@@ -45,6 +45,8 @@ export type RuntimeOptions = {
   readonly defer?: (fn: () => void) => void;
   /** Minimum time between two broadcasts; answers bursts are coalesced (default 0 = after every commit). */
   readonly broadcastIntervalMs?: number;
+  /** Monotonic clock for coalescing (default performance.now): never the wall clock. */
+  readonly monotonic?: () => number;
 };
 
 const REJECTION_CACHE = 10_000;
@@ -54,16 +56,17 @@ const TIMER_RETRY_MS = 1000;
 const normalize = (v: View): View => JSON.parse(JSON.stringify(v)) as View;
 
 /**
- * Identity of an intent for idempotency: role + action (not the actor id, which for a seat depends on who sits
- * there at resend time). An undo is journaled with its resolved target (ADR-0010): a fingerprint rebuilt from
- * the journal matches any undo under the same key.
+ * Identity of an intent for idempotency: role + actor id + action. For a seat the actor id is left out: it is the
+ * participant sitting there at resend time, which may have changed. An undo is journaled with its resolved target
+ * (ADR-0010): a fingerprint rebuilt from the journal matches any undo under the same key.
  */
 function fingerprint(actor: Actor, action: Action): string {
-  if (action.type === "undo") return `${actor.role}|undo|${action.targetSeq ?? "*"}`;
-  return `${actor.role}|${JSON.stringify(action)}`;
+  const who = actor.role === "seat" ? "seat" : `${actor.role}:${actor.id ?? ""}`;
+  if (action.type === "undo") return `${who}|undo|${action.targetSeq ?? "*"}`;
+  return `${who}|${JSON.stringify(action)}`;
 }
 function journalFingerprint(actor: Actor, action: Action): string {
-  return action.type === "undo" ? `${actor.role}|undo|?` : fingerprint(actor, action);
+  return action.type === "undo" ? fingerprint(actor, action).replace(/\|undo\|[^|]*$/, "|undo|?") : fingerprint(actor, action);
 }
 function sameIntent(stored: string, fp: string): boolean {
   return stored === fp || (stored.endsWith("|undo|?") && fp.startsWith(stored.slice(0, -1)));
@@ -94,6 +97,7 @@ export class SessionRuntime {
   private readonly log: Log;
   private readonly defer: (fn: () => void) => void;
   private readonly broadcastIntervalMs: number;
+  private readonly monotonic: () => number;
   private readonly queue: QueuedIntent[] = [];
   private flushScheduled = false;
   private broadcastPending = false;
@@ -108,6 +112,7 @@ export class SessionRuntime {
     this.log = log;
     this.defer = opts.defer ?? ((fn) => setImmediate(fn));
     this.broadcastIntervalMs = opts.broadcastIntervalMs ?? 0;
+    this.monotonic = opts.monotonic ?? (() => performance.now());
     const events = store.events(session.id);
     const raw = store.latestSnapshot(session.id);
     const snap = raw === null ? null : GameState.safeParse(raw.state);
@@ -162,13 +167,15 @@ export class SessionRuntime {
     }
     let game = this.game;
     const events: Event[] = [];
-    const results: { it: QueuedIntent; ack: Ack | null; fp: string }[] = [];
+    /** `fresh` = decided in this batch (as opposed to a replayed answer for an already committed key). */
+    const results: { it: QueuedIntent; ack: Ack | null; fp: string; fresh: boolean }[] = [];
     const inBatch = new Map<string, { index: number; fp: string }>();
     for (const it of batch) {
       const fp = fingerprint(it.actor, it.action);
       const early = this.replayed(it.key, fp, inBatch, results);
       if (early !== null) {
-        results.push({ it, ack: early, fp });
+        // A duplicate of an intent decided earlier in THIS batch shares its fate (fresh), a replay of a committed key does not.
+        results.push({ it, ack: early, fp, fresh: it.key !== null && inBatch.has(it.key) });
         continue;
       }
       let decided: ReturnType<typeof decide>;
@@ -176,18 +183,17 @@ export class SessionRuntime {
         decided = decide(game, { action: it.action, actor: it.actor, idempotencyKey: it.key }, this.clock(), this.registry);
       } catch (e) {
         this.log.error({ err: e, type: it.action.type }, "bug moteur : action refusée");
-        results.push({ it, ack: reply(it.key, { ok: false, code: "server-error", reason: "erreur interne" }), fp });
+        results.push({ it, ack: reply(it.key, { ok: false, code: "server-error", reason: "erreur interne" }), fp, fresh: true });
         continue;
       }
+      if (it.key !== null) inBatch.set(it.key, { index: results.length, fp });
       if (!decided.ok) {
-        if (it.key !== null) this.rememberRejection(it.key, decided.error.code, decided.error.message, fp);
-        results.push({ it, ack: reply(it.key, { ok: false, code: decided.error.code, reason: decided.error.message }), fp });
+        results.push({ it, ack: reply(it.key, { ok: false, code: decided.error.code, reason: decided.error.message }), fp, fresh: true });
         continue;
       }
       game = decided.value.game;
       events.push(decided.value.event);
-      if (it.key !== null) inBatch.set(it.key, { index: results.length, fp });
-      results.push({ it, ack: reply(it.key, { ok: true, eventSeq: decided.value.event.seq }), fp });
+      results.push({ it, ack: reply(it.key, { ok: true, eventSeq: decided.value.event.seq }), fp, fresh: true });
     }
     if (events.length > 0) {
       try {
@@ -195,25 +201,33 @@ export class SessionRuntime {
       } catch (e) {
         this.journal = { ok: false, lastError: e instanceof Error ? e.message : String(e), lastErrorAt: this.clock() };
         this.log.error({ err: e, count: events.length }, "échec d'écriture du journal : lot refusé");
-        // Nothing of this batch happened: memory state untouched, every accepted intent is refused.
-        for (const r of results) if (r.ack?.ok === true) r.ack = reply(r.it.key, { ok: false, code: "server-error", reason: "journal indisponible" });
-        for (const r of results) r.it.done(r.ack ?? reply(r.it.key, { ok: false, code: "server-error", reason: "journal indisponible" }));
+        // Nothing decided in this batch happened (state untouched). Every FRESH decision — accepted or rejected, since a
+        // rejection may depend on an accepted action of the same batch — becomes "retry later"; nothing is cached.
+        // Replays of keys committed earlier keep their true ack.
+        for (const r of results) if (r.fresh) r.ack = reply(r.it.key, { ok: false, code: "server-error", reason: "journal indisponible" });
+        for (const r of results) this.deliver(r.it, r.ack);
         return;
       }
       // ── committed: from here on nothing may throw out of flush ──
       if (!this.journal.ok) this.journal = { ...this.journal, ok: true };
       this.game = game;
-      for (const r of results) if (r.ack?.ok === true && r.it.key !== null) this.accepted.set(r.it.key, { seq: r.ack.eventSeq, fp: r.fp });
+      for (const r of results) if (r.fresh && r.ack?.ok === true && r.it.key !== null) this.accepted.set(r.it.key, { seq: r.ack.eventSeq, fp: r.fp });
       if (events.some((e) => e.action.type === "question.present")) this.guard("snapshot", () => this.snapshot());
       this.guard("timer", () => this.armTimer());
       this.guard("broadcast", () => this.scheduleBroadcast());
     }
+    // Rejections are cached only now: they were decided on a state that is now committed (or unchanged).
     for (const r of results) {
-      try {
-        r.it.done(r.ack ?? reply(r.it.key, { ok: false, code: "server-error", reason: "non traité" }));
-      } catch (e) {
-        this.log.warn({ err: e }, "envoi d'ack en erreur ignoré");
-      }
+      if (r.fresh && r.ack !== null && !r.ack.ok && r.ack.code !== "server-error" && r.it.key !== null) this.rememberRejection(r.it.key, r.ack.code, r.ack.reason, r.fp);
+    }
+    for (const r of results) this.deliver(r.it, r.ack);
+  }
+
+  private deliver(it: QueuedIntent, ack: Ack | null): void {
+    try {
+      it.done(ack ?? reply(it.key, { ok: false, code: "server-error", reason: "non traité" }));
+    } catch (e) {
+      this.log.warn({ err: e }, "envoi d'ack en erreur ignoré");
     }
   }
 
@@ -238,16 +252,18 @@ export class SessionRuntime {
       return;
     }
     if (this.broadcastPending) return;
-    const wait = this.lastBroadcastAt + this.broadcastIntervalMs - this.clock();
+    // Monotonic clock: a wall-clock step back (Windows time sync) must never freeze the screens.
+    const now = this.monotonic();
+    const wait = Math.min(this.broadcastIntervalMs, this.lastBroadcastAt + this.broadcastIntervalMs - now);
     if (wait <= 0) {
-      this.lastBroadcastAt = this.clock();
+      this.lastBroadcastAt = now;
       this.broadcast();
       return;
     }
     this.broadcastPending = true;
     this.timers.set(() => {
       this.broadcastPending = false;
-      this.lastBroadcastAt = this.clock();
+      this.lastBroadcastAt = this.monotonic();
       this.guard("broadcast", () => this.broadcast());
     }, wait);
   }
@@ -358,7 +374,7 @@ export class SessionRuntime {
     this.armedTimerId = null;
     try {
       const r = this.submit({ type: "timer.expired", timerId }, { role: "system" }, null);
-      if (!r.ok && r.code === "server-error" && !this.closed) {
+      if (!r.ok && r.code === "server-error" && !this.journal.ok && !this.closed) {
         // Journal unavailable: keep trying, the auto-lock must not be lost.
         this.armedTimerId = timerId;
         this.cancelTimer = this.timers.set(() => this.fireTimer(timerId), TIMER_RETRY_MS);

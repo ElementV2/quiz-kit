@@ -195,3 +195,19 @@ describe("QuizClient — throttling", () => {
     await expect(p).resolves.toMatchObject({ ok: true });
   });
 });
+
+describe("QuizClient — throttling keeps order", () => {
+  it("after a rate-limited ack, the whole queue is resent in submission order", () => {
+    const { client, last, welcome, timers } = setup();
+    client.start();
+    last().open();
+    welcome(last());
+    void client.submit({ type: "question.present" }); // k_test0000
+    void client.submit({ type: "question.open" }); // k_test0001
+    last().push({ t: "ack", key: "k_test0000", ok: false, code: "rate-limited", reason: "x" });
+    last().push({ t: "ack", key: "k_test0001", ok: false, code: "rate-limited", reason: "x" });
+    expect(timers).toHaveLength(1); // one resend for the whole queue
+    timers[0]?.fn();
+    expect(last().ofType("intent").map((m) => m["key"])).toEqual(["k_test0000", "k_test0001", "k_test0000", "k_test0001"]);
+  });
+});

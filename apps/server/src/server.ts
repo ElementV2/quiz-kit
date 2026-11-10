@@ -1,5 +1,5 @@
 import { randomBytes, randomInt } from "node:crypto";
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { closeSync, existsSync, fsyncSync, mkdirSync, openSync, readFileSync, renameSync, writeFileSync, writeSync } from "node:fs";
 import { join, resolve } from "node:path";
 import type { FastifyInstance } from "fastify";
 import { defaultRegistry } from "@quiz/engine";
@@ -36,14 +36,35 @@ function loadGame(path: string | undefined): GameDocument {
  * Token secret lives in its own file, NOT in the journal: the journal can be handed over for a dispute
  * without giving away the means to forge a control token. Migrates a secret stored by an older build.
  */
+const SECRET_FORMAT = /^[0-9a-f]{64}$/;
+
 function loadSecret(dataDir: string, store: SqliteEventStore): string {
   const file = join(dataDir, "secret.key");
-  if (existsSync(file)) return readFileSync(file, "utf8").trim();
   const legacy = store.getMeta("token-secret");
-  const secret = legacy ?? randomBytes(32).toString("hex");
-  writeFileSync(file, `${secret}\n`, { mode: 0o600 });
+  if (existsSync(file)) {
+    const secret = readFileSync(file, "utf8").trim();
+    // An empty / truncated key would let anyone forge a control token: refuse to start instead.
+    if (!SECRET_FORMAT.test(secret)) throw new Error(`secret.key invalide (${file}) : le supprimer pour en générer un nouveau (tous les liens changeront)`);
+    if (legacy !== null) store.deleteMeta("token-secret"); // finish an interrupted migration
+    return secret;
+  }
+  const secret = legacy !== null && SECRET_FORMAT.test(legacy) ? legacy : randomBytes(32).toString("hex");
+  writeFileAtomic(file, `${secret}\n`);
   if (legacy !== null) store.deleteMeta("token-secret");
   return secret;
+}
+
+/** temp file + fsync + rename: a power cut leaves the old file or the complete new one, never a torn one. */
+function writeFileAtomic(file: string, content: string): void {
+  const tmp = `${file}.tmp`;
+  const fd = openSync(tmp, "w", 0o600);
+  try {
+    writeSync(fd, content);
+    fsyncSync(fd);
+  } finally {
+    closeSync(fd);
+  }
+  renameSync(tmp, file);
 }
 
 /** Composition root: wires store, runtime, transport and HTTP. Used by main.ts and integration tests. */
@@ -52,6 +73,15 @@ export async function startServer(config: Config, opts: { clock?: Clock; timers?
   const dataDir = resolve(config.dataDir);
   mkdirSync(dataDir, { recursive: true });
   const store = new SqliteEventStore(join(dataDir, "journal.db"));
+  try {
+    return await boot(config, opts, clock, dataDir, store);
+  } catch (e) {
+    store.close(); // never leave the journal locked after a failed start (Windows keeps the file busy)
+    throw e;
+  }
+}
+
+async function boot(config: Config, opts: { timers?: Timers; broadcastIntervalMs?: number }, clock: Clock, dataDir: string, store: SqliteEventStore): Promise<RunningServer> {
   const secret = loadSecret(dataDir, store);
 
   let sessionId = config.newSession ? null : store.latestSessionId();
@@ -70,7 +100,10 @@ export async function startServer(config: Config, opts: { clock?: Clock; timers?
     return runtime;
   };
   const isRevoked = (jti: string): boolean => store.isRevoked(jti);
-  const generation = (base: string): number => Number(store.getMeta(`token-gen:${base}`) ?? 0);
+  const generation = (base: string): number => {
+    const n = Number(store.getMeta(`token-gen:${base}`) ?? 0);
+    return Number.isSafeInteger(n) && n >= 0 ? n : 0;
+  };
   const hosts = [...lanAddresses(), "localhost", ...config.publicHosts];
   let port = config.port;
   // HTTPS for tablets arrives with ADR-0012 (phase 1). Outputs (OBS / vMix) work over plain HTTP from any PC.
@@ -81,8 +114,7 @@ export async function startServer(config: Config, opts: { clock?: Clock; timers?
   const revoke = (base: string): Links => {
     const entry = links.entries.find((e) => e.id === base);
     if (entry === undefined) throw new Error(`lien inconnu : ${base}`);
-    store.revoke(entry.jti);
-    store.setMeta(`token-gen:${base}`, String(generation(base) + 1));
+    store.revokeAndBump(entry.jti, `token-gen:${base}`, String(generation(base) + 1)); // one transaction
     transport?.disconnectJti(entry.jti);
     links = makeLinks();
     writeLinks();
@@ -106,8 +138,20 @@ export async function startServer(config: Config, opts: { clock?: Clock; timers?
   runtime = new SessionRuntime(store, defaultRegistry, session, clock, opts.timers ?? realTimers, http.log, { broadcastIntervalMs: opts.broadcastIntervalMs ?? 25 });
   transport = new WsTransport({ runtime: getRuntime, secret, show: config.show, isRevoked, clock, log: http.log });
   transport.attach(http.server);
+  const tr0 = transport;
+  const rt0 = runtime;
+  const abort = async (): Promise<void> => {
+    tr0.close();
+    rt0.close();
+    await http.close();
+  };
   // Large accept backlog: after a restart every tablet reconnects at the same instant (reconnect storm).
-  await http.listen({ host: config.host, port: config.port, backlog: 4096 });
+  try {
+    await http.listen({ host: config.host, port: config.port, backlog: 4096 });
+  } catch (e) {
+    await abort(); // e.g. port already taken
+    throw e;
+  }
   const address = http.server.address();
   port = typeof address === "object" && address !== null ? address.port : config.port;
   links = makeLinks();

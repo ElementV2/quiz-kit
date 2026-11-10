@@ -16,3 +16,7 @@
 - Secrets (clés Twitch / YouTube) stockés côté serveur uniquement, jamais envoyés aux fronts.
 - Logs sans secrets ni jetons (URL masquées, 404 sans log d'URL ; les liens ne s'affichent que sur une console
   interactive, sinon seul le chemin de `links.txt` est imprimé). `/health` public ne renvoie que `{ ok: true }`.
+- `secret.key` : 64 caractères hexadécimaux, écrit de façon atomique ; un fichier vide ou tronqué empêche le démarrage
+  (sinon n'importe qui pourrait signer un jeton). Une installation qui a tourné avant cette version gardait le secret
+  dans `journal.db` : avant de transmettre un journal pour une contestation, faire tourner le secret.
+- Un jeton révoqué coupe immédiatement sa connexion (plus aucune vue ni intention, même si le client ignore la fermeture).

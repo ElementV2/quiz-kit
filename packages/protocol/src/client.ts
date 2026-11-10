@@ -71,6 +71,7 @@ export class QuizClient {
   private readonly waiters = new Map<string, (ack: AckMessage) => void>();
   private readonly clock = new ClockEstimator();
   private seq = -1;
+  private resendScheduled = false;
   private status: ClientStatus = "stopped";
   private readonly o: Required<Omit<ClientOptions, "onView" | "onStatus" | "onAck">> & Pick<ClientOptions, "onView" | "onStatus" | "onAck">;
   view: View | null = null;
@@ -193,9 +194,14 @@ export class QuizClient {
       }
       case "ack": {
         if (!m.ok && m.code === "rate-limited") {
-          // Throttled, not refused: keep it queued and resend it a bit later with the same key.
-          const p = this.pending.find((x) => x.key === m.key);
-          if (p !== undefined) this.o.setTimer(() => this.send({ t: "intent", key: p.key, action: p.action }), 200 + this.o.random() * 300);
+          // Throttled, not refused: keep it queued; resend the whole queue IN ORDER a bit later (same keys).
+          if (!this.resendScheduled) {
+            this.resendScheduled = true;
+            this.o.setTimer(() => {
+              this.resendScheduled = false;
+              for (const p of this.pending) this.send({ t: "intent", key: p.key, action: p.action });
+            }, 200 + this.o.random() * 300);
+          }
           return;
         }
         const p = this.pending.find((x) => x.key === m.key);

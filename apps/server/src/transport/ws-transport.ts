@@ -46,12 +46,16 @@ class RateLimiter {
   }
 }
 
+const THROTTLE_WINDOW_MS = 150;
+
 /** Per-role budgets: the control room may legitimately burst (CSV import of 500 players, Stream Deck macros). */
 const LIMITS = { staff: { capacity: 600, perSecond: 300 }, device: { capacity: 40, perSecond: 20 } } as const;
 
 type Conn = {
   readonly ws: WebSocket;
   limiter: RateLimiter;
+  /** After a throttled intent, every intent is throttled until this instant: order is preserved (FIFO). */
+  throttledUntil: number;
   missedPongs: number;
   viewer: Viewer | null;
   jti: string | null;
@@ -108,12 +112,21 @@ export class WsTransport {
     return this.conns.size;
   }
 
-  /** Revocation takes effect immediately: open connections using that token are closed. */
+  /**
+   * Revocation takes effect immediately: the connection stops being served at once (no view, no intent), then is
+   * closed — even a hostile client that ignores the close handshake can do nothing more.
+   */
   disconnectJti(jti: string): number {
     let n = 0;
     for (const c of this.conns) {
       if (c.jti === jti) {
-        this.fail(c, "unauthorized", "jeton révoqué");
+        c.viewer = null;
+        c.jti = null;
+        c.unsubscribe?.();
+        c.unsubscribe = null;
+        c.stream = null;
+        this.send(c, { t: "error", code: "unauthorized", message: "jeton révoqué" });
+        c.ws.terminate();
         n++;
       }
     }
@@ -128,7 +141,7 @@ export class WsTransport {
   }
 
   private onConnection(ws: WebSocket): void {
-    const conn: Conn = { ws, limiter: new RateLimiter(LIMITS.device.capacity, LIMITS.device.perSecond, this.monotonic()), missedPongs: 0, viewer: null, jti: null, clientId: null, stream: null, unsubscribe: null };
+    const conn: Conn = { ws, limiter: new RateLimiter(LIMITS.device.capacity, LIMITS.device.perSecond, this.monotonic()), missedPongs: 0, throttledUntil: 0, viewer: null, jti: null, clientId: null, stream: null, unsubscribe: null };
     this.conns.add(conn);
     const helloTimer = setTimeout(() => {
       if (conn.viewer === null) this.fail(conn, "unauthorized", "hello attendu");
@@ -158,7 +171,13 @@ export class WsTransport {
     // Decode first (bounded by maxPayload) so a throttled intent gets an ack carrying its key:
     // the client then retries it instead of waiting forever for an ack that never comes.
     const decoded = decodeClientMessage(rawToString(data));
-    const allowed = conn.limiter.take(this.monotonic());
+    const now = this.monotonic();
+    let allowed = conn.limiter.take(now);
+    if (decoded.ok && decoded.value.t === "intent") {
+      // Once one intent is throttled, later ones are too for a short window, so none can overtake it.
+      if (!allowed) conn.throttledUntil = now + THROTTLE_WINDOW_MS;
+      else if (now < conn.throttledUntil) allowed = false;
+    }
     if (!decoded.ok) {
       if (allowed) this.send(conn, { t: "error", code: decoded.error.code, message: decoded.error.message });
       return;

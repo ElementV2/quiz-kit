@@ -51,4 +51,7 @@
       de Windows édition poste client — NON VÉRIFIÉ dans la doc Microsoft. Si la machine show est un Windows client,
       mesurer un redémarrage serveur avec les vraies tablettes.
 
+- [ ] `OptionId` refuse désormais `__proto__` / `constructor` / `prototype` : un journal écrit avant ce changement avec
+      une telle option ne se rechargerait plus (aucun cas connu en phase 0 ; à traiter par migration si besoin).
+
 Règle : une question vérifiée devient un ADR ou une ligne dans le doc concerné, et la case est cochée.

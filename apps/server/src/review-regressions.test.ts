@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -118,7 +118,7 @@ describe("review #4 — revocation works and takes effect immediately", () => {
     await wait(100);
     const res = await fetch(`http://127.0.0.1:${s.port}/api/revoke?t=${tokenOf(s, "control")}`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ link: "seat-1" }) });
     expect(res.status).toBe(200);
-    expect(await closed).toBe(4000);
+    expect(await closed).toBe(1006); // terminated at once (second review #5)
     const fresh = tokenOf(s, "seat-1");
     expect(fresh).not.toBe(old);
     const again = await rawSocket(s);
@@ -204,5 +204,110 @@ describe("review #11/#14 — transport edge cases", () => {
     expect(json).not.toContain('"correct":["');
     expect(json).not.toContain("Hugues Capet");
     seat.ws.close();
+  });
+});
+
+describe("second review", () => {
+  const openRt = (store: MemoryEventStore, opts: { broadcastIntervalMs?: number; monotonic?: () => number; time?: FakeTime } = {}) => {
+    const time = opts.time ?? new FakeTime();
+    const rt = new SessionRuntime(store, createRegistry([choice]), session, time.clock, time, silentLog, {
+      ...(opts.broadcastIntervalMs === undefined ? {} : { broadcastIntervalMs: opts.broadcastIntervalMs }),
+      ...(opts.monotonic === undefined ? {} : { monotonic: opts.monotonic }),
+      defer: (fn) => deferred.push(fn),
+    });
+    return { rt, time };
+  };
+  const deferred: (() => void)[] = [];
+  const flush = () => deferred.splice(0).forEach((f) => f());
+
+  it("#1 a wall-clock step back never freezes broadcasts (coalescing is monotonic)", () => {
+    const store = new MemoryEventStore();
+    store.createSession(session);
+    let mono = 1000;
+    const time = new FakeTime();
+    const { rt } = openRt(store, { broadcastIntervalMs: 25, monotonic: () => mono, time });
+    let updates = 0;
+    rt.subscribe({ viewer: { role: "control" }, update: () => updates++ });
+    rt.submit({ type: "game.start" }, CTL, null);
+    expect(updates).toBe(1);
+    time.now -= 30_000; // Windows time sync jumps back
+    mono += 5;
+    rt.submit({ type: "round.start" }, CTL, null);
+    mono += 25;
+    time.advance(25);
+    expect(updates).toBe(2);
+  });
+
+  it("#3 a failed batch does not cache rejections computed on a state that never existed", () => {
+    const store = new MemoryEventStore();
+    store.createSession(session);
+    const { rt } = openRt(store);
+    for (const a of OPEN) rt.submit(a, CTL, null);
+    const answer: Action = { type: "answer.submit", participantId: "p_1", answer: { kind: "choice", optionIds: ["b"] } };
+    const acks: { ok: boolean; code?: string }[] = [];
+    store.failNextAppend = true;
+    rt.enqueue({ type: "question.lock" }, CTL, "k_lock0001", (a) => acks.push(a));
+    rt.enqueue(answer, { role: "seat", id: "p_1" }, "k_late0001", (a) => acks.push(a)); // rejected: "locked" (provisional)
+    flush();
+    expect(acks.map((a) => a.ok)).toEqual([false, false]);
+    expect(rt.current.state.phase).toBe("open");
+    // The retry must be decided on the real state (still open) → accepted.
+    expect(rt.submit(answer, { role: "seat", id: "p_1" }, "k_late0001")).toMatchObject({ ok: true });
+  });
+
+  it("#4 a failed batch keeps the true ack of a key committed earlier", () => {
+    const store = new MemoryEventStore();
+    store.createSession(session);
+    const { rt } = openRt(store);
+    const first = rt.submit({ type: "game.start" }, CTL, "k_done0001");
+    const acks: unknown[] = [];
+    store.failNextAppend = true;
+    rt.enqueue({ type: "game.start" }, CTL, "k_done0001", (a) => acks.push(a)); // replay
+    rt.enqueue({ type: "round.start" }, CTL, "k_new00001", (a) => acks.push(a)); // fresh → fails
+    flush();
+    expect(acks[0]).toEqual(first);
+    expect(acks[1]).toMatchObject({ ok: false, code: "server-error" });
+  });
+
+  it("#5 a revoked connection is cut at once and can no longer act", async () => {
+    const s = await boot();
+    for (const a of OPEN) s.runtime.submit(a, CTL, null);
+    const seat = await rawSocket(s);
+    hello(seat.ws, tokenOf(s, "seat-1"));
+    await wait(100);
+    const before = s.store.events(s.runtime.session.id).length;
+    s.revoke("seat-1");
+    seat.ws.send(JSON.stringify({ t: "intent", key: "k_afterrev", action: { type: "answer.submit", participantId: "p_1", answer: { kind: "choice", optionIds: ["b"] } } }));
+    await seat.closed;
+    await wait(50);
+    expect(s.store.events(s.runtime.session.id)).toHaveLength(before);
+    expect(s.runtime.clientCount).toBe(0);
+  });
+
+  it("#2 refuses to start with an empty or truncated secret.key", async () => {
+    const dataDir = mkdtempSync(join(tmpdir(), "quiz-rev-"));
+    dirs.push(dataDir);
+    writeFileSync(join(dataDir, "secret.key"), "");
+    await expect(startServer({ ...Config.parse({ dataDir, host: "127.0.0.1", logLevel: "fatal" }), port: 0 })).rejects.toThrow(/secret\.key invalide/);
+  });
+
+  it("#7 two players reusing one key for the same action do not share an ack", () => {
+    const store = new MemoryEventStore();
+    store.createSession(session);
+    const { rt } = openRt(store);
+    for (const a of OPEN) rt.submit(a, CTL, null);
+    rt.submit({ type: "player.add", participantId: "p_2", displayName: "Bo", channel: "play" }, CTL, null);
+    const a1: Action = { type: "answer.submit", participantId: "p_1", answer: { kind: "choice", optionIds: ["b"] } };
+    rt.submit(a1, { role: "player", id: "p_1" }, "k_shared01");
+    expect(rt.submit(a1, { role: "player", id: "p_2" }, "k_shared01")).toMatchObject({ ok: false, code: "conflict" });
+  });
+
+  it("#9 revocation bumps the generation atomically", async () => {
+    const s = await boot();
+    const before = tokenOf(s, "host");
+    s.revoke("host");
+    expect(s.store.getMeta("token-gen:host")).toBe("1");
+    expect(s.store.isRevoked("host")).toBe(true);
+    expect(tokenOf(s, "host")).not.toBe(before);
   });
 });

@@ -128,6 +128,13 @@ export class SqliteEventStore implements EventStore {
     this.stmts.revoke.run(jti);
   }
 
+  revokeAndBump(jti: string, genKey: string, nextGen: string): void {
+    this.db.transaction(() => {
+      this.stmts.revoke.run(jti);
+      this.stmts.setMeta.run(genKey, nextGen);
+    })();
+  }
+
   isRevoked(jti: string): boolean {
     return this.stmts.isRevoked.get(jti) !== undefined;
   }

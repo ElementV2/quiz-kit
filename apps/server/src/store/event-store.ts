@@ -21,6 +21,8 @@ export interface EventStore {
   setMeta(key: string, value: string): void;
   deleteMeta(key: string): void;
   revoke(jti: string): void;
+  /** Atomically revokes a token id and stores the next generation of its link. */
+  revokeAndBump(jti: string, genKey: string, nextGen: string): void;
   isRevoked(jti: string): boolean;
   close(): void;
 }
@@ -93,6 +95,10 @@ export class MemoryEventStore implements EventStore {
   }
   revoke(jti: string): void {
     this.revoked.add(jti);
+  }
+  revokeAndBump(jti: string, genKey: string, nextGen: string): void {
+    this.revoked.add(jti);
+    this.meta.set(genKey, nextGen);
   }
   isRevoked(jti: string): boolean {
     return this.revoked.has(jti);
