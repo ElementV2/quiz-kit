@@ -10,7 +10,7 @@ Règle : une phase n'est terminée que quand ses critères de sortie passent. Co
 - [x] `engine` : `reduce`, `project`, `replay`, registre de mécaniques, `mechanicContractSuite`, Rng seedé
 - [x] Mécanique `choice` (QCM 2 à 6 options, vrai/faux, multi) + scoring de base + registre de score + undo
 - [x] `protocol` : hello/welcome/patch/snapshot/intent/ack/ping, séquences, idempotence
-- [ ] `server` : Fastify + ws, file d'actions sérialisée, EventStore SQLite (WAL + FULL), snapshots, timers serveur, jetons par rôle
+- [x] `server` : Fastify + ws, file d'actions sérialisée, EventStore SQLite (WAL + FULL), snapshots, timers serveur, jetons par rôle
 - [ ] `protocol/client` : reconnexion backoff, file d'intentions persistée, resynchro
 - [ ] Bot client + chaos (`pnpm chaos`) + script k6 (`pnpm load`)
 
