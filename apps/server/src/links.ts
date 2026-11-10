@@ -3,7 +3,11 @@ import { signToken, type TokenClaims } from "./tokens.ts";
 
 export type LinkEntry = {
   readonly label: string;
+  /** Stable link name (`control`, `out-program`, `seat-3`): what you revoke. */
+  readonly id: string;
   readonly role: TokenClaims["role"];
+  /** Token id = `<id>` then `<id>.<generation>` after each revocation. */
+  readonly jti: string;
   /** Path + token, e.g. `/out/program?t=…`. Prefix with any of `origins`. */
   readonly path: string;
 };
@@ -16,6 +20,9 @@ export type Links = {
   readonly entries: readonly LinkEntry[];
 };
 
+/** Role-specific part of the claims (distributive Omit keeps the union). */
+type ClaimBody = TokenClaims extends infer T ? (T extends TokenClaims ? Omit<T, "v" | "show" | "exp" | "jti"> : never) : never;
+
 /** IPv4 addresses of every non-internal network card: what OBS / vMix on another PC must use. */
 export function lanAddresses(): string[] {
   const out: string[] = [];
@@ -26,8 +33,9 @@ export function lanAddresses(): string[] {
 }
 
 /**
- * Stable role links (doc 08): same secret + same claims = same token, so URLs pasted in OBS / vMix
- * keep working across restarts. Revoke one with its `jti`, or rotate the secret to revoke them all.
+ * Stable role links (doc 08): same secret + same claims = same token, so URLs pasted in OBS / vMix keep working
+ * across restarts. Shows use links without expiry on purpose (an OBS source must not die mid-show); the
+ * mitigation is revocation per link (generation bump, `POST /api/revoke`) and secret rotation (delete secret.key).
  */
 export function buildLinks(opts: {
   secret: string;
@@ -37,19 +45,22 @@ export function buildLinks(opts: {
   hosts: readonly string[];
   port: number;
   tlsPort: number | null;
+  generation: (id: string) => number;
 }): Links {
   const base = { v: 1, show: opts.show, exp: null } as const;
-  const make = (label: string, path: string, claims: TokenClaims): LinkEntry => ({
-    label,
-    role: claims.role,
-    path: `${path}?t=${signToken(opts.secret, claims)}`,
-  });
+  const make = (label: string, id: string, path: string, claims: ClaimBody): LinkEntry => {
+    // Generation 0 keeps the historical jti, so links already pasted in OBS stay valid.
+    const gen = opts.generation(id);
+    const jti = gen === 0 ? id : `${id}.${gen}`;
+    const full: TokenClaims = { ...base, jti, ...claims };
+    return { label, id, role: full.role, jti, path: `${path}?t=${signToken(opts.secret, full)}` };
+  };
   const entries: LinkEntry[] = [
-    make("Régie", "/control", { ...base, jti: "control", role: "control" }),
-    make("Régie (lecture seule)", "/control", { ...base, jti: "control-readonly", role: "control-readonly" }),
-    make("Animateur", "/host", { ...base, jti: "host", role: "host" }),
-    ...opts.outputs.map((scene) => make(`Sortie ${scene}`, `/out/${scene}`, { ...base, jti: `out-${scene}`, role: "output", scene })),
-    ...Array.from({ length: opts.seats }, (_, i) => make(`Siège ${i + 1}`, `/seat/${i + 1}`, { ...base, jti: `seat-${i + 1}`, role: "seat", seat: i + 1 })),
+    make("Régie", "control", "/control", { role: "control" }),
+    make("Régie (lecture seule)", "control-readonly", "/control", { role: "control-readonly" }),
+    make("Animateur", "host", "/host", { role: "host" }),
+    ...opts.outputs.map((scene) => make(`Sortie ${scene}`, `out-${scene}`, `/out/${scene}`, { role: "output", scene })),
+    ...Array.from({ length: opts.seats }, (_, i) => make(`Siège ${i + 1}`, `seat-${i + 1}`, `/seat/${i + 1}`, { role: "seat", seat: i + 1 })),
   ];
   const hosts = [...new Set(opts.hosts)];
   return {
@@ -59,8 +70,11 @@ export function buildLinks(opts: {
   };
 }
 
-/** Human-readable block printed at startup on the show machine's console. */
-export function formatLinks(links: Links): string {
+/**
+ * Startup banner. Tokens are printed only on an interactive console (the operator's screen); when stdout is
+ * captured (supervisor, service, CI) only the location of links.txt is printed — logs never carry tokens (doc 10).
+ */
+export function formatLinks(links: Links, linksPath: string, interactive: boolean): string {
   const first = links.origins[0] ?? "http://localhost";
   const lines = [
     "",
@@ -69,9 +83,10 @@ export function formatLinks(links: Links): string {
     ...(links.secureOrigins.length > 0 ? [`HTTPS (tablettes) : ${links.secureOrigins.join("  ·  ")}`] : []),
     "Depuis un autre PC, utiliser l'IP du réseau plateau (pas localhost).",
     "",
-    ...links.entries.map((e) => `  ${e.label.padEnd(24)} ${first}${e.path}`),
+    ...(interactive ? links.entries.map((e) => `  ${e.label.padEnd(24)} ${first}${e.path}`) : ["  (console non interactive : liens non affichés)"]),
     "",
-    "Les liens restent valables après un redémarrage. Liste complète : data/links.txt",
+    `Liste complète pour chaque adresse : ${linksPath}`,
+    "Les liens restent valables après un redémarrage.",
     "════════════════════════════════════════════════════════════════════",
     "",
   ];

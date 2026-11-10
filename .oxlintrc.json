@@ -1,7 +1,16 @@
 {
   "$schema": "./node_modules/oxlint/configuration_schema.json",
-  "plugins": ["typescript", "unicorn", "oxc", "import", "vitest"],
-  "categories": { "correctness": "error", "suspicious": "error" },
+  "plugins": [
+    "typescript",
+    "unicorn",
+    "oxc",
+    "import",
+    "vitest"
+  ],
+  "categories": {
+    "correctness": "error",
+    "suspicious": "error"
+  },
   "rules": {
     "typescript/no-explicit-any": "error",
     "typescript/no-non-null-assertion": "error",
@@ -12,12 +21,60 @@
     "typescript/no-misused-promises": "error",
     "typescript/await-thenable": "error",
     "typescript/no-unnecessary-type-assertion": "error",
-    "no-restricted-imports": ["error", { "patterns": [{ "group": ["@quiz/*/**"], "message": "Import profond interdit : passer par l'API publique du paquet (src/index.ts)." }] }],
+    "no-restricted-imports": [
+      "error",
+      {
+        "patterns": [
+          {
+            "group": [
+              "@quiz/*/src/**"
+            ],
+            "message": "Import profond interdit : passer par l'API publique du paquet (src/index.ts)."
+          }
+        ]
+      }
+    ],
     "no-console": "error",
-    "no-unused-vars": ["error", { "argsIgnorePattern": "^_", "varsIgnorePattern": "^_" }]
+    "no-unused-vars": [
+      "error",
+      {
+        "argsIgnorePattern": "^_",
+        "varsIgnorePattern": "^_"
+      }
+    ]
   },
   "overrides": [
-    { "files": ["**/*.test.ts", "**/tools/**", "scripts/**"], "rules": { "no-console": "off" } }
+    {
+      "files": [
+        "**/*.test.ts",
+        "**/tools/**",
+        "scripts/**"
+      ],
+      "rules": {
+        "no-console": "off"
+      }
+    },
+    {
+      "files": [
+        "apps/server/src/http/**"
+      ],
+      "rules": {
+        "oxc/no-async-endpoint-handlers": "off"
+      }
+    },
+    {
+      "files": [
+        "apps/server/tools/k6/**"
+      ],
+      "rules": {
+        "no-underscore-dangle": "off"
+      }
+    }
   ],
-  "ignorePatterns": ["node_modules", "dist", "coverage", ".turbo"]
+  "ignorePatterns": [
+    "node_modules",
+    "dist",
+    "coverage",
+    ".turbo"
+  ]
 }

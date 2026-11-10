@@ -29,3 +29,5 @@ Consigne : dernières versions stables. Registre npm au 2026-11-10 : `typescript
 
 ## Conséquences
 À surveiller : support de TS 7 dans typescript-eslint (retour possible à ESLint) et l'outillage Vite/Solid en phase 1.
+
+Note : la règle `oxc/no-async-endpoint-handlers` (écrite pour Express) est désactivée pour `apps/server/src/http/**` : Fastify gère nativement les handlers async (une promesse rejetée devient une réponse d'erreur).

@@ -47,7 +47,7 @@ export class SqliteEventStore implements EventStore {
     this.stmts = {
       insertSession: this.db.prepare("INSERT INTO sessions (id, doc, created_at) VALUES (?, ?, ?)"),
       getSession: this.db.prepare<[string], { doc: string }>("SELECT doc FROM sessions WHERE id = ?"),
-      latestSession: this.db.prepare<[], { id: string }>("SELECT id FROM sessions ORDER BY created_at DESC, rowid DESC LIMIT 1"),
+      latestSession: this.db.prepare<[], { id: string }>("SELECT id FROM sessions ORDER BY rowid DESC LIMIT 1"),
       lastSeq: this.db.prepare<[string], { seq: number | null }>("SELECT MAX(seq) AS seq FROM events WHERE session_id = ?"),
       insertEvent: this.db.prepare("INSERT INTO events (session_id, seq, at, actor, action, idem_key) VALUES (?, ?, ?, ?, ?, ?)"),
       events: this.db.prepare<[string], EventRow>("SELECT seq, at, actor, action, idem_key FROM events WHERE session_id = ? ORDER BY seq"),
@@ -55,6 +55,7 @@ export class SqliteEventStore implements EventStore {
       latestSnap: this.db.prepare<[string], { seq: number; state: string }>("SELECT seq, state FROM snapshots WHERE session_id = ? ORDER BY seq DESC LIMIT 1"),
       getMeta: this.db.prepare<[string], { value: string }>("SELECT value FROM meta WHERE key = ?"),
       setMeta: this.db.prepare("INSERT INTO meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value"),
+      deleteMeta: this.db.prepare("DELETE FROM meta WHERE key = ?"),
       revoke: this.db.prepare("INSERT OR IGNORE INTO revoked_tokens (jti) VALUES (?)"),
       isRevoked: this.db.prepare<[string], { jti: string }>("SELECT jti FROM revoked_tokens WHERE jti = ?"),
     };
@@ -84,6 +85,16 @@ export class SqliteEventStore implements EventStore {
     this.stmts.insertEvent.run(sessionId, e.seq, e.at, JSON.stringify(e.actor), JSON.stringify(e.action), e.idempotencyKey);
   }
 
+  appendMany(sessionId: string, events: readonly Event[]): void {
+    this.appendTx(sessionId, events);
+  }
+
+  private readonly appendTx = (sessionId: string, events: readonly Event[]): void => {
+    this.db.transaction(() => {
+      for (const e of events) this.append(sessionId, e);
+    })();
+  };
+
   events(sessionId: string): Event[] {
     return this.stmts.events.all(sessionId).map((r) =>
       Event.parse({ seq: r.seq, at: r.at, actor: JSON.parse(r.actor), action: JSON.parse(r.action), idempotencyKey: r.idem_key }),
@@ -97,6 +108,7 @@ export class SqliteEventStore implements EventStore {
   /** Raw state: the caller validates it with the engine's GameState schema. */
   latestSnapshot(sessionId: string): StoredSnapshot | null {
     const r = this.stmts.latestSnap.get(sessionId);
+    // `unknown` on purpose: GameState.safeParse validates it in the runtime.
     return r === undefined ? null : { seq: r.seq, state: JSON.parse(r.state) as unknown };
   }
 
@@ -106,6 +118,10 @@ export class SqliteEventStore implements EventStore {
 
   setMeta(key: string, value: string): void {
     this.stmts.setMeta.run(key, value);
+  }
+
+  deleteMeta(key: string): void {
+    this.stmts.deleteMeta.run(key);
   }
 
   revoke(jti: string): void {

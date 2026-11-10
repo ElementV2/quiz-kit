@@ -54,7 +54,8 @@ describe("codec", () => {
 });
 
 describe("patch (RFC 6902 subset)", () => {
-  const json = fc.jsonValue({ maxDepth: 4 });
+  // Prototype keys are refused on purpose (tested below), so they are excluded from generated values.
+  const json = fc.jsonValue({ maxDepth: 4 }).filter((v) => !/"(__proto__|constructor|prototype)":/.test(JSON.stringify(v)));
 
   it("apply(a, diff(a, b)) = b for any JSON values", () => {
     fc.assert(
@@ -113,5 +114,19 @@ describe("timing", () => {
     expect(checkViewSeq(3, 4)).toBe("next");
     expect(checkViewSeq(3, 6)).toBe("gap");
     expect(checkViewSeq(3, 3)).toBe("duplicate");
+  });
+});
+
+describe("patch safety (review)", () => {
+  it("refuses prototype keys instead of silently diverging", () => {
+    expect(applyPatch({ counts: {} }, [{ op: "add", path: "/counts/__proto__", value: 1 }])).toMatchObject({ ok: false });
+    expect(applyPatch({ a: {} }, [{ op: "add", path: "/a/constructor", value: 1 }])).toMatchObject({ ok: false });
+  });
+
+  it("parses array indexes strictly (RFC 6901)", () => {
+    for (const path of ["/a/", "/a/01", "/a/1.0", "/a/-1"]) {
+      expect(applyPatch({ a: [1, 2] }, [{ op: "replace", path, value: 0 }]).ok).toBe(false);
+    }
+    expect(applyPatch({ a: [1, 2] }, [{ op: "add", path: "/a/-", value: 3 }])).toEqual({ ok: true, value: { a: [1, 2, 3] } });
   });
 });

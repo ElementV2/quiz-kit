@@ -1,5 +1,5 @@
 import { randomBytes, randomInt } from "node:crypto";
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import type { FastifyInstance } from "fastify";
 import { defaultRegistry } from "@quiz/engine";
@@ -19,6 +19,9 @@ export type RunningServer = {
   readonly http: FastifyInstance;
   readonly port: number;
   readonly secret: string;
+  readonly dataDir: string;
+  /** Revokes one link (`control`, `out-program`, `seat-3`…): open connections are cut, a new link is issued. */
+  revoke(link: string): Links;
   close(): Promise<void>;
 };
 
@@ -29,18 +32,27 @@ function loadGame(path: string | undefined): GameDocument {
   return r.value;
 }
 
+/**
+ * Token secret lives in its own file, NOT in the journal: the journal can be handed over for a dispute
+ * without giving away the means to forge a control token. Migrates a secret stored by an older build.
+ */
+function loadSecret(dataDir: string, store: SqliteEventStore): string {
+  const file = join(dataDir, "secret.key");
+  if (existsSync(file)) return readFileSync(file, "utf8").trim();
+  const legacy = store.getMeta("token-secret");
+  const secret = legacy ?? randomBytes(32).toString("hex");
+  writeFileSync(file, `${secret}\n`, { mode: 0o600 });
+  if (legacy !== null) store.deleteMeta("token-secret");
+  return secret;
+}
+
 /** Composition root: wires store, runtime, transport and HTTP. Used by main.ts and integration tests. */
-export async function startServer(config: Config, opts: { clock?: Clock; timers?: Timers } = {}): Promise<RunningServer> {
+export async function startServer(config: Config, opts: { clock?: Clock; timers?: Timers; broadcastIntervalMs?: number } = {}): Promise<RunningServer> {
   const clock = opts.clock ?? Date.now;
   const dataDir = resolve(config.dataDir);
   mkdirSync(dataDir, { recursive: true });
   const store = new SqliteEventStore(join(dataDir, "journal.db"));
-
-  let secret = store.getMeta("token-secret");
-  if (secret === null) {
-    secret = randomBytes(32).toString("hex");
-    store.setMeta("token-secret", secret);
-  }
+  const secret = loadSecret(dataDir, store);
 
   let sessionId = config.newSession ? null : store.latestSessionId();
   if (sessionId === null) {
@@ -58,39 +70,62 @@ export async function startServer(config: Config, opts: { clock?: Clock; timers?
     return runtime;
   };
   const isRevoked = (jti: string): boolean => store.isRevoked(jti);
+  const generation = (base: string): number => Number(store.getMeta(`token-gen:${base}`) ?? 0);
   const hosts = [...lanAddresses(), "localhost", ...config.publicHosts];
+  let port = config.port;
   // HTTPS for tablets arrives with ADR-0012 (phase 1). Outputs (OBS / vMix) work over plain HTTP from any PC.
-  let links = buildLinks({ secret, show: config.show, outputs: config.outputs, seats: config.seats, hosts, port: config.port, tlsPort: null });
+  const makeLinks = (): Links => buildLinks({ secret, show: config.show, outputs: config.outputs, seats: config.seats, hosts, port, tlsPort: null, generation });
+  let links = makeLinks();
+  const writeLinks = (): void => writeFileSync(join(dataDir, "links.txt"), linksFile(links), { mode: 0o600 });
+
+  const revoke = (base: string): Links => {
+    const entry = links.entries.find((e) => e.id === base);
+    if (entry === undefined) throw new Error(`lien inconnu : ${base}`);
+    store.revoke(entry.jti);
+    store.setMeta(`token-gen:${base}`, String(generation(base) + 1));
+    transport?.disconnectJti(entry.jti);
+    links = makeLinks();
+    writeLinks();
+    return links;
+  };
 
   const deps = {
     runtime: getRuntime,
     links: () => links,
+    revoke,
     secret,
     show: config.show,
     isRevoked,
     clock,
     connections: () => transport?.connectionCount ?? 0,
-    health: () => ({ sessionId: getRuntime().session.id, lastSeq: getRuntime().current.state.lastSeq, journal: store.pragmas() }),
+    health: () => ({ sessionId: getRuntime().session.id, lastSeq: getRuntime().current.state.lastSeq, journal: { ...store.pragmas(), ...getRuntime().journalHealth } }),
+    dataDir,
   };
-  const http = buildHttpApp(deps, { logger: loggerOptions(config.logLevel), bodyLimit: 1024 * 1024 });
-  runtime = new SessionRuntime(store, defaultRegistry, session, clock, opts.timers ?? realTimers, http.log);
+  const http = buildHttpApp(deps, { logger: loggerOptions(config.logLevel), bodyLimit: 64 * 1024 });
+  // 25 ms broadcast coalescing: a burst of 500 answers becomes a few broadcasts, invisible on screen (40 fps).
+  runtime = new SessionRuntime(store, defaultRegistry, session, clock, opts.timers ?? realTimers, http.log, { broadcastIntervalMs: opts.broadcastIntervalMs ?? 25 });
   transport = new WsTransport({ runtime: getRuntime, secret, show: config.show, isRevoked, clock, log: http.log });
   transport.attach(http.server);
-  await http.listen({ host: config.host, port: config.port });
+  // Large accept backlog: after a restart every tablet reconnects at the same instant (reconnect storm).
+  await http.listen({ host: config.host, port: config.port, backlog: 4096 });
   const address = http.server.address();
-  const port = typeof address === "object" && address !== null ? address.port : config.port;
-  if (port !== config.port) links = buildLinks({ secret, show: config.show, outputs: config.outputs, seats: config.seats, hosts, port, tlsPort: null });
-  writeFileSync(join(dataDir, "links.txt"), linksFile(links));
+  port = typeof address === "object" && address !== null ? address.port : config.port;
+  links = makeLinks();
+  writeLinks();
 
   const rt = runtime;
   const tr = transport;
   return {
-    links,
+    get links() {
+      return links;
+    },
     runtime: rt,
     store,
     http,
     port,
     secret,
+    dataDir,
+    revoke,
     async close() {
       tr.close();
       rt.close();

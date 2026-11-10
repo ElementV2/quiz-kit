@@ -48,6 +48,10 @@ export function diff(before: unknown, after: unknown, path = ""): PatchOp[] {
 
 export type ApplyError = { readonly path: string; readonly message: string };
 
+/** Keys that would touch prototypes instead of data: refused (the client then resyncs). */
+const FORBIDDEN_KEYS = new Set(["__proto__", "prototype", "constructor"]);
+const ARRAY_INDEX = /^(0|[1-9][0-9]*)$/;
+
 /** Applies ops to a deep copy. Any invalid op fails the whole patch (client then resyncs). */
 export function applyPatch<T>(doc: T, ops: readonly PatchOp[]): { ok: true; value: T } | { ok: false; error: ApplyError } {
   let root: unknown = structuredCloneJson(doc);
@@ -57,18 +61,21 @@ export function applyPatch<T>(doc: T, ops: readonly PatchOp[]): { ok: true; valu
       root = structuredCloneJson(op.value);
       continue;
     }
+    if (!op.path.startsWith("/")) return { ok: false, error: { path: op.path, message: "invalid pointer" } };
     const parts = op.path.split("/").slice(1).map(unescape);
+    if (parts.some((p) => FORBIDDEN_KEYS.has(p))) return { ok: false, error: { path: op.path, message: "forbidden key" } };
     const last = parts.pop();
-    if (last === undefined || !op.path.startsWith("/")) return { ok: false, error: { path: op.path, message: "invalid pointer" } };
+    if (last === undefined) return { ok: false, error: { path: op.path, message: "invalid pointer" } };
     let parent: unknown = root;
     for (const p of parts) {
-      if (Array.isArray(parent)) parent = parent[Number(p)];
+      if (Array.isArray(parent) && ARRAY_INDEX.test(p)) parent = parent[Number(p)];
       else if (isObject(parent) && Object.hasOwn(parent, p)) parent = parent[p];
       else return { ok: false, error: { path: op.path, message: `missing ${p}` } };
     }
     if (Array.isArray(parent)) {
+      if (last !== "-" && !ARRAY_INDEX.test(last)) return { ok: false, error: { path: op.path, message: "invalid array index" } };
       const i = last === "-" ? parent.length : Number(last);
-      if (!Number.isInteger(i) || i < 0 || i > parent.length) return { ok: false, error: { path: op.path, message: "index out of range" } };
+      if (i > parent.length) return { ok: false, error: { path: op.path, message: "index out of range" } };
       if (op.op === "add") parent.splice(i, 0, structuredCloneJson(op.value));
       else if (i >= parent.length) return { ok: false, error: { path: op.path, message: "index out of range" } };
       else if (op.op === "replace") parent[i] = structuredCloneJson(op.value);

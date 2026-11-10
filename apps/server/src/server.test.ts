@@ -186,6 +186,22 @@ describe("server over WebSocket (integration)", () => {
     expect(await seat.act({ type: "question.reveal" }, "k_collision")).toMatchObject({ ok: false, code: "conflict" });
   });
 
+  it("the control room can burst (500 players) without losing an intent", async () => {
+    const { server } = await boot();
+    const ctl = await Client.connect(server, "Régie");
+    await ctl.act({ type: "game.start" });
+    const acks = await Promise.all(Array.from({ length: 300 }, (_, i) => ctl.act({ type: "player.add", participantId: `p_${i + 1}`, displayName: `J${i + 1}`, channel: "seat" })));
+    expect(acks.every((a) => a.t === "ack" && a.ok)).toBe(true);
+  });
+
+  it("a throttled intent gets an ack with its key (the client can retry)", async () => {
+    const { server } = await boot();
+    const out = await Client.connect(server, "Sortie program");
+    for (let i = 0; i < 60; i++) out.ws.send(JSON.stringify({ t: "intent", key: `k_flood${String(i).padStart(4, "0")}`, action: { type: "game.start" } }));
+    const limited = await out.until((m) => m.t === "ack" && !m.ok && m.code === "rate-limited");
+    expect(limited).toMatchObject({ key: expect.stringMatching(/^k_flood/) });
+  });
+
   it("rate-limits a flooding client without affecting others", async () => {
     const { server } = await boot();
     const flood = await Client.connect(server, "Sortie program");

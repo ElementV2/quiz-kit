@@ -12,11 +12,14 @@ export interface EventStore {
   getSession(id: string): Session | null;
   latestSessionId(): string | null;
   append(sessionId: string, event: Event): void;
+  /** Atomic: all events or none (one transaction, one fsync — group commit, ADR-0008). */
+  appendMany(sessionId: string, events: readonly Event[]): void;
   events(sessionId: string): Event[];
   saveSnapshot(sessionId: string, seq: number, state: unknown): void;
   latestSnapshot(sessionId: string): StoredSnapshot | null;
   getMeta(key: string): string | null;
   setMeta(key: string, value: string): void;
+  deleteMeta(key: string): void;
   revoke(jti: string): void;
   isRevoked(jti: string): boolean;
   close(): void;
@@ -54,6 +57,21 @@ export class MemoryEventStore implements EventStore {
     if (e.idempotencyKey !== null && events.some((x) => x.idempotencyKey === e.idempotencyKey)) throw new Error("duplicate idempotency key");
     events.push(structuredClone(e));
   }
+  appendMany(sessionId: string, events: readonly Event[]): void {
+    if (this.failNextAppend) {
+      this.failNextAppend = false;
+      throw new Error("disk full (simulated)");
+    }
+    const log = this.log.get(sessionId);
+    if (log === undefined) throw new Error(`unknown session ${sessionId}`);
+    const before = log.length;
+    try {
+      for (const e of events) this.append(sessionId, e);
+    } catch (err) {
+      log.length = before; // all or nothing
+      throw err;
+    }
+  }
   events(sessionId: string): Event[] {
     return structuredClone(this.log.get(sessionId) ?? []);
   }
@@ -69,6 +87,9 @@ export class MemoryEventStore implements EventStore {
   }
   setMeta(key: string, value: string): void {
     this.meta.set(key, value);
+  }
+  deleteMeta(key: string): void {
+    this.meta.delete(key);
   }
   revoke(jti: string): void {
     this.revoked.add(jti);

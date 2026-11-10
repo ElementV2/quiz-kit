@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { Action, View, Viewer } from "@quiz/schema";
 
-export const PROTOCOL_VERSION = 1;
+export { PROTOCOL_VERSION } from "./version.ts";
 /** Max size of one WebSocket message, both directions (doc 04). */
 export const MAX_MESSAGE_BYTES = 16 * 1024;
 /** Max size of a server message carrying a full view (snapshots can be larger than intents). */

@@ -64,7 +64,7 @@ const $ = (id) => document.getElementById(id);
 const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text !== undefined) e.textContent = String(text); return e; };
 const clientId = (() => { try { let id = localStorage.getItem("quiz.clientId"); if (!id) { id = "c_" + crypto.randomUUID().replaceAll("-", ""); localStorage.setItem("quiz.clientId", id); } return id; } catch { return "c_" + Math.random().toString(36).slice(2); } })();
 const PHASES = { lobby: "Avant la partie", idle: "Entre deux questions", presenting: "Question présentée", open: "Réponses ouvertes", locked: "Réponses fermées", judging: "Validation", revealed: "Réponse révélée", "round.end": "Fin de manche", "game.end": "Fin de partie" };
-let ws = null, view = null, viewSeq = 0, offset = 0, attempt = 0, pending = new Map();
+let ws = null, view = null, viewSeq = 0, offset = 0, attempt = 0, pending = new Map(), lastAck = "";
 
 function connect() {
   ws = new WebSocket((location.protocol === "https:" ? "wss://" : "ws://") + location.host + "/ws");
@@ -75,7 +75,7 @@ function connect() {
     else if (m.t === "snapshot") { view = m.view; viewSeq = m.viewSeq; render(); }
     else if (m.t === "patch") { send({ t: "resync" }); } // preview: always ask for a snapshot (real apps apply the patch)
     else if (m.t === "ping") { offset = m.serverTime - Date.now(); }
-    else if (m.t === "ack") { pending.delete(m.key); $("msg") && ($("msg").textContent = m.ok ? "✓ enregistré" : "✗ " + m.reason); render(); }
+    else if (m.t === "ack") { pending.delete(m.key); lastAck = m.ok ? "✓ enregistré" : "✗ " + m.reason; render(); }
     else if (m.t === "error") { setStatus(false, m.message); }
   };
   ws.onclose = () => { setStatus(false); const d = Math.random() * Math.min(2000, 100 * 2 ** attempt++); setTimeout(connect, d); };
@@ -133,9 +133,10 @@ function renderControls(v) {
   const add = el("button", "secondary", "+ Joueur");
   add.onclick = () => { const n = v.participants.length + 1; intent({ type: "player.add", participantId: "p_" + Date.now().toString(36), displayName: "Joueur " + n, seat: firstFreeSeat(v), channel: "seat" }); };
   c.append(add);
-  c.append(el("div", "msg", "")).id = "msg";
-  const info = el("div", "msg", v.participants.length + " joueur(s) · réponses : " + v.answers.length + " · événement #" + v.lastSeq);
-  c.append(info);
+  const msg = el("div", "msg", lastAck);
+  msg.id = "msg";
+  c.append(msg);
+  c.append(el("div", "msg", v.participants.length + " joueur(s) · réponses : " + v.answers.length + " · événement #" + v.lastSeq));
 }
 function firstFreeSeat(v) { const used = new Set(v.participants.map((p) => p.seat)); for (let i = 1; i < 999; i++) if (!used.has(i)) return i; return undefined; }
 

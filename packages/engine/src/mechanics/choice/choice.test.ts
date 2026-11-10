@@ -21,7 +21,7 @@ describe("choice projections", () => {
   it("hides the correct answer and distribution from players and outputs until reveal", () => {
     const g = run(reg, [...OPEN, answer("p_1", "b"), ctl({ type: "question.lock" })]);
     for (const v of [project(g, { role: "player", participantId: "p_2" }, reg), project(g, { role: "output", scene: "program" }, reg)]) {
-      expect(v.mechanic).toMatchObject({ correct: null, counts: null, answeredCount: 1 });
+      expect(v.mechanic).toMatchObject({ correct: null, counts: null });
     }
     expect(project(g, { role: "host" }, reg).mechanic).toMatchObject({ correct: ["b"], counts: { a: 0, b: 1, c: 0, d: 0 } });
   });

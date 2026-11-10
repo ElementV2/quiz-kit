@@ -21,7 +21,8 @@ export const ChoiceMechanicView = z.strictObject({
   correct: z.array(OptionId).nullable(),
   /** Answer distribution. Host / control from `locked`, everyone from `revealed`, else null. */
   counts: z.record(OptionId, z.number().int()).nullable(),
-  answeredCount: z.number().int(),
+  /** Live number of answers. Null for players: it would change every tablet's view on every answer (O(n²) broadcast). */
+  answeredCount: z.number().int().nullable(),
 });
 export type ChoiceMechanicView = z.infer<typeof ChoiceMechanicView>;
 
@@ -36,6 +37,9 @@ export const LeaderboardRow = z.strictObject({
   rank: z.number().int().min(1),
 });
 export type LeaderboardRow = z.infer<typeof LeaderboardRow>;
+
+/** Rows sent to players: the top of the leaderboard only (their own rank is in `me`). */
+export const PLAYER_LEADERBOARD_ROWS = 10;
 
 export const BaseView = z.strictObject({
   sessionId: SessionId,
@@ -68,6 +72,7 @@ export const PlayerView = BaseView.extend({
       status: ParticipantStatus,
       teamId: TeamId.nullable(),
       total: z.number().int(),
+      rank: z.number().int().min(1),
     })
     .nullable(),
   /** The player's own accepted answer (option ids), null if none. */

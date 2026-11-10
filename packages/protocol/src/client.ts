@@ -192,6 +192,12 @@ export class QuizClient {
         return;
       }
       case "ack": {
+        if (!m.ok && m.code === "rate-limited") {
+          // Throttled, not refused: keep it queued and resend it a bit later with the same key.
+          const p = this.pending.find((x) => x.key === m.key);
+          if (p !== undefined) this.o.setTimer(() => this.send({ t: "intent", key: p.key, action: p.action }), 200 + this.o.random() * 300);
+          return;
+        }
         const p = this.pending.find((x) => x.key === m.key);
         this.pending = this.pending.filter((x) => x.key !== m.key);
         this.o.store.save(this.pending);

@@ -32,7 +32,7 @@ describe("SessionRuntime — journal before broadcast (non-negotiable #4)", () =
   it("journals every accepted action before any client sees it", () => {
     const { rt, store, act } = setup();
     const seen: number[] = [];
-    const sink: ViewSink = { viewer: { role: "control" }, update: (v) => seen.push(v.role === "control" ? store.events(session.id).length : -1) };
+    const sink: ViewSink = { viewer: { role: "control" }, update: (f) => seen.push(f.view.role === "control" ? store.events(session.id).length : -1) };
     rt.subscribe(sink);
     act({ type: "game.start" });
     act({ type: "player.add", participantId: "p_1", displayName: "Ana", channel: "seat" });
@@ -215,5 +215,70 @@ describe("ViewStream — patches, snapshots, slow clients (ADR-0009)", () => {
     rt.subscribe({ viewer: { role: "control" }, update: () => ok++ });
     act({ type: "game.start" });
     expect(ok).toBe(1);
+  });
+});
+
+function batched() {
+  const store = new MemoryEventStore();
+  store.createSession(session);
+  const writes: number[] = [];
+  const original = store.appendMany.bind(store);
+  store.appendMany = (sid, evs) => {
+    writes.push(evs.length);
+    original(sid, evs);
+  };
+  const deferred: (() => void)[] = [];
+  const time = new FakeTime();
+  const rt = new SessionRuntime(store, defaultRegistry, session, time.clock, time, silentLog, { defer: (fn) => deferred.push(fn) });
+  const flush = () => deferred.splice(0).forEach((f) => f());
+  return { store, writes, rt, flush };
+}
+
+describe("SessionRuntime — group commit (ADR-0008)", () => {
+
+  it("journals a burst of intents in ONE write, acks only after it, broadcasts once", () => {
+    const { rt, writes, flush, store } = batched();
+    let updates = 0;
+    rt.subscribe({ viewer: { role: "control" }, update: () => updates++ });
+    const acks: { journal: number }[] = [];
+    rt.enqueue({ type: "game.start" }, CTL, "k_batch001", () => acks.push({ journal: store.events(session.id).length }));
+    for (let i = 1; i <= 50; i++) rt.enqueue({ type: "player.add", participantId: `p_${i}`, displayName: `J${i}`, channel: "seat" }, CTL, `k_batch${String(i + 1).padStart(3, "0")}`, () => acks.push({ journal: store.events(session.id).length }));
+    expect(acks).toHaveLength(0); // nothing acked before the commit
+    flush();
+    expect(writes).toEqual([51]);
+    expect(acks).toHaveLength(51);
+    expect(acks.every((x) => x.journal === 51)).toBe(true);
+    expect(updates).toBe(1);
+  });
+
+  it("a failed batch write refuses every intent of the batch and changes nothing", () => {
+    const { rt, store, flush } = batched();
+    const acks: { ok: boolean }[] = [];
+    store.failNextAppend = true;
+    rt.enqueue({ type: "game.start" }, CTL, "k_fail0001", (a) => acks.push(a));
+    rt.enqueue({ type: "player.add", participantId: "p_1", displayName: "A", channel: "seat" }, CTL, "k_fail0002", (a) => acks.push(a));
+    flush();
+    expect(acks.map((a) => a.ok)).toEqual([false, false]);
+    expect(rt.current.state.phase).toBe("lobby");
+    expect(rt.current.state.participants).toHaveLength(0);
+  });
+
+  it("the same key twice in one batch is applied once and acked identically", () => {
+    const { rt, store, flush } = batched();
+    const acks: unknown[] = [];
+    rt.enqueue({ type: "game.start" }, CTL, "k_twice001", (a) => acks.push(a));
+    rt.enqueue({ type: "game.start" }, CTL, "k_twice001", (a) => acks.push(a));
+    flush();
+    expect(store.events(session.id)).toHaveLength(1);
+    expect(acks[0]).toEqual(acks[1]);
+  });
+
+  it("decisions inside a batch see each other (single writer, in order)", () => {
+    const { rt, flush } = batched();
+    const acks: { ok: boolean }[] = [];
+    rt.enqueue({ type: "game.start" }, CTL, "k_order001", (a) => acks.push(a));
+    rt.enqueue({ type: "game.start" }, CTL, "k_order002", (a) => acks.push(a)); // second start: wrong phase
+    flush();
+    expect(acks.map((a) => a.ok)).toEqual([true, false]);
   });
 });

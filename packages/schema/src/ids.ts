@@ -17,8 +17,13 @@ export const FormatId = prefixed("f");
 export const ScoreEntryId = prefixed("se");
 export const ClientId = prefixed("c");
 
-/** Option ids are local to a question (`a`, `b`, `opt_1`…). */
-export const OptionId = z.string().min(1).max(32).regex(/^[0-9A-Za-z_-]+$/);
+/** Option ids are local to a question (`a`, `b`, `opt_1`…). They become object keys in views: no prototype names. */
+export const OptionId = z
+  .string()
+  .min(1)
+  .max(32)
+  .regex(/^[0-9A-Za-z_-]+$/)
+  .refine((s) => s !== "__proto__" && s !== "constructor" && s !== "prototype", "identifiant réservé");
 
 export const MediaHash = z.string().regex(/^[0-9a-f]{64}$/, "SHA-256 hexadécimal attendu");
 

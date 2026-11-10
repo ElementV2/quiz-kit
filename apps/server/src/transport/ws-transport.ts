@@ -4,7 +4,7 @@ import { WebSocketServer, type RawData, type WebSocket } from "ws";
 import { MAX_MESSAGE_BYTES, PROTOCOL_VERSION, decodeClientMessage, encode, type ErrorCode, type ServerMessage } from "@quiz/protocol";
 import { assertNever } from "@quiz/engine";
 import type { Actor, Viewer } from "@quiz/schema";
-import type { Clock, Log, SessionRuntime } from "../runtime/session-runtime.ts";
+import { toAckMessage, type Clock, type Log, type SessionRuntime } from "../runtime/session-runtime.ts";
 import { ViewStream } from "../runtime/view-stream.ts";
 import { verifyToken, viewerOf } from "../tokens.ts";
 
@@ -13,13 +13,18 @@ export type TransportDeps = {
   readonly secret: string;
   readonly show: string;
   readonly isRevoked: (jti: string) => boolean;
+  /** Wall clock: server time sent to clients, token expiry. */
   readonly clock: Clock;
+  /** Monotonic clock (ms): rate limiting must not jump when Windows resyncs the wall clock. */
+  readonly monotonic?: () => number;
   readonly log: Log;
   readonly helloTimeoutMs?: number;
   readonly heartbeatMs?: number;
+  /** Pings without pong before a connection is considered dead (Wi-Fi power saving tolerates a few). */
+  readonly missedPongsAllowed?: number;
 };
 
-/** Token bucket per connection (doc 04: rate limit per device). */
+/** Token bucket per connection (doc 04: rate limit per device), on a monotonic clock. */
 class RateLimiter {
   private tokens: number;
   private last: number;
@@ -32,7 +37,8 @@ class RateLimiter {
     this.last = now;
   }
   take(now: number): boolean {
-    this.tokens = Math.min(this.capacity, this.tokens + ((now - this.last) / 1000) * this.perSecond);
+    const elapsed = Math.max(0, now - this.last);
+    this.tokens = Math.min(this.capacity, this.tokens + (elapsed / 1000) * this.perSecond);
     this.last = now;
     if (this.tokens < 1) return false;
     this.tokens -= 1;
@@ -40,18 +46,21 @@ class RateLimiter {
   }
 }
 
+/** Per-role budgets: the control room may legitimately burst (CSV import of 500 players, Stream Deck macros). */
+const LIMITS = { staff: { capacity: 600, perSecond: 300 }, device: { capacity: 40, perSecond: 20 } } as const;
+
 type Conn = {
   readonly ws: WebSocket;
-  readonly limiter: RateLimiter;
-  alive: boolean;
-  rttMs: number | null;
+  limiter: RateLimiter;
+  missedPongs: number;
   viewer: Viewer | null;
+  jti: string | null;
   clientId: string | null;
   stream: ViewStream | null;
   unsubscribe: (() => void) | null;
 };
 
-/** Same-origin check: browsers send Origin; bots and OBS-loaded pages from this server match the Host. */
+/** Same-origin check: browsers send Origin; bots and pages served by this server match the Host. */
 function originAllowed(req: IncomingMessage): boolean {
   const origin = req.headers.origin;
   if (origin === undefined) return true;
@@ -62,15 +71,23 @@ function originAllowed(req: IncomingMessage): boolean {
   }
 }
 
+function rawToString(data: RawData): string {
+  if (Array.isArray(data)) return Buffer.concat(data).toString("utf8");
+  if (data instanceof ArrayBuffer) return Buffer.from(new Uint8Array(data)).toString("utf8");
+  return data.toString("utf8");
+}
+
 /** WebSocket endpoint `/ws` (doc 04, ADR-0009). Attach it to every HTTP(S) server. */
 export class WsTransport {
   private readonly wss = new WebSocketServer({ noServer: true, maxPayload: MAX_MESSAGE_BYTES, clientTracking: false });
   private readonly conns = new Set<Conn>();
   private readonly heartbeat: ReturnType<typeof setInterval>;
   private readonly deps: TransportDeps;
+  private readonly monotonic: () => number;
 
   constructor(deps: TransportDeps) {
     this.deps = deps;
+    this.monotonic = deps.monotonic ?? (() => performance.now());
     this.heartbeat = setInterval(() => this.tick(), deps.heartbeatMs ?? 2000);
     this.heartbeat.unref();
   }
@@ -91,6 +108,18 @@ export class WsTransport {
     return this.conns.size;
   }
 
+  /** Revocation takes effect immediately: open connections using that token are closed. */
+  disconnectJti(jti: string): number {
+    let n = 0;
+    for (const c of this.conns) {
+      if (c.jti === jti) {
+        this.fail(c, "unauthorized", "jeton révoqué");
+        n++;
+      }
+    }
+    return n;
+  }
+
   close(): void {
     clearInterval(this.heartbeat);
     for (const c of this.conns) c.ws.terminate();
@@ -99,7 +128,7 @@ export class WsTransport {
   }
 
   private onConnection(ws: WebSocket): void {
-    const conn: Conn = { ws, limiter: new RateLimiter(40, 20, this.deps.clock()), alive: true, rttMs: null, viewer: null, clientId: null, stream: null, unsubscribe: null };
+    const conn: Conn = { ws, limiter: new RateLimiter(LIMITS.device.capacity, LIMITS.device.perSecond, this.monotonic()), missedPongs: 0, viewer: null, jti: null, clientId: null, stream: null, unsubscribe: null };
     this.conns.add(conn);
     const helloTimer = setTimeout(() => {
       if (conn.viewer === null) this.fail(conn, "unauthorized", "hello attendu");
@@ -113,7 +142,7 @@ export class WsTransport {
       }
     });
     ws.on("pong", () => {
-      conn.alive = true;
+      conn.missedPongs = 0;
     });
     ws.on("close", () => {
       clearTimeout(helloTimer);
@@ -124,18 +153,22 @@ export class WsTransport {
   }
 
   private onMessage(conn: Conn, data: RawData, isBinary: boolean): void {
-    if (!conn.limiter.take(this.deps.clock())) {
-      this.send(conn, { t: "error", code: "rate-limited", message: "trop de messages" });
-      return;
-    }
+    conn.missedPongs = 0; // any message proves the client is alive (some stacks answer protocol pings late)
     if (isBinary) return this.fail(conn, "bad-message", "binaire refusé");
-    const raw = Array.isArray(data) ? Buffer.concat(data).toString("utf8") : Buffer.from(data instanceof ArrayBuffer ? new Uint8Array(data) : data).toString("utf8");
-    const decoded = decodeClientMessage(raw);
+    // Decode first (bounded by maxPayload) so a throttled intent gets an ack carrying its key:
+    // the client then retries it instead of waiting forever for an ack that never comes.
+    const decoded = decodeClientMessage(rawToString(data));
+    const allowed = conn.limiter.take(this.monotonic());
     if (!decoded.ok) {
-      this.send(conn, { t: "error", code: decoded.error.code, message: decoded.error.message });
+      if (allowed) this.send(conn, { t: "error", code: decoded.error.code, message: decoded.error.message });
       return;
     }
     const m = decoded.value;
+    if (!allowed) {
+      if (m.t === "intent") this.send(conn, { t: "ack", key: m.key, ok: false, code: "rate-limited", reason: "trop de messages : réessayer" });
+      else this.send(conn, { t: "error", code: "rate-limited", message: "trop de messages" });
+      return;
+    }
     if (conn.viewer === null) {
       if (m.t !== "hello") return this.fail(conn, "unauthorized", "hello attendu");
       return this.onHello(conn, m.v, m.token, m.clientId);
@@ -151,16 +184,17 @@ export class WsTransport {
           this.send(conn, { t: "ack", key: m.key, ok: false, code: "forbidden", reason: "siège non assigné" });
           return;
         }
-        const ack = runtime.submit(m.action, actor, m.key);
-        if (ack.key !== null) this.send(conn, ack.ok ? { t: "ack", key: ack.key, ok: true, eventSeq: ack.eventSeq ?? 0 } : { t: "ack", key: ack.key, ok: false, code: ack.code ?? "rejected", reason: ack.reason ?? "" });
+        const key = m.key;
+        runtime.enqueue(m.action, actor, key, (ack) => this.send(conn, toAckMessage({ ...ack, key })));
         return;
       }
       case "pong":
-        conn.rttMs = Math.max(0, this.deps.clock() - m.serverTime);
         return;
       case "resync":
-        conn.stream?.resync(runtime.view(conn.viewer));
+        conn.stream?.resync(runtime.welcomeView(conn.viewer));
         return;
+      default:
+        return assertNever(m);
     }
   }
 
@@ -171,10 +205,14 @@ export class WsTransport {
     const viewer = viewerOf(r.claims);
     const runtime = this.deps.runtime();
     conn.viewer = viewer;
+    conn.jti = r.claims.jti;
+    const staff = viewer.role === "control" || viewer.role === "scorer" || viewer.role === "host" || viewer.role === "control-readonly";
+    const budget = staff ? LIMITS.staff : LIMITS.device;
+    conn.limiter = new RateLimiter(budget.capacity, budget.perSecond, this.monotonic());
     conn.clientId = clientId;
     const stream = new ViewStream(viewer, { send: (d) => conn.ws.send(d), get bufferedAmount() { return conn.ws.bufferedAmount; } });
     conn.stream = stream;
-    stream.welcome(runtime.view(viewer), this.deps.clock(), PROTOCOL_VERSION);
+    stream.welcome(runtime.welcomeView(viewer), this.deps.clock(), PROTOCOL_VERSION);
     conn.unsubscribe = runtime.subscribe(stream);
   }
 
@@ -202,12 +240,13 @@ export class WsTransport {
 
   private tick(): void {
     const now = this.deps.clock();
+    const allowed = this.deps.missedPongsAllowed ?? 3;
     for (const c of this.conns) {
-      if (!c.alive) {
+      if (c.missedPongs >= allowed) {
         c.ws.terminate(); // dead TCP: the client will reconnect and get a fresh snapshot
         continue;
       }
-      c.alive = false;
+      c.missedPongs += 1;
       c.ws.ping();
       if (c.viewer !== null) this.send(c, { t: "ping", serverTime: now });
       c.stream?.flushIfCaughtUp();

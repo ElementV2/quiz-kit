@@ -110,7 +110,7 @@ export const choice = defineMechanic<ChoiceConfig, ChoiceState>({
       maxPick: s.maxPick,
       correct: revealed || privileged ? [...s.correct] : null,
       counts: showCounts ? counts : null,
-      answeredCount: s.answers.length,
+      answeredCount: env.audience === "player" ? null : s.answers.length,
     };
   },
 });

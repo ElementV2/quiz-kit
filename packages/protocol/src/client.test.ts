@@ -179,3 +179,19 @@ describe("QuizClient", () => {
     expect(timers).toHaveLength(0);
   });
 });
+
+describe("QuizClient — throttling", () => {
+  it("a rate-limited intent stays queued and is resent with the same key", async () => {
+    const { client, last, welcome, timers } = setup();
+    client.start();
+    last().open();
+    welcome(last());
+    const p = client.submit({ type: "game.start" });
+    last().push({ t: "ack", key: "k_test0000", ok: false, code: "rate-limited", reason: "trop de messages" });
+    expect(client.queued).toHaveLength(1);
+    timers.at(-1)?.fn();
+    expect(last().ofType("intent").map((m) => m["key"])).toEqual(["k_test0000", "k_test0000"]);
+    last().push({ t: "ack", key: "k_test0000", ok: true, eventSeq: 1 });
+    await expect(p).resolves.toMatchObject({ ok: true });
+  });
+});

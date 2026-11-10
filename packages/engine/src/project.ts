@@ -1,4 +1,4 @@
-import type { BaseView, ControlView, HostView, LeaderboardRow, OutputView, PlayerView, View, Viewer } from "@quiz/schema";
+import { PLAYER_LEADERBOARD_ROWS, type BaseView, type ControlView, type HostView, type LeaderboardRow, type OutputView, type PlayerView, type View, type Viewer } from "@quiz/schema";
 import type { Game } from "./game.ts";
 import type { Audience, Registry } from "./mechanic.ts";
 import { assertNever } from "./result.ts";
@@ -46,7 +46,8 @@ function base(s: GameState, audience: Audience, participantId: string | null, re
         : null,
     timer: s.timer === null ? null : { endsAt: s.timer.endsAt, durationMs: s.timer.durationMs },
     mechanic: m === null || s.mechanic === null ? null : m.project(s.mechanic.state, { audience, phase: s.phase, participantId }),
-    leaderboard: leaderboard(s),
+    // Players get the top only: a full 500-row board in every tablet view would make each broadcast O(n²).
+    leaderboard: audience === "player" ? leaderboard(s).slice(0, PLAYER_LEADERBOARD_ROWS) : leaderboard(s),
   };
 }
 
@@ -62,7 +63,7 @@ function playerView(s: GameState, participantId: string | null, registry: Regist
   return {
     role: "player",
     ...base(s, "player", me?.id ?? null, registry),
-    me: me === undefined ? null : { participantId: me.id, displayName: me.displayName, status: me.status, teamId: me.teamId, total: participantTotal(s, me.id) },
+    me: me === undefined ? null : { participantId: me.id, displayName: me.displayName, status: me.status, teamId: me.teamId, total: participantTotal(s, me.id), rank: rankOf(s, me.id) },
     myAnswer: myAnswer === null ? null : [...myAnswer],
     myResult,
     canAnswer: s.phase === "open" && me !== undefined && me.status === "active",
@@ -92,8 +93,36 @@ function next(s: GameState): HostView["nextQuestion"] {
   return q === null ? null : { id: q.id, text: q.prompt.text };
 }
 
+/** Memoised per (ledger, participants) identity: computed once per state, shared by every projection (ADR-0004). */
+const boardCache = new WeakMap<object, WeakMap<object, LeaderboardRow[]>>();
+
+const rankCache = new WeakMap<readonly LeaderboardRow[], ReadonlyMap<string, number>>();
+
+function rankOf(s: GameState, participantId: string): number {
+  const board = leaderboard(s);
+  let ranks = rankCache.get(board);
+  if (ranks === undefined) {
+    ranks = new Map(board.map((r) => [r.participantId, r.rank]));
+    rankCache.set(board, ranks);
+  }
+  return ranks.get(participantId) ?? s.participants.length;
+}
+
 /** Standard competition ranking (1, 1, 3); ties keep registration order. */
 export function leaderboard(s: GameState): LeaderboardRow[] {
+  let inner = boardCache.get(s.ledger);
+  if (inner === undefined) {
+    inner = new WeakMap();
+    boardCache.set(s.ledger, inner);
+  }
+  const cached = inner.get(s.participants);
+  if (cached !== undefined) return cached;
+  const board = computeLeaderboard(s);
+  inner.set(s.participants, board);
+  return board;
+}
+
+function computeLeaderboard(s: GameState): LeaderboardRow[] {
   const rows = s.participants
     .map((p, order) => ({ p, order, total: participantTotal(s, p.id) }))
     .toSorted((a, b) => b.total - a.total || a.order - b.order);

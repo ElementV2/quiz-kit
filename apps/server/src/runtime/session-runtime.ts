@@ -1,6 +1,6 @@
 import { GameState, decide, project, replay, type Game, type Registry } from "@quiz/engine";
-import type { Action, Actor, Session, View, Viewer } from "@quiz/schema";
-import type { AckMessage } from "@quiz/protocol";
+import { diff, type AckMessage } from "@quiz/protocol";
+import type { Action, Actor, Event, Session, View, Viewer } from "@quiz/schema";
 import type { EventStore } from "../store/event-store.ts";
 
 /** Ports injected so tests control time and timers (CONVENTIONS "D"). */
@@ -16,35 +16,75 @@ export const realTimers: Timers = {
 
 export type Log = { info(o: object, msg: string): void; warn(o: object, msg: string): void; error(o: object, msg: string): void };
 
-/** Receives the projected view of one viewer after every committed change. */
-export type ViewSink = { readonly viewer: Viewer; update(view: View): void };
+/**
+ * One broadcast for one kind of viewer, shared by every connection with that viewer (ADR-0004):
+ * the projection, its normalised form and the patch from the previous broadcast are computed once.
+ */
+export type ViewFrame = {
+  readonly view: View;
+  /** Previous broadcast view for this viewer kind (identity-compared by streams), or null. */
+  readonly base: View | null;
+  /** JSON of the RFC 6902 ops from `base` to `view`, or null when there is no base. */
+  readonly opsJson: string | null;
+  readonly viewJsonLength: number;
+};
 
-export type SubmitResult = AckMessage | { t: "ack"; key: null; ok: boolean; code?: string; reason?: string; eventSeq?: number };
+/** Receives the projected view of one viewer after every committed change. */
+export type ViewSink = { readonly viewer: Viewer; update(frame: ViewFrame): void };
+
+export type Ack =
+  | { readonly t: "ack"; readonly key: string | null; readonly ok: true; readonly eventSeq: number }
+  | { readonly t: "ack"; readonly key: string | null; readonly ok: false; readonly code: string; readonly reason: string };
+
+export type JournalHealth = { readonly ok: boolean; readonly lastError: string | null; readonly lastErrorAt: number | null };
+
+type QueuedIntent = { readonly action: Action; readonly actor: Actor; readonly key: string | null; readonly done: (ack: Ack) => void };
+
+export type RuntimeOptions = {
+  /** How a group commit is scheduled (default: setImmediate = after the current I/O turn). */
+  readonly defer?: (fn: () => void) => void;
+  /** Minimum time between two broadcasts; answers bursts are coalesced (default 0 = after every commit). */
+  readonly broadcastIntervalMs?: number;
+};
 
 const REJECTION_CACHE = 10_000;
+const TIMER_RETRY_MS = 1000;
+
+// oxlint-disable-next-line typescript/no-unsafe-type-assertion -- JSON round-trip of a View is still that View minus undefined members
+const normalize = (v: View): View => JSON.parse(JSON.stringify(v)) as View;
 
 /**
- * Identity of an intent for idempotency. `undo` is journaled with its resolved target (ADR-0010),
- * so only its type is compared.
+ * Identity of an intent for idempotency: role + action (not the actor id, which for a seat depends on who sits
+ * there at resend time). An undo is journaled with its resolved target (ADR-0010): a fingerprint rebuilt from
+ * the journal matches any undo under the same key.
  */
 function fingerprint(actor: Actor, action: Action): string {
-  return `${actor.role}|${actor.id ?? ""}|${action.type === "undo" ? "undo" : JSON.stringify(action)}`;
+  if (action.type === "undo") return `${actor.role}|undo|${action.targetSeq ?? "*"}`;
+  return `${actor.role}|${JSON.stringify(action)}`;
+}
+function journalFingerprint(actor: Actor, action: Action): string {
+  return action.type === "undo" ? `${actor.role}|undo|?` : fingerprint(actor, action);
+}
+function sameIntent(stored: string, fp: string): boolean {
+  return stored === fp || (stored.endsWith("|undo|?") && fp.startsWith(stored.slice(0, -1)));
 }
 
 /**
  * One live session: the single writer (ADR-0003).
- * `submit` is fully synchronous — decide → append (fsync) → swap state → broadcast — so two intents can
- * never interleave in Node's event loop: the "serialized queue" is the event loop itself, with no await inside.
+ * Intents are queued and flushed as a group commit: decide each (in order) → append all in one transaction →
+ * swap state → ack → broadcast. `flush` is synchronous with no await inside, so two batches never interleave in
+ * Node's event loop. Nothing after the commit can throw out of `flush`: a failing step is logged, the loop goes on.
  */
 export class SessionRuntime {
   private game: Game;
-  /** key → seq + fingerprint of the intent it was used for. */
   private readonly accepted = new Map<string, { seq: number; fp: string }>();
   private readonly rejected = new Map<string, { code: string; reason: string; fp: string }>();
   private readonly sinks = new Set<ViewSink>();
+  private readonly lastFrames = new Map<string, { seq: number; view: View; viewer: Viewer }>();
   private cancelTimer: (() => void) | null = null;
   private armedTimerId: number | null = null;
   private closed = false;
+  private journal: JournalHealth = { ok: true, lastError: null, lastErrorAt: null };
 
   private readonly store: EventStore;
   private readonly registry: Registry;
@@ -52,20 +92,28 @@ export class SessionRuntime {
   private readonly clock: Clock;
   private readonly timers: Timers;
   private readonly log: Log;
+  private readonly defer: (fn: () => void) => void;
+  private readonly broadcastIntervalMs: number;
+  private readonly queue: QueuedIntent[] = [];
+  private flushScheduled = false;
+  private broadcastPending = false;
+  private lastBroadcastAt = Number.NEGATIVE_INFINITY;
 
-  constructor(store: EventStore, registry: Registry, session: Session, clock: Clock, timers: Timers, log: Log) {
+  constructor(store: EventStore, registry: Registry, session: Session, clock: Clock, timers: Timers, log: Log, opts: RuntimeOptions = {}) {
     this.store = store;
     this.registry = registry;
     this.session = session;
     this.clock = clock;
     this.timers = timers;
     this.log = log;
+    this.defer = opts.defer ?? ((fn) => setImmediate(fn));
+    this.broadcastIntervalMs = opts.broadcastIntervalMs ?? 0;
     const events = store.events(session.id);
     const raw = store.latestSnapshot(session.id);
     const snap = raw === null ? null : GameState.safeParse(raw.state);
     if (raw !== null && snap !== null && !snap.success) log.warn({ seq: raw.seq }, "snapshot invalide ignoré, rejeu complet");
     this.game = replay(session, events, registry, raw !== null && snap?.success === true ? { seq: raw.seq, state: snap.data } : undefined);
-    for (const e of events) if (e.idempotencyKey !== null) this.accepted.set(e.idempotencyKey, { seq: e.seq, fp: fingerprint(e.actor, e.action) });
+    for (const e of events) if (e.idempotencyKey !== null) this.accepted.set(e.idempotencyKey, { seq: e.seq, fp: journalFingerprint(e.actor, e.action) });
     log.info({ sessionId: session.id, events: events.length, lastSeq: this.game.state.lastSeq }, "session rechargée depuis le journal");
     this.armTimer();
   }
@@ -74,46 +122,148 @@ export class SessionRuntime {
     return this.game;
   }
 
+  get journalHealth(): JournalHealth {
+    return this.journal;
+  }
+
   /** Resolves a seat viewer to the participant sitting there (for the actor stamp). */
   participantAtSeat(seat: number): string | null {
     return this.game.state.participants.find((p) => p.seat === seat)?.id ?? null;
   }
 
-  submit(action: Action, actor: Actor, key: string | null): SubmitResult {
-    if (this.closed) return this.reply(key, { ok: false, code: "not-ready", reason: "session fermée" });
-    const fp = fingerprint(actor, action);
-    if (key !== null) {
-      // Replayed intent → same ack, never re-applied. A key reused for ANOTHER intent is refused explicitly:
-      // acknowledging it would make that client believe an action passed that never ran.
-      const seen = this.accepted.get(key);
-      if (seen !== undefined) {
-        return seen.fp === fp ? { t: "ack", key, ok: true, eventSeq: seen.seq } : { t: "ack", key, ok: false, code: "conflict", reason: "clé d'idempotence déjà utilisée pour une autre intention" };
+  /** Processes one intent right now (tests, server timers). Same path as a batch of one. */
+  submit(action: Action, actor: Actor, key: string | null): Ack {
+    let result: Ack = reply(key, { ok: false, code: "server-error", reason: "non traité" });
+    this.queue.push({ action, actor, key, done: (a) => (result = a) });
+    this.flush();
+    return result;
+  }
+
+  /**
+   * Queues an intent for the next group commit (ADR-0008): every intent received in the same event-loop turn is
+   * decided one after the other (single writer), journaled in ONE transaction (one fsync), then acked and broadcast
+   * once. `done` is called after the commit — never before.
+   */
+  enqueue(action: Action, actor: Actor, key: string | null, done: (ack: Ack) => void): void {
+    this.queue.push({ action, actor, key, done });
+    if (!this.flushScheduled) {
+      this.flushScheduled = true;
+      this.defer(() => this.flush());
+    }
+  }
+
+  private flush(): void {
+    this.flushScheduled = false;
+    const batch = this.queue.splice(0);
+    if (batch.length === 0) return;
+    if (this.closed) {
+      for (const it of batch) it.done(reply(it.key, { ok: false, code: "not-ready", reason: "session fermée" }));
+      return;
+    }
+    let game = this.game;
+    const events: Event[] = [];
+    const results: { it: QueuedIntent; ack: Ack | null; fp: string }[] = [];
+    const inBatch = new Map<string, { index: number; fp: string }>();
+    for (const it of batch) {
+      const fp = fingerprint(it.actor, it.action);
+      const early = this.replayed(it.key, fp, inBatch, results);
+      if (early !== null) {
+        results.push({ it, ack: early, fp });
+        continue;
       }
-      const rej = this.rejected.get(key);
-      if (rej !== undefined && rej.fp === fp) return { t: "ack", key, ok: false, code: rej.code, reason: rej.reason };
+      let decided: ReturnType<typeof decide>;
+      try {
+        decided = decide(game, { action: it.action, actor: it.actor, idempotencyKey: it.key }, this.clock(), this.registry);
+      } catch (e) {
+        this.log.error({ err: e, type: it.action.type }, "bug moteur : action refusée");
+        results.push({ it, ack: reply(it.key, { ok: false, code: "server-error", reason: "erreur interne" }), fp });
+        continue;
+      }
+      if (!decided.ok) {
+        if (it.key !== null) this.rememberRejection(it.key, decided.error.code, decided.error.message, fp);
+        results.push({ it, ack: reply(it.key, { ok: false, code: decided.error.code, reason: decided.error.message }), fp });
+        continue;
+      }
+      game = decided.value.game;
+      events.push(decided.value.event);
+      if (it.key !== null) inBatch.set(it.key, { index: results.length, fp });
+      results.push({ it, ack: reply(it.key, { ok: true, eventSeq: decided.value.event.seq }), fp });
     }
-    const r = decide(this.game, { action, actor, idempotencyKey: key }, this.clock(), this.registry);
-    if (!r.ok) {
-      if (key !== null) this.rememberRejection(key, r.error.code, r.error.message, fp);
-      return this.reply(key, { ok: false, code: r.error.code, reason: r.error.message });
+    if (events.length > 0) {
+      try {
+        this.store.appendMany(this.session.id, events); // journal BEFORE anything else (non-negotiable #4), one fsync
+      } catch (e) {
+        this.journal = { ok: false, lastError: e instanceof Error ? e.message : String(e), lastErrorAt: this.clock() };
+        this.log.error({ err: e, count: events.length }, "échec d'écriture du journal : lot refusé");
+        // Nothing of this batch happened: memory state untouched, every accepted intent is refused.
+        for (const r of results) if (r.ack?.ok === true) r.ack = reply(r.it.key, { ok: false, code: "server-error", reason: "journal indisponible" });
+        for (const r of results) r.it.done(r.ack ?? reply(r.it.key, { ok: false, code: "server-error", reason: "journal indisponible" }));
+        return;
+      }
+      // ── committed: from here on nothing may throw out of flush ──
+      if (!this.journal.ok) this.journal = { ...this.journal, ok: true };
+      this.game = game;
+      for (const r of results) if (r.ack?.ok === true && r.it.key !== null) this.accepted.set(r.it.key, { seq: r.ack.eventSeq, fp: r.fp });
+      if (events.some((e) => e.action.type === "question.present")) this.guard("snapshot", () => this.snapshot());
+      this.guard("timer", () => this.armTimer());
+      this.guard("broadcast", () => this.scheduleBroadcast());
     }
-    const { event, game } = r.value;
-    try {
-      this.store.append(this.session.id, event); // journal BEFORE anything else (non-negotiable #4)
-    } catch (e) {
-      this.log.error({ err: e, seq: event.seq, type: action.type }, "échec d'écriture du journal : action refusée");
-      return this.reply(key, { ok: false, code: "server-error", reason: "journal indisponible" });
+    for (const r of results) {
+      try {
+        r.it.done(r.ack ?? reply(r.it.key, { ok: false, code: "server-error", reason: "non traité" }));
+      } catch (e) {
+        this.log.warn({ err: e }, "envoi d'ack en erreur ignoré");
+      }
     }
-    this.game = game;
-    if (key !== null) this.accepted.set(key, { seq: event.seq, fp });
-    if (action.type === "question.present") this.snapshot();
-    this.armTimer();
-    this.broadcast();
-    return this.reply(key, { ok: true, eventSeq: event.seq });
+  }
+
+  /** Same key seen before (journal, rejection cache, or earlier in this batch) → same answer, never re-applied. */
+  private replayed(key: string | null, fp: string, inBatch: Map<string, { index: number; fp: string }>, results: readonly { ack: Ack | null }[]): Ack | null {
+    if (key === null) return null;
+    const conflict = reply(key, { ok: false, code: "conflict", reason: "clé d'idempotence déjà utilisée pour une autre intention" });
+    const seen = this.accepted.get(key);
+    // A key reused for ANOTHER intent is refused: acknowledging it would make that client believe an action passed.
+    if (seen !== undefined) return sameIntent(seen.fp, fp) ? reply(key, { ok: true, eventSeq: seen.seq }) : conflict;
+    const local = inBatch.get(key);
+    if (local !== undefined) return local.fp === fp ? (results[local.index]?.ack ?? conflict) : conflict;
+    const rej = this.rejected.get(key);
+    if (rej !== undefined && rej.fp === fp) return reply(key, { ok: false, code: rej.code, reason: rej.reason });
+    return null;
+  }
+
+  /** Coalesces broadcasts: at most one every `broadcastIntervalMs` (0 = immediately). Acks never wait for it. */
+  private scheduleBroadcast(): void {
+    if (this.broadcastIntervalMs === 0) {
+      this.broadcast();
+      return;
+    }
+    if (this.broadcastPending) return;
+    const wait = this.lastBroadcastAt + this.broadcastIntervalMs - this.clock();
+    if (wait <= 0) {
+      this.lastBroadcastAt = this.clock();
+      this.broadcast();
+      return;
+    }
+    this.broadcastPending = true;
+    this.timers.set(() => {
+      this.broadcastPending = false;
+      this.lastBroadcastAt = this.clock();
+      this.guard("broadcast", () => this.broadcast());
+    }, wait);
   }
 
   view(viewer: Viewer): View {
     return project(this.game, viewer, this.registry);
+  }
+
+  /** Normalised view for a new connection; reuses the last broadcast frame when still current. */
+  welcomeView(viewer: Viewer): View {
+    const k = JSON.stringify(viewer);
+    const last = this.lastFrames.get(k);
+    if (last !== undefined && last.seq === this.game.state.lastSeq) return last.view;
+    const v = normalize(this.view(viewer));
+    this.lastFrames.set(k, { seq: this.game.state.lastSeq, view: v, viewer });
+    return v;
   }
 
   subscribe(sink: ViewSink): () => void {
@@ -132,8 +282,12 @@ export class SessionRuntime {
     this.sinks.clear();
   }
 
-  private reply(key: string | null, r: { ok: true; eventSeq: number } | { ok: false; code: string; reason: string }): SubmitResult {
-    return key === null ? { t: "ack", key: null, ...r } : { t: "ack", key, ...r };
+  private guard(step: string, f: () => void): void {
+    try {
+      f();
+    } catch (e) {
+      this.log.error({ err: e, step }, "erreur après commit (l'action reste enregistrée, la boucle continue)");
+    }
   }
 
   private rememberRejection(key: string, code: string, reason: string, fp: string): void {
@@ -152,20 +306,37 @@ export class SessionRuntime {
     }
   }
 
-  /** Mutualised projections (ADR-0004): one projection per distinct viewer per change. */
+  /** One projection + one diff + one serialisation per viewer kind, shared by all its connections (ADR-0004). */
   private broadcast(): void {
-    const cache = new Map<string, View>();
+    const groups = new Map<string, ViewSink[]>();
     for (const sink of this.sinks) {
       const k = JSON.stringify(sink.viewer);
-      let v = cache.get(k);
-      if (v === undefined) {
-        v = this.view(sink.viewer);
-        cache.set(k, v);
-      }
+      const g = groups.get(k);
+      if (g === undefined) groups.set(k, [sink]);
+      else g.push(sink);
+    }
+    const seq = this.game.state.lastSeq;
+    for (const [k, sinks] of groups) {
+      let frame: ViewFrame;
       try {
-        sink.update(v);
+        const first = sinks[0];
+        if (first === undefined) continue;
+        const view = normalize(this.view(first.viewer));
+        const prev = this.lastFrames.get(k);
+        const base = prev?.view ?? null;
+        frame = { view, base, opsJson: base === null ? null : JSON.stringify(diff(base, view)), viewJsonLength: JSON.stringify(view).length };
+        this.lastFrames.set(k, { seq, view, viewer: first.viewer });
       } catch (e) {
-        this.log.warn({ err: e }, "client en erreur ignoré"); // one client never breaks the loop
+        // Clients of this kind keep their previous view; the next change patches from it (same base).
+        this.log.error({ err: e, viewer: k }, "projection en erreur : diffusion ignorée pour ce rôle");
+        continue;
+      }
+      for (const sink of sinks) {
+        try {
+          sink.update(frame);
+        } catch (e) {
+          this.log.warn({ err: e }, "client en erreur ignoré"); // one client never breaks the loop
+        }
       }
     }
   }
@@ -179,11 +350,32 @@ export class SessionRuntime {
     this.armedTimerId = null;
     if (t === null || this.closed) return;
     this.armedTimerId = t.id;
-    this.cancelTimer = this.timers.set(() => {
-      this.cancelTimer = null;
-      this.armedTimerId = null;
-      const r = this.submit({ type: "timer.expired", timerId: t.id }, { role: "system" }, null);
-      if (!r.ok) this.log.info({ timerId: t.id, reason: r.reason }, "expiration ignorée");
-    }, Math.max(0, t.endsAt - this.clock()));
+    this.cancelTimer = this.timers.set(() => this.fireTimer(t.id), Math.max(0, t.endsAt - this.clock()));
   }
+
+  private fireTimer(timerId: number): void {
+    this.cancelTimer = null;
+    this.armedTimerId = null;
+    try {
+      const r = this.submit({ type: "timer.expired", timerId }, { role: "system" }, null);
+      if (!r.ok && r.code === "server-error" && !this.closed) {
+        // Journal unavailable: keep trying, the auto-lock must not be lost.
+        this.armedTimerId = timerId;
+        this.cancelTimer = this.timers.set(() => this.fireTimer(timerId), TIMER_RETRY_MS);
+      } else if (!r.ok) {
+        this.log.info({ timerId, reason: r.reason }, "expiration ignorée");
+      }
+    } catch (e) {
+      this.log.error({ err: e, timerId }, "erreur dans le timer serveur");
+    }
+  }
+}
+
+function reply(key: string | null, r: { ok: true; eventSeq: number } | { ok: false; code: string; reason: string }): Ack {
+  return { t: "ack", key, ...r };
+}
+
+/** Narrow an Ack with a key to the wire message. */
+export function toAckMessage(ack: Ack & { key: string }): AckMessage {
+  return ack.ok ? { t: "ack", key: ack.key, ok: true, eventSeq: ack.eventSeq } : { t: "ack", key: ack.key, ok: false, code: ack.code, reason: ack.reason };
 }
