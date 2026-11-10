@@ -6,7 +6,7 @@ Règle : une phase n'est terminée que quand ses critères de sortie passent. Co
 
 - [x] Cadrage : relecture du kit, ADR 0007 → 0012, docs corrigés, points ouverts vérifiés
 - [x] Monorepo pnpm + Turborepo, TS strict, lint (règles d'import entre paquets), Vitest, CI locale (`pnpm check`)
-- [ ] `schema` : Question, AnswerSpec (single, multi, boolean, poll, oral), Format, Round, Session, Participant, Team, ScoreEntry, Event, Actions, Vues + `schemaVersion`
+- [x] `schema` : Question, AnswerSpec (single, multi, boolean, poll, oral), Format, Round, Session, Participant, Team, ScoreEntry, Event, Actions, Vues + `schemaVersion`
 - [ ] `engine` : `reduce`, `project`, `replay`, registre de mécaniques, `mechanicContractSuite`, Rng seedé
 - [ ] Mécanique `choice` (QCM 2 à 6 options, vrai/faux, multi) + scoring de base + registre de score + undo
 - [ ] `protocol` : hello/welcome/patch/snapshot/intent/ack/ping, séquences, idempotence
