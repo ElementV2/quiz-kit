@@ -7,10 +7,13 @@
     ".": "./src/index.ts"
   },
   "scripts": {
-    "start": "node src/main.ts",
+    "start": "node src/supervise.ts",
+    "serve": "node src/main.ts",
     "dev": "node --watch src/main.ts",
-    "test": "vitest run --passWithNoTests",
-    "typecheck": "tsc -p tsconfig.json"
+    "test": "vitest run",
+    "typecheck": "tsc -p tsconfig.json",
+    "chaos": "node tools/chaos.ts",
+    "load": "node tools/load.ts"
   },
   "dependencies": {
     "@quiz/engine": "workspace:*",
@@ -24,6 +27,7 @@
   "devDependencies": {
     "@types/better-sqlite3": "9.6.0",
     "@types/ws": "8.18.2",
+    "esbuild": "0.28.2",
     "vitest": "5.1.0"
   }
 }
