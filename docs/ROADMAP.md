@@ -11,7 +11,7 @@ Règle : une phase n'est terminée que quand ses critères de sortie passent. Co
 - [x] Mécanique `choice` (QCM 2 à 6 options, vrai/faux, multi) + scoring de base + registre de score + undo
 - [x] `protocol` : hello/welcome/patch/snapshot/intent/ack/ping, séquences, idempotence
 - [x] `server` : Fastify + ws, file d'actions sérialisée, EventStore SQLite (WAL + FULL), snapshots, timers serveur, jetons par rôle
-- [ ] `protocol/client` : reconnexion backoff, file d'intentions persistée, resynchro
+- [x] `protocol/client` : reconnexion backoff, file d'intentions persistée, resynchro
 - [ ] Bot client + chaos (`pnpm chaos`) + script k6 (`pnpm load`)
 
 **Sortie** : 500 clients simulés, partie complète, 0 réponse perdue ; chaos (kill serveur, coupure réseau) → état final identique.
