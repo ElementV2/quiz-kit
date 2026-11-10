@@ -42,16 +42,28 @@ comme n'importe quelle action. Le moteur ne lit jamais l'horloge.
 ## Dépendances entre paquets
 
 ```
-schema ◄── engine ◄── protocol ◄── server
-   ▲                      ▲
-   └──── renderer ◄── apps (studio, control, host, player, output)
-                          └── protocol/client
+           ┌── engine ───┐
+schema ◄───┤             ├──► server
+           └── protocol ─┘
+   ▲            ▲
+   └ renderer ◄─┴── apps (control, host, player, output)        studio : + engine (simulation)
 ```
 
-`renderer` ne connaît pas `engine` : il rend des vues projetées et des scènes.
-`studio` utilise `engine` en local uniquement pour la **simulation d'états** (aperçu, mode Répétition).
+Les schémas des **actions** et des **vues par rôle** sont dans `schema` (ADR-0007) : `protocol` et le
+`renderer` les connaissent sans dépendre du moteur. `studio` est le seul front autorisé à importer `engine`,
+pour la **simulation d'états** (aperçu, mode Répétition).
 
 ## Rôles (viewers)
 
-`control` (régie maître), `control-readonly`, `host`, `output:<scene>`, `player:<participantId>`,
-`seat:<n>`, `studio`. Chaque rôle a son type de vue et ses actions autorisées (voir `04-protocol-realtime.md`).
+| Rôle | URL | Vue | Actions |
+|---|---|---|---|
+| `control` | `/control/<show>` | `ControlView` (tout) | toutes les actions régie |
+| `control-readonly` | idem | `ControlView` | aucune |
+| `scorer` | idem | `ControlView` | `score.*`, `answer.judge` |
+| `host` | `/host/<show>` | `HostView` (bonne réponse, notes) | `answer.judge` si le format le permet |
+| `output:<scene>` | `/out/<show>/<scene>` | `OutputView` (public) | aucune |
+| `seat:<n>` | `/seat/<n>` | `PlayerView` du participant assis au siège n | réponses, buzz, vote |
+| `player:<participantId>` | `/play/<code>` | `PlayerView` | réponses, buzz, vote |
+| `studio` | `/studio` | édition | hors show |
+
+La table d'autorisations est un schéma de `schema` (`actionPermissions`), vérifié par le serveur et par le moteur.

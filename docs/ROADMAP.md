@@ -4,14 +4,15 @@ Règle : une phase n'est terminée que quand ses critères de sortie passent. Co
 
 ## Phase 0 — Socle (rien ne casse)
 
+- [x] Cadrage : relecture du kit, ADR 0007 → 0012, docs corrigés, points ouverts vérifiés
 - [ ] Monorepo pnpm + Turborepo, TS strict, lint (règles d'import entre paquets), Vitest, CI locale (`pnpm check`)
-- [ ] `schema` : Question, AnswerSpec (single, boolean, poll, oral), Format, Round, Session, Participant, Team, ScoreEntry, Event + `schemaVersion`
+- [ ] `schema` : Question, AnswerSpec (single, multi, boolean, poll, oral), Format, Round, Session, Participant, Team, ScoreEntry, Event, Actions, Vues + `schemaVersion`
 - [ ] `engine` : `reduce`, `project`, `replay`, registre de mécaniques, `mechanicContractSuite`, Rng seedé
-- [ ] Mécanique `choice` (QCM 2 à 6 options, vrai/faux) + scoring de base + registre de score + undo
+- [ ] Mécanique `choice` (QCM 2 à 6 options, vrai/faux, multi) + scoring de base + registre de score + undo
 - [ ] `protocol` : hello/welcome/patch/snapshot/intent/ack/ping, séquences, idempotence
-- [ ] `server` : Fastify + ws, file d'actions sérialisée, EventStore SQLite (WAL), snapshots, timers serveur, jetons par rôle
+- [ ] `server` : Fastify + ws, file d'actions sérialisée, EventStore SQLite (WAL + FULL), snapshots, timers serveur, jetons par rôle
 - [ ] `protocol/client` : reconnexion backoff, file d'intentions persistée, resynchro
-- [ ] Bot client + script k6
+- [ ] Bot client + chaos (`pnpm chaos`) + script k6 (`pnpm load`)
 
 **Sortie** : 500 clients simulés, partie complète, 0 réponse perdue ; chaos (kill serveur, coupure réseau) → état final identique.
 
@@ -22,7 +23,10 @@ Règle : une phase n'est terminée que quand ses critères de sortie passent. Co
 - [ ] `control` : run-down, actions contextuelles, couches, scores éditables, undo, raccourcis
 - [ ] `host` : bonne réponse, notes, valider / refuser
 - [ ] `player` : PWA `/seat/<n>` et `/play/<code>`, Wake Lock, cache médias, « Réponse enregistrée » après ack
+- [ ] HTTPS LAN tranché (ADR-0012) — prérequis de `player` (Wake Lock, Service Worker)
+- [ ] Médias minimum : stockage par hash + `preload` (prérequis du cache médias de `player`)
 - [ ] Mécaniques `poll-board` (sondage à slots, 3 erreurs, vol) et `buzzer` (priorité, blocage)
+- [ ] Mécanique `ladder` + jokers 50:50 / sondage public (prérequis du template QCM à paliers)
 - [ ] Joueurs / équipes / sièges : création, import CSV, statuts, échange de tablette
 - [ ] Import CSV de questions
 - [ ] Templates codés : QCM à paliers (`ladder`), sondage à slots, buzzer culture G

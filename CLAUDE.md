@@ -40,19 +40,26 @@ apps/output         sorties 1920×1080 (OBS Browser Source, vMix Web Browser, LE
 apps/desktop        (phase 4) lanceur Tauri qui supervise le serveur
 ```
 
-Règles de dépendance (vérifiées par lint) :
-`schema` ← `engine` ← `protocol` ← `server` ; `schema` ← `renderer` ← apps front.
-Le `renderer` ne dépend **jamais** de `engine` : il ne connaît que des vues projetées.
+Règles de dépendance (ADR-0007, vérifiées par `pnpm check:deps` + lint) :
+`schema` ← `engine` ; `schema` ← `protocol` ; `engine` + `protocol` ← `server` ;
+`schema` ← `renderer` ← apps front ; `protocol` ← apps front (client).
+Les actions et les vues par rôle sont des schémas de `schema`. Ni le `renderer` ni les apps front ne
+dépendent de `engine` (seule exception : `apps/studio`, pour simuler des états).
 
-## Commandes (à créer en phase 0, garder à jour ici)
+## Commandes (garder à jour ici)
+
+Node ≥ 24.12 exécute le TypeScript directement (type stripping, ADR-0011) : pas de build pour le code Node.
 
 ```
 pnpm i
-pnpm dev            # server + toutes les apps
-pnpm test           # vitest tous paquets
-pnpm test:e2e       # playwright
-pnpm load           # k6 : 500 tablettes simulées
+pnpm start          # serveur de show (process autonome)
+pnpm dev            # serveur en mode dev (+ apps front dès la phase 1)
+pnpm test           # vitest, tous paquets
+pnpm test:e2e       # playwright (phase 1)
+pnpm load           # k6 : 500 clients simulés (k6 doit être installé)
+pnpm chaos          # bot Node : kill serveur + coupure réseau, état final comparé
 pnpm lint && pnpm typecheck
+pnpm check          # lint + typecheck + check:deps + test (CI locale)
 ```
 
 ## Façon de travailler
@@ -61,7 +68,9 @@ pnpm lint && pnpm typecheck
 - **Test d'abord** pour le moteur et le protocole (scénarios d'actions → état attendu).
 - Toute décision structurante → un ADR dans `docs/adr/` (gabarit `docs/adr/0000-template.md`).
 - Commits : Conventional Commits (`feat(engine): ...`). Petits, une intention par commit.
-- Fin de tâche : `pnpm lint && pnpm typecheck && pnpm test` au vert, case cochée dans la roadmap.
+- Fin de tâche : `pnpm check` au vert, case cochée dans la roadmap.
+- Versions : toujours la dernière version stable publiée (vérifier `npm view <pkg> version`), sauf
+  incompatibilité vérifiée et notée dans un ADR.
 - Sous-agents dispo dans `.claude/agents/` : `engine-dev`, `realtime-dev`, `frontend-dev`, `reviewer`.
   Le `reviewer` relit toute PR qui touche `engine`, `protocol` ou `server`.
 

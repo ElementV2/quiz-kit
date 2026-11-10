@@ -51,6 +51,15 @@ sont des fonctions pures `vN → vN+1` testées sur des fixtures.
 - `Participant` : `id`, `displayName`, `photo?`, `teamId?`, `seat?`, `status`
   (active | eliminated | waiting | substitute | disconnected), `channel` (seat | play | buzzer | twitch | youtube).
 - `Team` : `id`, `name`, `color`, `captainId?`.
-- `ScoreEntry` : `id`, `participantId | teamId`, `delta`, `questionId?`, `reason`
-  (auto | bonus | penalty | manual | regrade), `by`, `at`, `voided?`.
-- `Event` (journal) : `seq`, `at` (serveur, monotone + mur), `actor`, `action`, `idempotencyKey?`.
+- `ScoreEntry` : `id` (dérivé de l'événement : `se_<seq>_<n>`), `target` ({ participantId } | { teamId }),
+  `delta`, `questionId?`, `reason` (auto | bonus | penalty | manual | regrade), `by`, `at`, `voided`.
+- `Event` (journal, append-only) : `seq`, `at` (heure murale serveur, ms), `actor` ({ role, id? }), `action`,
+  `idempotencyKey?` (unique). L'undo est lui-même un événement (`undo { targetSeq }`, ADR-0010) : aucun
+  événement n'est jamais modifié.
+
+## Actions et vues (ADR-0007)
+
+- `Action` : union discriminée sur `type` (`domaine.verbe`), un schéma Zod par action.
+- `actionPermissions` : rôle → actions autorisées.
+- `ControlView`, `HostView`, `OutputView`, `PlayerView` : schémas des vues projetées, contrat entre le moteur
+  (qui les produit) et le renderer (qui s'y binde).

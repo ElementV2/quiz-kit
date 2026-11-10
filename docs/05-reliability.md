@@ -14,7 +14,7 @@ Zéro réponse perdue, zéro fuite, aucune panne qui coupe l'antenne.
 | Machine show HS | Phase 4 : hot standby qui suit le journal, bascule manuelle | `chaos:failover` |
 | Internet coupé | Mode Show 100 % LAN | test réseau isolé |
 | Média lourd | Préchargement + cache Service Worker, check-list rouge si incomplet | `e2e:preload` |
-| Erreur régie | Undo, overrides, confirmation des actions irréversibles | tests moteur |
+| Erreur régie | Undo (événement, ADR-0010), overrides, confirmation des actions irréversibles | tests moteur |
 | Spam chat | 1 réponse / compte / question, rate limit, filtre comptes récents | `load:chat` |
 
 ## Boucle de jeu
@@ -22,7 +22,7 @@ Zéro réponse perdue, zéro fuite, aucune panne qui coupe l'antenne.
 - File sérialisée, une action à la fois. Aucune I/O lente dans la boucle hormis l'append journal.
 - Diffusion découplée : si un client est lent (buffer plein), il est passé en `snapshot au prochain tick`
   plutôt que de ralentir les autres.
-- Snapshot persisté à chaque `question.present` pour borner le temps de rejeu.
+- Snapshot persisté à chaque `question.present` pour borner le temps de rejeu (sauf undo antérieur au snapshot : rejeu complet, ADR-0010).
 
 ## Réseau plateau
 

@@ -5,12 +5,13 @@ de chaque lib.** Ne pas se fier à des versions écrites ici.
 
 | Brique | Choix | Raison |
 |---|---|---|
-| Langage | TypeScript strict | Moteur partagé serveur / studio / tests |
+| Langage | TypeScript 7 strict, exécuté par Node (type stripping) | Moteur partagé serveur / studio / tests (ADR-0011) |
+| Lint | oxlint + oxlint-tsgolint (type-aware) | typescript-eslint ne supporte pas encore TS 7 (ADR-0011) |
 | Monorepo | pnpm workspaces + Turborepo | Build et tests par paquet, cache |
 | Schémas | Zod | Validation aux frontières, types dérivés |
 | Serveur | Node.js LTS + Fastify | Rapide, plugins (static, rate limit) |
 | WebSocket | `ws` (uWebSockets.js si bench insuffisant) | Des centaines de clients tiennent dans un process |
-| Persistance | SQLite via better-sqlite3, WAL | Un fichier, pas de serveur BDD en tournage |
+| Persistance | SQLite via better-sqlite3, WAL + `synchronous=FULL` | Un fichier, pas de serveur BDD en tournage (ADR-0008) |
 | Médias | Disque, adressage par hash + ffmpeg | Transcodage à l'import, préchargement fiable |
 | Front | SolidJS + Vite | Réactivité fine, sorties fluides |
 | Animations | Web Animations API, lottie-web | Natif, pilotable |
@@ -20,7 +21,7 @@ de chaque lib.** Ne pas se fier à des versions écrites ici.
 | Chat | Twitch EventSub (WebSocket), YouTube Live Streaming API | Canaux officiels |
 | Tests | Vitest, Playwright, k6 | Moteur, visuel, charge |
 | Logs | pino | Structurés, rejouables |
-| Packaging (phase 4) | Tauri 2 + serveur compilé (Node SEA ou `bun build --compile`, à trancher par ADR) | Double-clic sur la machine show |
+| Packaging (phase 4) | Tauri 2 + serveur compilé : **Node SEA** (addon natif extrait puis `process.dlopen()`), ou `node:sqlite` s'il est stable d'ici là. `bun build --compile` écarté : Bun ne charge pas better-sqlite3 (addon V8, https://github.com/oven-sh/bun/pull/36712) | Double-clic sur la machine show |
 
 Pourquoi pas Rust côté serveur : la charge ne le justifie pas, et partager le moteur TS vaut plus.
 Rust envisagé pour un module NDI natif (phase 5).

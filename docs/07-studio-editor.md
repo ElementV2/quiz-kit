@@ -10,7 +10,8 @@
 
 ## Canvas
 
-- Taille de la scène (1920×1080 par défaut, vertical, tablette), grille, repères, safe areas.
+- Taille de la scène (1920×1080 par défaut, vertical, tablette), grille, repères, safe areas EBU R 95
+  (action safe 3,5 % = 67×38 px, graphics safe 5 % = 96×54 px par bord en 1080p ; voir `OPEN-QUESTIONS.md`).
 - Palette de zones typées ; binding auto à l'évidence, modifiable dans l'inspecteur.
 - Inspecteur à onglets d'états + « simuler l'état » (le moteur tourne en local sur un état fictif).
 - Alignement, distribution, duplication de zones répétées, verrouillage de calques, undo/redo (commandes).

@@ -8,7 +8,7 @@
 | **O** — ouvert/fermé | On ajoute un type de réponse ou une mécanique en **enregistrant** un module (`registerMechanic(buzzer)`), sans modifier le cœur du réducteur. Pareil pour les zones du renderer (`registerZone`) et les canaux d'entrée (`registerInput`). |
 | **L** — substitution | Toute mécanique respecte le même contrat `Mechanic<Config, State, Action>` et passe la même suite de tests de contrat (`mechanicContractSuite`). Tout canal d'entrée (tablette, buzzer USB, chat Twitch) produit les mêmes actions `submit`, `buzz` ou `vote`. |
 | **I** — interfaces ciblées | Une vue projetée par rôle (`PlayerView`, `HostView`, `OutputView`, `ControlView`), pas un gros état partagé. Un composant de zone reçoit uniquement la donnée bindée et son état. |
-| **D** — inversion de dépendances | Le moteur dépend d'interfaces (`Clock`, `Rng`) injectées. Le serveur dépend de ports (`EventStore`, `MediaStore`, `Transport`) avec une implémentation SQLite / disque / ws, remplaçable en test par de la mémoire. |
+| **D** — inversion de dépendances | Le moteur reçoit son `Rng` et l'heure de l'événement (`ctx.at`) en paramètre ; il n'a pas de `Clock` (ADR-0010). Le serveur dépend de ports (`EventStore`, `MediaStore`, `Transport`) avec une implémentation SQLite / disque / ws, remplaçable en test par de la mémoire. |
 
 Garde-fou : SOLID sert à rendre le code **simple à changer**, pas à multiplier les abstractions.
 Pas d'interface tant qu'il n'y a pas au moins deux implémentations réelles ou un besoin de test.
@@ -16,6 +16,9 @@ Pas d'interface tant qu'il n'y a pas au moins deux implémentations réelles ou 
 ## TypeScript
 
 - `strict: true`, `noUncheckedIndexedAccess: true`, `exactOptionalPropertyTypes: true`.
+- Code exécuté par Node sans build (ADR-0011) : imports relatifs avec extension `.ts`, `import type` pour les
+  types (`verbatimModuleSyntax`), syntaxe effaçable uniquement (`erasableSyntaxOnly` : pas d'`enum`,
+  de `namespace` ni de parameter properties).
 - Interdits : `any`, `as` non justifié (commentaire obligatoire), `!` non-null, `enum` TS (préférer unions de littéraux).
 - Types dérivés des schémas Zod (`z.infer`), jamais dupliqués à la main.
 - Données immuables dans le moteur (`readonly`, `ReadonlyArray`). Mises à jour par copie ; une lib
@@ -30,7 +33,8 @@ Pas d'interface tant qu'il n'y a pas au moins deux implémentations réelles ou 
 - Fichiers en `kebab-case.ts`, composants Solid en `PascalCase.tsx`.
 - Actions : `domaine.verbe` (`question.reveal`, `score.adjust`, `player.rename`).
 - Événements journalisés = actions acceptées + `seq` + `at` (horodatage serveur) + `actor`.
-- IDs : préfixe + identifiant unique triable (`q_…`, `p_…`, `ses_…`). Choisir la lib dans un ADR.
+- IDs : préfixe + ULID maison (`q_…`, `p_…`, `ses_…`), générés par le serveur ; IDs créés par le moteur
+  dérivés de l'événement (ADR-0011).
 
 ## Structure d'un paquet
 
