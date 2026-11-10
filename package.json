@@ -1,0 +1,29 @@
+{
+  "name": "quiz",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@11.1.2",
+  "engines": {
+    "node": ">=24.12"
+  },
+  "scripts": {
+    "start": "pnpm --filter @quiz/server start",
+    "dev": "pnpm --filter @quiz/server dev",
+    "test": "turbo run test",
+    "typecheck": "turbo run typecheck",
+    "lint": "oxlint --type-aware --deny-warnings",
+    "check:deps": "node scripts/check-deps.ts",
+    "check": "pnpm lint && pnpm typecheck && pnpm check:deps && pnpm test",
+    "chaos": "pnpm --filter @quiz/server chaos",
+    "load": "pnpm --filter @quiz/server load"
+  },
+  "devDependencies": {
+    "@types/node": "24.19.2",
+    "fast-check": "4.10.2",
+    "oxlint": "1.93.0",
+    "oxlint-tsgolint": "7.0.2006",
+    "turbo": "2.11.10",
+    "typescript": "7.0.2",
+    "vitest": "5.1.0"
+  }
+}

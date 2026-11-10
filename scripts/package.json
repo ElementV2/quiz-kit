@@ -1,0 +1,13 @@
+{
+  "name": "@quiz/scripts",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "vitest run",
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "devDependencies": {
+    "vitest": "5.1.0"
+  }
+}

@@ -1,0 +1,23 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "plugins": ["typescript", "unicorn", "oxc", "import", "vitest"],
+  "categories": { "correctness": "error", "suspicious": "error" },
+  "rules": {
+    "typescript/no-explicit-any": "error",
+    "typescript/no-non-null-assertion": "error",
+    "typescript/no-namespace": "error",
+    "typescript/consistent-type-imports": "error",
+    "typescript/switch-exhaustiveness-check": "error",
+    "typescript/no-floating-promises": "error",
+    "typescript/no-misused-promises": "error",
+    "typescript/await-thenable": "error",
+    "typescript/no-unnecessary-type-assertion": "error",
+    "no-restricted-imports": ["error", { "patterns": [{ "group": ["@quiz/*/**"], "message": "Import profond interdit : passer par l'API publique du paquet (src/index.ts)." }] }],
+    "no-console": "error",
+    "no-unused-vars": ["error", { "argsIgnorePattern": "^_", "varsIgnorePattern": "^_" }]
+  },
+  "overrides": [
+    { "files": ["**/*.test.ts", "**/tools/**", "scripts/**"], "rules": { "no-console": "off" } }
+  ],
+  "ignorePatterns": ["node_modules", "dist", "coverage", ".turbo"]
+}
