@@ -20,5 +20,6 @@ Règle « journal avant diffusion ». Vérifié dans la doc officielle :
 - `synchronous=NORMAL` : plus rapide, mais une action déjà diffusée peut disparaître après une coupure de courant.
 
 ## Conséquences
-Un fsync par action. Le coût est mesuré par `pnpm load` (latence d'append). Si insuffisant : regrouper les
-intentions en attente dans une seule transaction (group commit), jamais baisser `synchronous`.
+Un fsync par transaction. Mesuré (2026-11-11) : avec un fsync par réponse, 100 réponses simultanées donnaient une
+latence d'ack médiane de 425 ms. **Group commit implémenté** : les intentions d'un même tour de boucle partagent une
+transaction → médiane ≈ 15 ms à 500 tablettes. `synchronous` reste à `FULL`.

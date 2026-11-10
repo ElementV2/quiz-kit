@@ -44,6 +44,11 @@
 - [ ] YouTube : statut (GA ?) et durée max d'une connexion `streamList`.
 - [ ] Mode kiosque sur le parc retenu (Accès guidé iOS / épinglage Android).
 - [ ] `node:sqlite` utilisable dans un Node SEA (passage en stable à surveiller).
-- [ ] Coût réel d'un fsync par action (`synchronous=FULL`) sur la machine show : mesuré par `pnpm load`.
+- [x] Coût du fsync (`synchronous=FULL`) : mesuré sur le PC de dev → group commit nécessaire et implémenté
+      (ADR-0008). **À remesurer sur la machine show** (`pnpm load`).
+- [ ] Tempête de reconnexions : 500 connexions ouvertes dans la même milliseconde depuis un seul PC Windows voient
+      ~40 % de refus TCP immédiats (rattrapés par le backoff en < 1 s). Hypothèse : plafond de la file d'attente TCP
+      de Windows édition poste client — NON VÉRIFIÉ dans la doc Microsoft. Si la machine show est un Windows client,
+      mesurer un redémarrage serveur avec les vraies tablettes.
 
 Règle : une question vérifiée devient un ADR ou une ligne dans le doc concerné, et la case est cochée.

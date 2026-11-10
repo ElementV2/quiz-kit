@@ -12,9 +12,16 @@ Règle : une phase n'est terminée que quand ses critères de sortie passent. Co
 - [x] `protocol` : hello/welcome/patch/snapshot/intent/ack/ping, séquences, idempotence
 - [x] `server` : Fastify + ws, file d'actions sérialisée, EventStore SQLite (WAL + FULL), snapshots, timers serveur, jetons par rôle
 - [x] `protocol/client` : reconnexion backoff, file d'intentions persistée, resynchro
-- [ ] Bot client + chaos (`pnpm chaos`) + script k6 (`pnpm load`)
+- [x] Bot client + chaos (`pnpm chaos`) + script k6 (`pnpm load`)
 
 **Sortie** : 500 clients simulés, partie complète, 0 réponse perdue ; chaos (kill serveur, coupure réseau) → état final identique.
+
+**Mesuré le 2026-11-11** (PC de dev Windows 11, serveur + 500 tablettes k6 sur la même machine, Node 26.13, k6 2.3) :
+- `pnpm load` : 500 tablettes × 10 questions → 5 000 réponses acquittées, 5 000 au journal, **0 perdue** ;
+  ack d'une réponse médiane ≈ 15 ms, p95 ≈ 30 ms ; diffusion régie → sortie médiane ≈ 30 ms, p95 ≈ 60 ms
+  (dont 25 ms de regroupement volontaire) ; connexion p95 ≈ 120 ms.
+- `pnpm chaos` : 50 bots, kill -9 du serveur en pleine question, coupure réseau générale, rechargement de la sortie
+  → 500 / 500 réponses, 0 perdue, 0 doublon, état final de la sortie = rejeu du journal. ✓
 
 ## Phase 1 — Un show jouable
 

@@ -53,12 +53,13 @@ le TypeScript directement (type stripping, ADR-0011) : pas de build pour le code
 
 ```
 pnpm i
-pnpm start          # serveur de show (process autonome)
+pnpm start          # serveur de show sous superviseur (relance auto, état repris du journal)
+pnpm --filter @quiz/server serve   # serveur seul, sans superviseur
 pnpm dev            # serveur en mode dev (+ apps front dès la phase 1)
 pnpm test           # vitest, tous paquets
 pnpm test:e2e       # playwright (phase 1)
 pnpm load           # k6 : 500 clients simulés (k6 doit être installé)
-pnpm chaos          # bot Node : kill serveur + coupure réseau, état final comparé
+pnpm chaos          # 50 bots Node : kill -9 serveur, coupure réseau, reload sortie ; journal audité
 pnpm lint && pnpm typecheck
 pnpm check          # lint + typecheck + check:deps + test (CI locale)
 ```

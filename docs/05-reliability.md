@@ -19,7 +19,16 @@ Zéro réponse perdue, zéro fuite, aucune panne qui coupe l'antenne.
 
 ## Boucle de jeu
 
-- File sérialisée, une action à la fois. Aucune I/O lente dans la boucle hormis l'append journal.
+- File sérialisée, une action à la fois. Aucune I/O lente dans la boucle hormis l'append journal (et le snapshot
+  à chaque `question.present`, un fsync de plus par question).
+- **Group commit** (ADR-0008) : les intentions reçues dans le même tour de boucle sont décidées une par une puis
+  journalisées en une transaction (un fsync), acquittées après le commit, diffusées une fois.
+- Diffusion mutualisée par type de vue (une projection + un diff + une sérialisation), regroupée toutes les 25 ms.
+  Les vues joueur portent le top 10 du classement et leur rang, pas le compteur de réponses en direct
+  (sinon chaque réponse ferait recalculer les 500 vues : O(n²)).
+- Rate limit par connexion (tablette 20 msg/s, rafale 40 ; régie 300 msg/s, rafale 600) ; une intention freinée
+  reçoit un ack `rate-limited` et le client la ré-émet : rien n'est perdu.
+- `pnpm start` = superviseur qui relance le serveur s'il s'arrête (état repris du journal).
 - Diffusion découplée : si un client est lent (buffer plein), il est passé en `snapshot au prochain tick`
   plutôt que de ralentir les autres.
 - Snapshot persisté à chaque `question.present` pour borner le temps de rejeu (sauf undo antérieur au snapshot : rejeu complet, ADR-0010).
@@ -37,6 +46,6 @@ sorties ouvertes ✓ · journal actif et disque OK ✓ · chat connecté (si uti
 
 ## Critères de sortie de chaque phase
 
-- `pnpm load` : 500 clients simulés sur une partie complète, 0 réponse perdue, latence de diffusion stable
-  (seuils à fixer après le premier bench).
+- `pnpm load` : 500 clients simulés sur une partie complète, 0 réponse perdue, p95 de l'ack < 250 ms (seuil k6) ;
+  mesure actuelle ≈ 30 ms (voir `ROADMAP.md`).
 - Chaos : couper le Wi-Fi, tuer le serveur, recharger une sortie en pleine question → partie identique à la fin.
