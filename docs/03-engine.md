@@ -73,7 +73,8 @@ toute profondeur. `replay` ignore les événements annulés ; une action devenue
 ## Overrides
 
 Les actions de correction manuelle de la régie (`score.*`, `player.*`, `team.add`) sont acceptées quelle
-que soit la phase. `timer.set` / `timer.stop` ne valent que réponses ouvertes (pour rouvrir : undo du verrouillage).
+que soit la phase, et tracées avec `reason: manual`. En live, l'humain a le dernier mot.
+`timer.set` / `timer.stop` ne valent que réponses ouvertes (pour rouvrir : undo du verrouillage).
 
 ## Règles de score
 
@@ -83,4 +84,4 @@ que soit la phase. `timer.set` / `timer.stop` ne valent que réponses ouvertes (
   pas de dégressivité.
 - Chaque ligne de score fige l'équipe du joueur au moment du score : changer d'équipe ne réécrit pas l'historique.
 - Un joueur retiré perd sa réponse en cours (un identifiant réutilisé n'hérite de rien).
-- Arrondi symétrique (7,5 → 8 ; −7,5 → −8). Elles sont tracées avec `reason: manual`. En live, l'humain a le dernier mot.
+- Arrondi symétrique (7,5 → 8 ; −7,5 → −8).
