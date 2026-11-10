@@ -32,6 +32,11 @@ function reduceAllowed(s: GameState, a: Action, ctx: Ctx, registry: Registry): R
 
     case "round.start": {
       if (s.phase !== "idle" && s.phase !== "round.end") return err("wrong-phase", "une question est en cours");
+      const current = currentRound(s);
+      const remaining = current !== null && s.phase === "idle" && (s.questionIndex ?? -1) + 1 < current.questions.length;
+      if (a.roundIndex === undefined && remaining) {
+        return err("conflict", "il reste des questions dans la manche : préciser roundIndex pour sauter");
+      }
       const index = a.roundIndex ?? (s.roundIndex === null ? 0 : s.roundIndex + 1);
       if (s.game.format.rounds[index] === undefined) return err("not-found", `manche ${index} inexistante`);
       return ok({ ...s, phase: "idle", roundIndex: index, questionIndex: null });
@@ -48,6 +53,7 @@ function reduceAllowed(s: GameState, a: Action, ctx: Ctx, registry: Registry): R
         phase: "open",
         openedAt: ctx.at,
         lockedAt: null,
+        windowMs: timer?.durationMs ?? null,
         timer: timer === undefined ? null : { id: ctx.seq, endsAt: ctx.at + timer.durationMs, durationMs: timer.durationMs, autoLock: timer.autoLock },
       });
     }
@@ -62,12 +68,17 @@ function reduceAllowed(s: GameState, a: Action, ctx: Ctx, registry: Registry): R
       return ok(s.timer.autoLock ? { ...s, phase: "locked", timer: null, lockedAt: ctx.at } : { ...s, timer: null });
     }
 
-    case "timer.set":
+    case "timer.set": {
+      // Only meaningful while answers are open (doc 03); to re-open answers, undo the lock.
       if (s.phase !== "open") return err("wrong-phase", "le chrono ne se règle que réponses ouvertes");
+      const endsAt = ctx.at + a.remainingMs;
       return ok({
         ...s,
-        timer: { id: ctx.seq, endsAt: ctx.at + a.remainingMs, durationMs: a.remainingMs, autoLock: s.timer?.autoLock ?? true },
+        // The decay window follows the timer actually armed (an extension widens it).
+        windowMs: s.openedAt === null ? null : endsAt - s.openedAt,
+        timer: { id: ctx.seq, endsAt, durationMs: a.remainingMs, autoLock: s.timer?.autoLock ?? currentRound(s)?.timer?.autoLock ?? true },
       });
+    }
 
     case "timer.stop":
       if (s.timer === null) return err("conflict", "aucun chrono en cours");
@@ -83,7 +94,7 @@ function reduceAllowed(s: GameState, a: Action, ctx: Ctx, registry: Registry): R
       const isLastQuestion = round === null || qi + 1 >= round.questions.length;
       const isLastRound = s.roundIndex === null || s.roundIndex + 1 >= s.game.format.rounds.length;
       const phase = !isLastQuestion ? "idle" : isLastRound ? "game.end" : "round.end";
-      return ok({ ...s, phase, mechanic: null, timer: null, openedAt: null, lockedAt: null });
+      return ok({ ...s, phase, mechanic: null, timer: null, openedAt: null, lockedAt: null, windowMs: null });
     }
 
     case "answer.submit": {
@@ -149,8 +160,13 @@ function reduceAllowed(s: GameState, a: Action, ctx: Ctx, registry: Registry): R
       return updateParticipant(s, a.participantId, (p) => ok({ ...p, seat: a.seat }));
 
     case "player.remove":
+    {
       if (!s.participants.some((p) => p.id === a.participantId)) return err("not-found", "joueur inconnu");
-      return ok({ ...s, participants: s.participants.filter((p) => p.id !== a.participantId) });
+      const without = { ...s, participants: s.participants.filter((p) => p.id !== a.participantId) };
+      // Purge their answer: an id reused later must not inherit it (no leak, no phantom score).
+      if (s.mechanic === null) return ok(without);
+      return withMechanic(without, registry, (m, state) => ok(m.removeParticipant(state, a.participantId)));
+    }
 
     case "team.add":
       if (s.teams.some((t) => t.id === a.teamId)) return err("conflict", "identifiant d'équipe déjà pris");
@@ -182,7 +198,7 @@ function present(s: GameState, a: ActionOf<"question.present">, ctx: Ctx, regist
   if (!cfg.success) return err("invalid", `configuration de mécanique invalide : ${cfg.error.message}`);
   const init = m.init(cfg.data, question, envOf(s, ctx));
   if (!init.ok) return init;
-  return ok({ ...s, phase: "presenting", questionIndex: index, mechanic: { id: m.id, state: init.value }, timer: null, openedAt: null, lockedAt: null });
+  return ok({ ...s, phase: "presenting", questionIndex: index, mechanic: { id: m.id, state: init.value }, timer: null, openedAt: null, lockedAt: null, windowMs: null });
 }
 
 function reveal(s: GameState, ctx: Ctx, registry: Registry): R {
@@ -192,29 +208,40 @@ function reveal(s: GameState, ctx: Ctx, registry: Registry): R {
   if (round === null || question === null || s.mechanic === null) return err("conflict", "aucune question en cours");
   const m = registry.get(s.mechanic.id);
   if (m === null) return err("unsupported", `mécanique inconnue : ${s.mechanic.id}`);
+  if (s.openedAt === null) return err("conflict", "réponses jamais ouvertes");
   const judgements = m.judge(s.mechanic.state);
-  const window = { openedAt: s.openedAt ?? ctx.at, durationMs: round.timer?.durationMs ?? null };
+  const window = { openedAt: s.openedAt, durationMs: s.windowMs };
   const entries: ScoreEntry[] = [];
   for (const j of judgements) {
-    if (!s.participants.some((p) => p.id === j.participantId)) continue; // removed meanwhile
+    const p = s.participants.find((x) => x.id === j.participantId);
+    if (p === undefined) continue; // removed meanwhile
     const delta = pointsFor(round.scoring, j, window);
     if (delta === 0) continue;
-    entries.push(entry(ctx, entries.length, { participantId: j.participantId }, delta, "auto", null, question.id));
+    entries.push(entry(ctx, entries.length, { participantId: p.id }, p.teamId, delta, "auto", null, question.id));
   }
-  return ok({ ...s, phase: "revealed", timer: null, ledger: [...s.ledger, ...entries] });
+  // Replaying a question (doc 09 "rejouer") replaces its automatic points instead of adding to them.
+  const ledger = s.ledger.map((e) => (e.reason === "auto" && e.questionId === question.id && !e.voided ? { ...e, voided: true } : e));
+  return ok({ ...s, phase: "revealed", timer: null, ledger: [...ledger, ...entries] });
 }
 
-function entry(ctx: Ctx, n: number, target: ScoreTarget, delta: number, reason: ScoreEntry["reason"], note: string | null, questionId: string | null): ScoreEntry {
+function entry(ctx: Ctx, n: number, target: ScoreTarget, teamId: string | null, delta: number, reason: ScoreEntry["reason"], note: string | null, questionId: string | null): ScoreEntry {
   // Deterministic id derived from the event (ADR-0011).
-  return { id: `se_${ctx.seq}_${n}`, target, delta, questionId, reason, note, by: ctx.actor, at: ctx.at, voided: false };
+  return { id: `se_${ctx.seq}_${n}`, target, teamId, delta, questionId, reason, note, by: ctx.actor, at: ctx.at, voided: false };
 }
 
 function addEntry(s: GameState, target: ScoreTarget, delta: number, reason: ScoreEntry["reason"], note: string | null, ctx: Ctx): R {
-  if ("participantId" in target && !s.participants.some((p) => p.id === target.participantId)) return err("not-found", "joueur inconnu");
-  if ("teamId" in target && !s.teams.some((t) => t.id === target.teamId)) return err("not-found", "équipe inconnue");
+  let teamId: string | null;
+  if ("participantId" in target) {
+    const p = s.participants.find((x) => x.id === target.participantId);
+    if (p === undefined) return err("not-found", "joueur inconnu");
+    teamId = p.teamId; // frozen at scoring time: moving the player later never rewrites team totals
+  } else {
+    if (!s.teams.some((t) => t.id === target.teamId)) return err("not-found", "équipe inconnue");
+    teamId = target.teamId;
+  }
   if (delta === 0) return err("invalid", "variation nulle");
   const q = QUESTION_PHASES.has(s.phase) ? currentQuestion(s) : null;
-  return ok({ ...s, ledger: [...s.ledger, entry(ctx, 0, target, delta, reason, note, q?.id ?? null)] });
+  return ok({ ...s, ledger: [...s.ledger, entry(ctx, 0, target, teamId, delta, reason, note, q?.id ?? null)] });
 }
 
 function updateParticipant(s: GameState, id: string, f: (p: Participant) => Result<Participant, Rejection>): R {

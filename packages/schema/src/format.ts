@@ -24,7 +24,14 @@ export const ScoringComponent = z.discriminatedUnion("type", [
 ]);
 export type ScoringComponent = z.infer<typeof ScoringComponent>;
 
-export const ScoringRule = z.array(ScoringComponent).min(1);
+export const ScoringRule = z
+  .array(ScoringComponent)
+  .min(1)
+  .refine((r) => r.filter((c) => c.type === "timeDecay").length <= 1, "un seul timeDecay par règle")
+  .refine((r) => {
+    const base = r.reduce((sum, c) => (c.type === "base" ? sum + c.points : sum), 0);
+    return r.every((c) => c.type !== "timeDecay" || c.minPoints <= base);
+  }, "timeDecay.minPoints doit être ≤ aux points de base");
 export type ScoringRule = z.infer<typeof ScoringRule>;
 
 export const TimerConfig = z.strictObject({

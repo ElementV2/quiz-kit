@@ -50,7 +50,7 @@ describe("mechanicContractSuite catches faulty mechanics", () => {
 
   it("a non-deterministic mechanic fails the replay check", () => {
     let calls = 0;
-    const flaky = defineMechanic<C, S>({ ...typed, judge: (s) => typed.judge(s).map((j) => ({ ...j, answeredAt: j.answeredAt + (calls++ % 2) * 5000 })) });
+    const flaky = defineMechanic<C, S>({ ...typed, judge: (s) => typed.judge(s).map((j) => ({ ...j, answeredAt: j.answeredAt + (calls++ % 7) * 1000 })) });
     const opts = { mechanic: flaky, registry: createRegistry([flaky]), game: DEMO_GAME, answerFor };
     expect(failureOf(() => assertContract(opts, 50))).toMatch(/replay differs/);
   });

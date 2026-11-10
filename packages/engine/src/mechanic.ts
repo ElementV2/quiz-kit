@@ -41,6 +41,8 @@ export interface Mechanic<C, S> {
   judge(state: S): readonly Judgement[];
   /** Accepted answer of a participant, for the player view. */
   answerOf(state: S, participantId: ParticipantId): readonly string[] | null;
+  /** Drops a removed participant's answer (ids may be reused later). */
+  removeParticipant(state: S, participantId: ParticipantId): S;
   /** All accepted answers, for the control view. */
   answers(state: S): readonly { participantId: ParticipantId; optionIds: readonly string[]; at: number }[];
   project(state: S, env: ProjectEnv): MechanicView;

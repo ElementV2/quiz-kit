@@ -1,5 +1,6 @@
 import type { ScoringRule } from "@quiz/schema";
 import type { Judgement } from "./mechanic.ts";
+import { assertNever } from "./result.ts";
 
 export type ScoringWindow = {
   /** When answers opened (server ms). */
@@ -32,13 +33,21 @@ export function pointsFor(rule: ScoringRule, j: Judgement, w: ScoringWindow): nu
       case "timeDecay":
         minPoints = c.minPoints;
         break;
+      default:
+        return assertNever(c);
     }
   }
-  if (j.outcome === "wrong") return Math.round(penalty * factor) + 0; // `+ 0` turns -0 into 0
+  if (j.outcome === "wrong") return roundHalfAway(penalty * factor);
   let points = base;
   if (minPoints !== null && w.durationMs !== null && w.durationMs > 0) {
     const elapsed = Math.min(Math.max(j.answeredAt - w.openedAt, 0), w.durationMs);
     points = base - ((base - minPoints) * elapsed) / w.durationMs;
   }
-  return Math.round(points * factor);
+  return roundHalfAway(points * factor);
+}
+
+/** Symmetric rounding (7.5 → 8, -7.5 → -8), never -0. */
+function roundHalfAway(x: number): number {
+  const r = Math.sign(x) * Math.round(Math.abs(x));
+  return r === 0 ? 0 : r;
 }

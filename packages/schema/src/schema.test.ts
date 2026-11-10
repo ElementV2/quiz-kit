@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   Action,
+  ScoringRule,
   AnswerSpec,
   DEMO_GAME,
   Event,
@@ -9,7 +10,7 @@ import {
   Viewer,
   View,
   isAllowed,
-  isControlDecision,
+  isUndoableByDefault,
   loadGameDocument,
   type Migration,
 } from "./index.ts";
@@ -138,8 +139,17 @@ describe("permissions", () => {
     expect(isAllowed("system", "timer.expired")).toBe(true);
   });
   it("undo never targets player answers by default", () => {
-    expect(isControlDecision("answer.submit")).toBe(false);
-    expect(isControlDecision("score.adjust")).toBe(true);
+    expect(isUndoableByDefault("answer.submit")).toBe(false);
+    expect(isUndoableByDefault("score.adjust")).toBe(true);
+    expect(isUndoableByDefault("timer.expired")).toBe(true);
+  });
+});
+
+describe("ScoringRule", () => {
+  it("rejects a decay that would raise points over time, or two decays", () => {
+    expect(ScoringRule.safeParse([{ type: "base", points: 10 }, { type: "timeDecay", minPoints: 20 }]).success).toBe(false);
+    expect(ScoringRule.safeParse([{ type: "base", points: 10 }, { type: "timeDecay", minPoints: 1 }, { type: "timeDecay", minPoints: 2 }]).success).toBe(false);
+    expect(ScoringRule.safeParse([{ type: "base", points: 10 }, { type: "timeDecay", minPoints: 5 }]).success).toBe(true);
   });
 });
 

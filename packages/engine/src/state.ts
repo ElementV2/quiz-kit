@@ -29,6 +29,8 @@ export const GameState = z.strictObject({
   timer: TimerState.nullable(),
   openedAt: z.number().int().nullable(),
   lockedAt: z.number().int().nullable(),
+  /** Answer window used by timeDecay: follows the timer actually armed; null without timer. */
+  windowMs: z.number().int().nullable(),
   lastSeq: z.number().int(),
 });
 export type GameState = z.infer<typeof GameState>;
@@ -48,6 +50,7 @@ export function initialState(session: Session): GameState {
     timer: null,
     openedAt: null,
     lockedAt: null,
+    windowMs: null,
     lastSeq: 0,
   };
 }
@@ -74,22 +77,33 @@ export function nextQuestion(s: GameState): Question | null {
   return id === undefined ? null : questionById(s, id);
 }
 
-/** Total of non-voided entries for a participant, plus their team entries are NOT included (team totals are separate). */
-export function participantTotal(s: GameState, participantId: string): number {
-  let total = 0;
-  for (const e of s.ledger) if (!e.voided && "participantId" in e.target && e.target.participantId === participantId) total += e.delta;
-  return total;
-}
+type Totals = { readonly participants: ReadonlyMap<string, number>; readonly teams: ReadonlyMap<string, number> };
 
-export function teamTotal(s: GameState, teamId: string): number {
-  let total = 0;
+/** One O(ledger) pass per ledger version, memoised: 500 projections reuse it (ADR-0004). Pure: keyed by identity. */
+const totalsCache = new WeakMap<readonly ScoreEntry[], Totals>();
+
+export function totals(s: GameState): Totals {
+  const cached = totalsCache.get(s.ledger);
+  if (cached !== undefined) return cached;
+  const participants = new Map<string, number>();
+  const teams = new Map<string, number>();
   for (const e of s.ledger) {
     if (e.voided) continue;
-    if ("teamId" in e.target && e.target.teamId === teamId) total += e.delta;
-    else if ("participantId" in e.target) {
-      const pid = e.target.participantId;
-      if (s.participants.some((p) => p.id === pid && p.teamId === teamId)) total += e.delta;
-    }
+    if ("participantId" in e.target) participants.set(e.target.participantId, (participants.get(e.target.participantId) ?? 0) + e.delta);
+    // Team at the time of scoring: moving a player never rewrites history.
+    if (e.teamId !== null) teams.set(e.teamId, (teams.get(e.teamId) ?? 0) + e.delta);
   }
-  return total;
+  const t = { participants, teams };
+  totalsCache.set(s.ledger, t);
+  return t;
+}
+
+/** Total of non-voided entries targeting this participant. */
+export function participantTotal(s: GameState, participantId: string): number {
+  return totals(s).participants.get(participantId) ?? 0;
+}
+
+/** Member entries (team at scoring time) + entries targeting the team. */
+export function teamTotal(s: GameState, teamId: string): number {
+  return totals(s).teams.get(teamId) ?? 0;
 }

@@ -81,6 +81,10 @@ export const choice = defineMechanic<ChoiceConfig, ChoiceState>({
     return s.answers.map((a) => ({ participantId: a.participantId, outcome: sameSet(a.optionIds, s.correct) ? "correct" : "wrong", answeredAt: a.at }));
   },
 
+  removeParticipant(s, participantId) {
+    return { ...s, answers: s.answers.filter((a) => a.participantId !== participantId) };
+  },
+
   answerOf(s, participantId) {
     return s.answers.find((a) => a.participantId === participantId)?.optionIds ?? null;
   },

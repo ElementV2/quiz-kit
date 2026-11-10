@@ -63,11 +63,24 @@ Les rôles autorisés par action sont dans `schema` (`actionPermissions`) et vé
 
 ## Undo (ADR-0010)
 
-`undo` est un événement du journal. Sans cible, il annule la dernière action **de la régie** non annulée
-(jamais une réponse joueur). `replay` rejoue tout en ignorant les événements annulés ; une action devenue
-invalide est ignorée et listée dans `skipped`. Annuler un `undo` = redo.
+`undo` est un événement du journal, toujours journalisé avec sa cible résolue (`targetSeq`) : le rejeu ne
+devine jamais. Sans cible, il annule le dernier événement actif et effectif qui n'est ni une réponse joueur ni
+un undo (un `timer.expired` compris : undo juste après un verrouillage auto = réponses rouvertes).
+Un événement est actif si aucun undo actif ne le vise : annuler un undo = redo, annuler ce redo = re-undo, à
+toute profondeur. `replay` ignore les événements annulés ; une action devenue invalide est listée dans `skipped`.
+`replay` refuse un journal non contigu (`CorruptJournalError`) et ignore un snapshot invalide (rejeu complet).
 
 ## Overrides
 
-Les actions de correction manuelle de la régie (`score.adjust`, `score.void`, `player.*`, `timer.set`)
-sont acceptées quelle que soit la phase. Elles sont tracées avec `reason: manual`. En live, l'humain a le dernier mot.
+Les actions de correction manuelle de la régie (`score.*`, `player.*`, `team.add`) sont acceptées quelle
+que soit la phase. `timer.set` / `timer.stop` ne valent que réponses ouvertes (pour rouvrir : undo du verrouillage).
+
+## Règles de score
+
+- Une question **rejouée** (re-présentée puis révélée) remplace ses points automatiques précédents (annulés).
+- `round.start` sans index est refusé tant qu'il reste des questions dans la manche (sauter = index explicite).
+- La dégressivité (`timeDecay`) suit la fenêtre du chrono réellement armé (prolongation comprise) ; sans chrono,
+  pas de dégressivité.
+- Chaque ligne de score fige l'équipe du joueur au moment du score : changer d'équipe ne réécrit pas l'historique.
+- Un joueur retiré perd sa réponse en cours (un identifiant réutilisé n'hérite de rien).
+- Arrondi symétrique (7,5 → 8 ; −7,5 → −8). Elles sont tracées avec `reason: manual`. En live, l'humain a le dernier mot.

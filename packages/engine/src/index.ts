@@ -4,7 +4,7 @@ export { GameState, TimerState, initialState, currentQuestion, currentRound, par
 export { createRegistry, defineMechanic, type Mechanic, type AnyMechanic, type Registry, type Audience, type Judgement, type MechanicEnv, type ProjectEnv } from "./mechanic.ts";
 export { pointsFor } from "./scoring.ts";
 export { reduce, type Ctx } from "./reduce.ts";
-export { createGame, decide, replay, nextSeq, type Game, type Intent, type Skipped } from "./game.ts";
+export { createGame, decide, replay, nextSeq, CorruptJournalError, type Game, type Intent, type Skipped, type Snapshot } from "./game.ts";
 export { project, leaderboard } from "./project.ts";
 export { choice, ChoiceConfig, ChoiceState } from "./mechanics/choice/choice.ts";
 

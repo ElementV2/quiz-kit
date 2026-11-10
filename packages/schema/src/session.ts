@@ -43,6 +43,8 @@ export type ScoreReason = z.infer<typeof ScoreReason>;
 export const ScoreEntry = z.strictObject({
   id: ScoreEntryId,
   target: ScoreTarget,
+  /** Team of the participant when the entry was created (team totals never change retroactively). */
+  teamId: TeamId.nullable(),
   delta: z.number().int(),
   questionId: QuestionId.nullable(),
   reason: ScoreReason,

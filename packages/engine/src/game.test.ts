@@ -174,3 +174,24 @@ describe("replay (crash recovery)", () => {
     expect(project(b, { role: "output", scene: "x" }, reg).mechanic?.options).toEqual(project(a, { role: "output", scene: "x" }, reg).mechanic?.options);
   });
 });
+
+describe("replay from a snapshot", () => {
+  const steps = [...OPEN_Q1, answer("p_1", "b"), ctl({ type: "question.lock" }), ctl({ type: "question.reveal" }), ctl({ type: "question.next" }), ctl({ type: "question.present" })];
+
+  it("gives the same game as a full replay", () => {
+    const g = run(reg, steps);
+    const cut = g.events.findIndex((e) => e.action.type === "question.reveal");
+    const prefix = replay(g.session, g.events.slice(0, cut + 1), reg);
+    const fromSnap = replay(g.session, g.events, reg, { seq: prefix.state.lastSeq, state: prefix.state });
+    expect(fromSnap.state).toEqual(g.state);
+  });
+
+  it("falls back to a full replay when a later undo reaches before the snapshot", () => {
+    const g0 = run(reg, steps);
+    const snap = { seq: g0.state.lastSeq, state: g0.state };
+    const revealSeq = g0.events.find((e) => e.action.type === "question.reveal")?.seq ?? 0;
+    const g = run(reg, [ctl({ type: "undo", targetSeq: revealSeq })], g0);
+    expect(replay(g.session, g.events, reg, snap).state).toEqual(g.state);
+    expect(participantTotal(g.state, "p_1")).toBe(0);
+  });
+});

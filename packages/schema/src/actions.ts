@@ -55,7 +55,7 @@ export const Action = z.discriminatedUnion("type", [
     name: z.string().trim().min(1).max(40),
     color: z.string().regex(/^#[0-9a-fA-F]{6}$/),
   }),
-  // Undo (ADR-0010)
+  // Undo (ADR-0010). The engine always journals the resolved `targetSeq`, so replay never guesses.
   action("undo", { targetSeq: z.number().int().min(1).optional() }),
 ]);
 export type Action = z.infer<typeof Action>;
@@ -86,7 +86,10 @@ export function isAllowed(role: Role, type: ActionType): boolean {
   return actionPermissions[role].has(type);
 }
 
-/** Actions that `undo` without target may cancel: control decisions, never player answers. */
-export function isControlDecision(type: ActionType): boolean {
-  return type !== "answer.submit" && type !== "timer.expired" && type !== "undo";
+/**
+ * Actions that `undo` without target may cancel: everything except player answers and undos.
+ * `timer.expired` is included so that "undo" right after an auto-lock simply re-opens answers.
+ */
+export function isUndoableByDefault(type: ActionType): boolean {
+  return type !== "answer.submit" && type !== "undo";
 }

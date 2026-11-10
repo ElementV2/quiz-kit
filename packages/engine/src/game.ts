@@ -1,9 +1,9 @@
-import { isAllowed, isControlDecision, type Action, type Actor, type Event, type Session } from "@quiz/schema";
+import { isAllowed, isUndoableByDefault, type Action, type Actor, type Event, type Session } from "@quiz/schema";
 import type { Registry } from "./mechanic.ts";
 import { reduce } from "./reduce.ts";
 import { err, ok, type Rejection, type Result } from "./result.ts";
 import { createRng } from "./rng.ts";
-import { initialState, type GameState } from "./state.ts";
+import { GameState, initialState } from "./state.ts";
 
 export type Skipped = { readonly seq: number; readonly type: string; readonly reason: string };
 
@@ -14,14 +14,19 @@ export type Skipped = { readonly seq: number; readonly type: string; readonly re
 export type Game = {
   readonly session: Session;
   readonly events: readonly Event[];
-  /** seq → seq of the undo that cancels it (cancelled undos are themselves keys). */
+  /** Cancelled seq → seq of the active undo that cancels it. Undos can themselves be cancelled (redo). */
   readonly cancelledBy: ReadonlyMap<number, number>;
   readonly state: GameState;
-  /** Events ignored at the last replay because they became invalid after an undo. */
+  /** Events without effect: they became invalid after an undo (shown to control). */
   readonly skipped: readonly Skipped[];
 };
 
 export type Intent = { readonly action: Action; readonly actor: Actor; readonly idempotencyKey: string | null };
+
+/** A persisted checkpoint: the state right after event `seq` (ADR-0003). */
+export type Snapshot = { readonly seq: number; readonly state: GameState };
+
+export class CorruptJournalError extends Error {}
 
 export function createGame(session: Session): Game {
   return { session, events: [], cancelledBy: new Map(), state: initialState(session), skipped: [] };
@@ -35,40 +40,80 @@ export function nextSeq(g: Game): number {
 /**
  * Validates an intent against the current game. On success returns the event to journal and the
  * resulting game. Nothing is mutated: if the journal write fails, the caller simply drops the result.
+ * An `undo` is journaled with its resolved `targetSeq`, so replay never has to guess (ADR-0010).
  */
 export function decide(g: Game, intent: Intent, at: number, registry: Registry): Result<{ event: Event; game: Game }, Rejection> {
   const seq = nextSeq(g);
-  const event: Event = { seq, at, actor: intent.actor, action: intent.action, idempotencyKey: intent.idempotencyKey };
   if (intent.action.type === "undo") {
     if (!isAllowed(intent.actor.role, "undo")) return err("forbidden", `le rôle ${intent.actor.role} ne peut pas annuler`);
-    const target = undoTarget(g.events, g.cancelledBy, intent.action.targetSeq);
+    const target = undoTarget(g, intent.action.targetSeq);
     if (!target.ok) return target;
-    const cancelledBy = applyUndo(g.cancelledBy, g.events, target.value, seq);
+    const event: Event = { seq, at, actor: intent.actor, action: { type: "undo", targetSeq: target.value }, idempotencyKey: intent.idempotencyKey };
     const events = [...g.events, event];
-    const folded = fold(g.session, events, cancelledBy, registry);
-    return ok({ event, game: { session: g.session, events, cancelledBy, ...folded } });
+    const cancelledBy = computeCancelled(events);
+    return ok({ event, game: { session: g.session, events, cancelledBy, ...fold(g.session, events, cancelledBy, registry) } });
   }
+  const event: Event = { seq, at, actor: intent.actor, action: intent.action, idempotencyKey: intent.idempotencyKey };
   const r = reduce(g.state, intent.action, { at, seq, actor: intent.actor, rng: createRng(g.session.seed, seq) }, registry);
   if (!r.ok) return r;
   return ok({ event, game: { ...g, events: [...g.events, event], state: r.value } });
 }
 
-/** Rebuilds a game from its journal (crash recovery, ADR-0003). Deterministic. */
-export function replay(session: Session, events: readonly Event[], registry: Registry): Game {
-  let cancelledBy: ReadonlyMap<number, number> = new Map();
-  for (const e of events) {
-    if (e.action.type !== "undo") continue;
-    const target = undoTarget(events.filter((x) => x.seq < e.seq), cancelledBy, e.action.targetSeq);
-    if (target.ok) cancelledBy = applyUndo(cancelledBy, events, target.value, e.seq);
+/**
+ * Rebuilds a game from its journal (crash recovery, ADR-0003). Deterministic.
+ * With a valid snapshot, folds only the events after it — unless an undo after the snapshot changed
+ * the fate of an event before it, in which case it replays everything.
+ * Throws CorruptJournalError if seqs are not 1, 2, 3… (never silently play a damaged journal).
+ */
+export function replay(session: Session, events: readonly Event[], registry: Registry, snapshot?: Snapshot): Game {
+  for (const [i, e] of events.entries()) {
+    if (e.seq !== i + 1) throw new CorruptJournalError(`journal non contigu : seq ${e.seq} en position ${i + 1}`);
   }
-  return { session, events: [...events], cancelledBy, ...fold(session, events, cancelledBy, registry) };
+  const cancelledBy = computeCancelled(events);
+  const usable = snapshot !== undefined && isUsableSnapshot(snapshot, events, cancelledBy, registry);
+  const folded = usable
+    ? fold(session, events.filter((e) => e.seq > snapshot.seq), cancelledBy, registry, snapshot.state)
+    : fold(session, events, cancelledBy, registry);
+  return { session, events: [...events], cancelledBy, ...folded };
 }
 
-function fold(session: Session, events: readonly Event[], cancelledBy: ReadonlyMap<number, number>, registry: Registry): { state: GameState; skipped: Skipped[] } {
-  let state = initialState(session);
+function isUsableSnapshot(snap: Snapshot, events: readonly Event[], cancelledBy: ReadonlyMap<number, number>, registry: Registry): boolean {
+  if (snap.seq > events.length || snap.state.lastSeq > snap.seq) return false;
+  // An undo after the snapshot that cancels (or restores) something before it invalidates the snapshot.
+  for (const e of events) {
+    if (e.seq > snap.seq && e.action.type === "undo" && (e.action.targetSeq ?? 0) <= snap.seq) return false;
+  }
+  for (const [target, by] of cancelledBy) if (target <= snap.seq && by > snap.seq) return false;
+  // The mechanic state inside the snapshot is validated by its own schema (boundary: DB read).
+  const m = snap.state.mechanic;
+  if (m !== null) {
+    const mech = registry.get(m.id);
+    if (mech === null || !mech.stateSchema.safeParse(m.state).success) return false;
+  }
+  return GameState.safeParse(snap.state).success;
+}
+
+/**
+ * An event is active iff no ACTIVE undo targets it. Undos only target earlier events, so a single
+ * pass from newest to oldest settles every level of undo / redo / re-undo.
+ */
+function computeCancelled(events: readonly Event[]): Map<number, number> {
+  const cancelled = new Map<number, number>();
+  for (let i = events.length - 1; i >= 0; i--) {
+    const e = events[i];
+    if (e === undefined || e.action.type !== "undo" || cancelled.has(e.seq)) continue;
+    const target = e.action.targetSeq;
+    if (target !== undefined && target < e.seq && !cancelled.has(target)) cancelled.set(target, e.seq);
+  }
+  return cancelled;
+}
+
+function fold(session: Session, events: readonly Event[], cancelledBy: ReadonlyMap<number, number>, registry: Registry, from: GameState = initialState(session)): { state: GameState; skipped: Skipped[] } {
+  let state = from;
   const skipped: Skipped[] = [];
   for (const e of events) {
     if (e.action.type === "undo") {
+      if (e.action.targetSeq === undefined || e.action.targetSeq >= e.seq) skipped.push({ seq: e.seq, type: "undo", reason: "undo sans cible valide" });
       state = { ...state, lastSeq: e.seq };
       continue;
     }
@@ -80,35 +125,23 @@ function fold(session: Session, events: readonly Event[], cancelledBy: ReadonlyM
   return { state, skipped };
 }
 
-function isActive(seq: number, cancelledBy: ReadonlyMap<number, number>): boolean {
-  return !cancelledBy.has(seq);
-}
-
 /**
- * Default target: the latest active control decision (never a player answer). An explicit target may
- * be any active event, including an active undo (→ redo).
+ * Default target: the latest event that is active, has an effect (not skipped) and is undoable by
+ * default (never a player answer). An explicit target may be any such event, including an undo (→ redo).
  */
-function undoTarget(events: readonly Event[], cancelledBy: ReadonlyMap<number, number>, explicit: number | undefined): Result<number, Rejection> {
+function undoTarget(g: Game, explicit: number | undefined): Result<number, Rejection> {
+  const skipped = new Set(g.skipped.map((s) => s.seq));
+  const hasEffect = (seq: number): boolean => !g.cancelledBy.has(seq) && !skipped.has(seq);
   if (explicit !== undefined) {
-    const e = events.find((x) => x.seq === explicit);
+    const e = g.events.find((x) => x.seq === explicit);
     if (e === undefined) return err("not-found", `événement ${explicit} inconnu`);
-    if (!isActive(explicit, cancelledBy)) return err("conflict", `événement ${explicit} déjà annulé`);
+    if (g.cancelledBy.has(explicit)) return err("conflict", `événement ${explicit} déjà annulé`);
+    if (skipped.has(explicit)) return err("conflict", `événement ${explicit} déjà sans effet`);
     return ok(explicit);
   }
-  for (let i = events.length - 1; i >= 0; i--) {
-    const e = events[i];
-    if (e !== undefined && e.action.type !== "undo" && isControlDecision(e.action.type) && isActive(e.seq, cancelledBy)) return ok(e.seq);
+  for (let i = g.events.length - 1; i >= 0; i--) {
+    const e = g.events[i];
+    if (e !== undefined && isUndoableByDefault(e.action.type) && hasEffect(e.seq)) return ok(e.seq);
   }
   return err("not-found", "rien à annuler");
-}
-
-/** Cancelling an undo restores what it had cancelled (redo). */
-function applyUndo(cancelledBy: ReadonlyMap<number, number>, events: readonly Event[], target: number, undoSeq: number): Map<number, number> {
-  const next = new Map(cancelledBy);
-  const targetEvent = events.find((x) => x.seq === target);
-  if (targetEvent?.action.type === "undo") {
-    for (const [seq, by] of next) if (by === target) next.delete(seq);
-  }
-  next.set(target, undoSeq);
-  return next;
 }
