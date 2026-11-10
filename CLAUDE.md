@@ -48,7 +48,8 @@ dépendent de `engine` (seule exception : `apps/studio`, pour simuler des états
 
 ## Commandes (garder à jour ici)
 
-Node ≥ 24.12 exécute le TypeScript directement (type stripping, ADR-0011) : pas de build pour le code Node.
+Node 26 LTS (version fixée dans `.node-version`, lue par fnm ; `engineStrict` refuse une autre version) exécute
+le TypeScript directement (type stripping, ADR-0011) : pas de build pour le code Node.
 
 ```
 pnpm i

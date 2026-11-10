@@ -4,3 +4,4 @@ packages:
   - scripts
 allowBuilds:
   better-sqlite3: true
+engineStrict: true

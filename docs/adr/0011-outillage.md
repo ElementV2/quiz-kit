@@ -14,7 +14,9 @@ Consigne : dernières versions stables. Registre npm au 2026-11-10 : `typescript
   (https://nodejs.org/api/typescript.html — « Type stripping is now stable. » v25.2.0, v24.12.0). Donc : imports
   relatifs avec extension `.ts`, `erasableSyntaxOnly`, `verbatimModuleSyntax`, pas d'`enum` ni de parameter
   properties. Les paquets exportent `./src/index.ts` (les workspaces pnpm sont des liens résolus hors
-  `node_modules`, où Node refuse le TS). `engines.node >=24.12`.
+  `node_modules`, où Node refuse le TS).
+- **Node 26.13 LTS** (« Lithium », dernière LTS au 2026-11-10 ; la v27 est en alpha), fixé par `.node-version`
+  (fnm) et `engines.node >=26.13` avec `engineStrict: true`. better-sqlite3 fournit des binaires pour Node 26.
 - **Vitest** pour les tests, **fast-check** pour les propriétés.
 - **IDs** : `préfixe_` + ULID maison (48 bits ms + 80 bits aléatoires, Crockford base32) généré **par le serveur** ;
   les IDs créés par le moteur sont dérivés de l'événement (`se_<seq>_<n>`) pour rester déterministes.
