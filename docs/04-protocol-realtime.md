@@ -6,8 +6,9 @@ Un WebSocket par client (`/ws`). Messages JSON validés par Zod des deux côtés
 au bench), rate limit par connexion (tablette 20 msg/s, régie 300 msg/s). Une intention freinée reçoit
 `{ t:'ack', key, ok:false, code:'rate-limited' }` : le client la garde et la ré-émet avec la même clé.
 Heartbeat toutes les 2 s ; une connexion est coupée après 3 pings sans réponse (tout message compte comme réponse).
-`@quiz/protocol/lite` expose patchs et timing sans Zod (VU k6) ; les apps utilisent l'entrée complète. Protocole versionné (`v` dans le `hello`). Le paquet ne dépend que de
-`schema` (ADR-0007) et ne contient aucune API Node (il est aussi bundlé pour k6 et les navigateurs).
+`@quiz/protocol/lite` expose patchs et timing sans Zod (VU k6) ; les apps utilisent l'entrée complète.
+Protocole versionné (`v` dans le `hello`). Le paquet ne dépend que de `schema` (ADR-0007) et ne contient aucune
+API Node (il est aussi bundlé pour k6 et les navigateurs).
 
 ## Poignée de main (ADR-0009)
 
