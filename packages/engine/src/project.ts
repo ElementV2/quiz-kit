@@ -1,0 +1,107 @@
+import type { BaseView, ControlView, HostView, LeaderboardRow, OutputView, PlayerView, View, Viewer } from "@quiz/schema";
+import type { Game } from "./game.ts";
+import type { Audience, Registry } from "./mechanic.ts";
+import { assertNever } from "./result.ts";
+import { currentQuestion, currentRound, nextQuestion, participantTotal, type GameState } from "./state.ts";
+
+/**
+ * Role-filtered view (ADR-0004). The only way state leaves the server.
+ * Player / output views never contain: correct answers before reveal, host notes, other players' answers.
+ */
+export function project(game: Game, viewer: Viewer, registry: Registry): View {
+  const s = game.state;
+  switch (viewer.role) {
+    case "output":
+      return { role: "output", ...base(s, "public", null, registry) } satisfies OutputView;
+    case "player":
+      return playerView(s, viewer.participantId, registry);
+    case "seat": {
+      const p = s.participants.find((x) => x.seat === viewer.seat);
+      return playerView(s, p?.id ?? null, registry);
+    }
+    case "host":
+      return { role: "host", ...base(s, "host", null, registry), notes: currentQuestion(s)?.notes ?? null, nextQuestion: next(s) } satisfies HostView;
+    case "control":
+    case "control-readonly":
+    case "scorer":
+    case "studio":
+      return controlView(game, viewer.role !== "control" && viewer.role !== "scorer", registry);
+    default:
+      return assertNever(viewer);
+  }
+}
+
+function base(s: GameState, audience: Audience, participantId: string | null, registry: Registry): BaseView {
+  const round = currentRound(s);
+  const q = currentQuestion(s);
+  const showQuestion = q !== null && s.mechanic !== null;
+  const m = s.mechanic === null ? null : registry.get(s.mechanic.id);
+  return {
+    sessionId: s.sessionId,
+    phase: s.phase,
+    round: round === null || s.roundIndex === null ? null : { index: s.roundIndex, count: s.game.format.rounds.length, title: round.title },
+    question:
+      showQuestion && round !== null && s.questionIndex !== null
+        ? { id: q.id, index: s.questionIndex, count: round.questions.length, prompt: q.prompt }
+        : null,
+    timer: s.timer === null ? null : { endsAt: s.timer.endsAt, durationMs: s.timer.durationMs },
+    mechanic: m === null || s.mechanic === null ? null : m.project(s.mechanic.state, { audience, phase: s.phase, participantId }),
+    leaderboard: leaderboard(s),
+  };
+}
+
+function playerView(s: GameState, participantId: string | null, registry: Registry): PlayerView {
+  const me = participantId === null ? undefined : s.participants.find((p) => p.id === participantId);
+  const m = s.mechanic === null ? null : registry.get(s.mechanic.id);
+  const myAnswer = me === undefined || m === null || s.mechanic === null ? null : m.answerOf(s.mechanic.state, me.id);
+  let myResult: PlayerView["myResult"] = null;
+  if (s.phase === "revealed" && me !== undefined && m !== null && s.mechanic !== null) {
+    const j = m.judge(s.mechanic.state).find((x) => x.participantId === me.id);
+    myResult = j === undefined ? "none" : j.outcome;
+  }
+  return {
+    role: "player",
+    ...base(s, "player", me?.id ?? null, registry),
+    me: me === undefined ? null : { participantId: me.id, displayName: me.displayName, status: me.status, teamId: me.teamId, total: participantTotal(s, me.id) },
+    myAnswer: myAnswer === null ? null : [...myAnswer],
+    myResult,
+    canAnswer: s.phase === "open" && me !== undefined && me.status === "active",
+  };
+}
+
+function controlView(game: Game, readonly: boolean, registry: Registry): ControlView {
+  const s = game.state;
+  const m = s.mechanic === null ? null : registry.get(s.mechanic.id);
+  return {
+    role: "control",
+    ...base(s, "control", null, registry),
+    readonly,
+    notes: currentQuestion(s)?.notes ?? null,
+    nextQuestion: next(s),
+    participants: s.participants,
+    teams: s.teams,
+    ledger: s.ledger,
+    answers: m === null || s.mechanic === null ? [] : m.answers(s.mechanic.state).map((x) => ({ ...x, optionIds: [...x.optionIds] })),
+    skipped: [...game.skipped],
+    lastSeq: s.lastSeq,
+  };
+}
+
+function next(s: GameState): HostView["nextQuestion"] {
+  const q = nextQuestion(s);
+  return q === null ? null : { id: q.id, text: q.prompt.text };
+}
+
+/** Standard competition ranking (1, 1, 3); ties keep registration order. */
+export function leaderboard(s: GameState): LeaderboardRow[] {
+  const rows = s.participants
+    .map((p, order) => ({ p, order, total: participantTotal(s, p.id) }))
+    .toSorted((a, b) => b.total - a.total || a.order - b.order);
+  let rank = 0;
+  let prev: number | null = null;
+  return rows.map((r, i) => {
+    if (r.total !== prev) rank = i + 1;
+    prev = r.total;
+    return { participantId: r.p.id, displayName: r.p.displayName, teamId: r.p.teamId, total: r.total, rank };
+  });
+}

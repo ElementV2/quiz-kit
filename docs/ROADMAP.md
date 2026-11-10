@@ -7,8 +7,8 @@ Règle : une phase n'est terminée que quand ses critères de sortie passent. Co
 - [x] Cadrage : relecture du kit, ADR 0007 → 0012, docs corrigés, points ouverts vérifiés
 - [x] Monorepo pnpm + Turborepo, TS strict, lint (règles d'import entre paquets), Vitest, CI locale (`pnpm check`)
 - [x] `schema` : Question, AnswerSpec (single, multi, boolean, poll, oral), Format, Round, Session, Participant, Team, ScoreEntry, Event, Actions, Vues + `schemaVersion`
-- [ ] `engine` : `reduce`, `project`, `replay`, registre de mécaniques, `mechanicContractSuite`, Rng seedé
-- [ ] Mécanique `choice` (QCM 2 à 6 options, vrai/faux, multi) + scoring de base + registre de score + undo
+- [x] `engine` : `reduce`, `project`, `replay`, registre de mécaniques, `mechanicContractSuite`, Rng seedé
+- [x] Mécanique `choice` (QCM 2 à 6 options, vrai/faux, multi) + scoring de base + registre de score + undo
 - [ ] `protocol` : hello/welcome/patch/snapshot/intent/ack/ping, séquences, idempotence
 - [ ] `server` : Fastify + ws, file d'actions sérialisée, EventStore SQLite (WAL + FULL), snapshots, timers serveur, jetons par rôle
 - [ ] `protocol/client` : reconnexion backoff, file d'intentions persistée, resynchro
