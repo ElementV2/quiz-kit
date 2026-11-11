@@ -227,3 +227,45 @@ describe("points of one question win over its category and the round", () => {
   });
 });
 
+const routeOf = (kinds: unknown, kind: Question["answerSpec"]["kind"]) => {
+  const m = reg.get("mixed");
+  const cfg = m?.configSchema.parse({ kinds });
+  const q = [...IDS.map(pick), pick("q_ord_1")].find((x) => x.answerSpec.kind === kind) ?? { ...pick("q_capital_fr"), answerSpec: { kind } };
+  return m?.route?.(cfg, q as Question); // oxlint-disable-line typescript/no-unsafe-type-assertion -- a question of that kind for routing only
+};
+
+describe("every category setting reaches the mechanic that plays the question", () => {
+  it("by category, with every key set", () => {
+    const rule = [{ type: "base", points: 42 }];
+    const kinds = {
+      choice: { shuffleOptions: true, allowChange: false, scoring: rule },
+      poll: { mode: "per-answer", maxStrikes: 2, multiplier: 2 },
+      oral: { lockoutOnWrong: false, scoring: rule },
+      text: { allowChange: false, scoring: rule },
+      number: { mode: "closest", allowChange: false, scoring: rule },
+      order: { allowChange: false, scoring: rule },
+    };
+    expect(routeOf(kinds, "single")).toEqual({ id: "choice", config: { shuffleOptions: true, allowChange: false }, scoring: rule });
+    expect(routeOf(kinds, "poll")).toEqual({ id: "poll-board", config: { maxStrikes: 2, multiplier: 2, scoring: "per-answer" } });
+    expect(routeOf(kinds, "oral")).toEqual({ id: "buzzer", config: { lockoutOnWrong: false }, scoring: rule });
+    expect(routeOf(kinds, "text")).toEqual({ id: "text-answer", config: { allowChange: false }, scoring: rule });
+    expect(routeOf(kinds, "number")).toEqual({ id: "number-answer", config: { allowChange: false, mode: "closest" }, scoring: rule });
+    expect(routeOf(kinds, "order")).toEqual({ id: "order", config: { allowChange: false }, scoring: rule });
+    expect(routeOf({ pairs: { allowChange: false }, pin: { allowChange: false }, allocation: { allowChange: false, keepOneEmpty: false } }, "allocation")).toEqual({ id: "allocation", config: { allowChange: false, keepOneEmpty: false } });
+  });
+
+  it("and they change the game: no answer change on a QCM, the steal after 2 strikes on a survey", () => {
+    const doc = structuredClone(MIXED);
+    const r0 = doc.format.rounds[0];
+    if (r0 === undefined) throw new Error("fixture");
+    r0.mechanicConfig = { kinds: { choice: { allowChange: false }, poll: { maxStrikes: 2 } } };
+    const game = GameDocument.parse(doc);
+    const qcm = pick("q_capital_fr");
+    const [a, b] = qcm.answerSpec.kind === "single" ? qcm.answerSpec.options.map((o) => o.id) : [];
+    const g = run(reg, [...START, ctl({ type: "question.present" }), ctl({ type: "question.open" }), answer("p_1", a ?? "")], createGame(makeSession(game)));
+    expect(() => run(reg, [answer("p_1", b ?? "")], g)).toThrow(/rejected/);
+    const poll = run(reg, [...START, ctl({ type: "question.skip", roundIndex: 0, questionIndex: 0 }), ctl({ type: "question.present" }), ctl({ type: "poll.control", participantId: "p_1" }), ctl({ type: "question.open" }), ctl({ type: "answer.judge", correct: false }), ctl({ type: "answer.judge", correct: false })], createGame(makeSession(game)));
+    expect(project(poll, { role: "control" }, reg).mechanic).toMatchObject({ stage: "steal", maxStrikes: 2 });
+  });
+});
+
