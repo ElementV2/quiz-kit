@@ -53,6 +53,30 @@ Fond 1920×1080 (livrer 3840×2160), stinger 1920×1080 ProRes 4444 ou WebM VP9 
 logo SVG (sinon PNG alpha ≥ 1000 px de large), avatar carré ≥ 512×512, sons WAV 48 kHz.
 Contrôles à l'import : dimensions, alpha, licence de police déclarée, échantillonnage audio (conversion auto).
 
+## Modifier une partie en direct (« Envoyer au direct »)
+
+Quand la partie ouverte dans le studio est celle lancée en régie, l'en-tête affiche **En direct** et le bouton
+**Envoyer au direct**. Le studio charge alors le document du direct (`GET /api/live/game`, corrections de la régie
+comprises) et retient sa version (`gameVersion`). L'envoi (`POST /api/games/:id/apply-live`, `{ game, baseVersion }`)
+passe par l'action journalisée `game.patch` ; la régie, les sorties, l'animateur et les tablettes se mettent à jour
+sans relancer. La régie affiche le badge « modifiée HH:MM ».
+
+Autorisé : nouvelles manches et questions, questions pas encore jouées, habillage (thème, scènes), titre, limites
+de joueurs compatibles avec les joueurs présents.
+
+Refusé (message en clair dans le studio) :
+- supprimer une question jouée ou changer sa réponse (→ « Corriger la réponse » en régie) ;
+- déplacer une manche commencée, changer son type ou son barème ;
+- changer les réglages de la manche en cours après sa première question ;
+- déplacer les questions déjà présentées ; un plateau (Jeopardy) en cours garde sa grille telle quelle ;
+- sur la question à l'antenne, autre chose que son texte ;
+- un envoi fait sur une version périmée (correction en régie entre-temps) : le studio propose de recharger la
+  version du direct. Sans changement en attente, le studio suit le direct tout seul.
+
+`game.patch` ne s'annule pas (`NEVER_UNDONE`) : pour revenir en arrière, renvoyer la version précédente. Une mise
+d'enjeu (×N) posée sur une place où une autre question arrive est retirée. Chaque envoi écrit le document complet
+dans le journal (quelques dizaines de Ko) : rester raisonnable sur le nombre d'envois pendant un show.
+
 ## Templates
 
 Format + Scènes + Thème + set d'exemple : QCM à paliers, sondage à slots, buzzer culture G, blind test,

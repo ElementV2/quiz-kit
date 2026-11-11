@@ -235,7 +235,12 @@ export class WsTransport {
           return;
         }
         const key = m.key;
-        const action = m.action.type === "player.add" || m.action.type === "player.rename" ? { ...m.action, displayName: cleanDisplayName(m.action.displayName) || m.action.displayName } : m.action;
+        const raw = m.action;
+        const action = raw.type === "player.add" || raw.type === "player.rename" ? { ...raw, displayName: cleanDisplayName(raw.displayName) } : raw;
+        if ((action.type === "player.add" || action.type === "player.rename") && action.displayName === "") {
+          this.send(conn, { t: "ack", key, ok: false, code: "invalid", reason: "nom vide (caractères invisibles retirés)" });
+          return;
+        }
         runtime.enqueue(action, actor, key, (ack) => this.send(conn, toAckMessage({ ...ack, key })));
         return;
       }

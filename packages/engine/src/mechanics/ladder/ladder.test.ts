@@ -154,6 +154,12 @@ describe("ladder progression", () => {
     expect(participantTotal(g.state, "p_1")).toBe(500);
   });
 
+  it("passing the last question between questions (question.skip) banks the step reached", () => {
+    const g = play([...START, ...climb(2), ctl({ type: "question.skip", roundIndex: 0, questionIndex: 2 })], withConfig({ steps: [200, 500, 1000], safeSteps: [] }, ["q_lad_1", "q_lad_2", "q_lad_3"]));
+    expect(g.state.phase).toBe("game.end");
+    expect(participantTotal(g.state, "p_1")).toBe(500);
+  });
+
   it("a question skipped without reveal keeps the level", () => {
     const g = play([...START, ...climb(1), ...OPEN, say("a"), NEXT, ...OPEN]);
     expect(viewOf(g)).toMatchObject({ level: 1, atStake: 1, answer: null });

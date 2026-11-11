@@ -358,3 +358,4 @@
 .s-new-menu > button { display: grid; gap: 1px; }
 .s-new-menu > button > span { font-size: 11px; }
 .s-menu-label { margin: 6px 10px 2px; font-size: 10px; font-weight: 650; font-stretch: 75%; text-transform: uppercase; letter-spacing: .12em; color: var(--ui-faint); }
+.s-live-tag { align-self: center; }

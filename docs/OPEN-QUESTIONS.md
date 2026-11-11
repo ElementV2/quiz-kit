@@ -90,3 +90,5 @@ Règle : une question vérifiée devient un ADR ou une ligne dans le doc concern
       sous Windows ; à la fermeture le serveur est arrêté par `TerminateProcess` (sans perte grâce au journal).
       Mieux : handle / pipe hérité (revue 4, m5–m6).
 - [ ] `QUIZ_APPS_DIR` lu hors de `config.ts` (module `http/app.ts`) — à rapatrier dans la config validée (revue 4, m8).
+- [ ] `game.patch` journalise le document complet à chaque envoi : taille du journal et durée du rejeu à mesurer
+      sur un show avec beaucoup d'envois ; un diff (JSON Patch) serait plus léger (revue 7, m4).

@@ -69,6 +69,13 @@ export const GameState = z.strictObject({
   history: z.array(QuestionRecord).default([]),
   /** Live stakes for one question (`question.setStakes`): the round / question index they apply to. */
   stakes: z.strictObject({ roundIndex: z.number().int(), questionIndex: z.number().int(), points: z.number().int().nullable(), multiplier: z.number().nullable() }).nullable().default(null),
+  /**
+   * Seq of the last event that changed the game document (`game.patch`, `question.edit` / `regrade` /
+   * `replaceFromReserve`); 0 = as launched. Never reused (seqs are unique), so a stale studio copy is always seen.
+   */
+  gameVersion: z.number().int().min(0).default(0),
+  /** When the studio last sent the game to the live (`game.patch`): shown in the control room. */
+  studioPatchedAt: z.number().nullable().default(null),
   /** The host may drive the question flow from their tablet (`host.setDrive`, HOST_DRIVE_ACTIONS). */
   hostDrives: z.boolean().default(false),
 });
@@ -98,6 +105,8 @@ export function initialState(session: Session): GameState {
     history: [],
     hostDrives: false,
     stakes: null,
+    gameVersion: 0,
+    studioPatchedAt: null,
   };
 }
 

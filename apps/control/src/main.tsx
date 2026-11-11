@@ -1,4 +1,4 @@
-import { For, Show, createMemo, createResource, createSignal, onCleanup, onMount, type JSX } from "solid-js";
+import { For, Show, createEffect, createMemo, createResource, createSignal, on, onCleanup, onMount, type JSX } from "solid-js";
 import { render } from "solid-js/web";
 import type { Action, ControlView } from "@quiz/schema";
 import { asChoice, optionLetter, secondsLeft } from "@quiz/renderer";
@@ -39,9 +39,20 @@ function App() {
   const timers = [setInterval(() => void poll(), 3000), setInterval(() => setNow(conn.serverNow()), 250)];
   onCleanup(() => timers.forEach(clearInterval));
 
+  // « Envoyer au direct » from the studio: badge in the top bar + one message when it arrives.
+  createEffect(
+    on(
+      () => { const v = view(); return v === null ? undefined : v.studioPatchedAt; }, // undefined: not connected yet
+      (at, prev) => {
+        if (at !== undefined && at !== null && prev !== undefined && at !== prev) setMessage({ ok: true, text: "Partie mise à jour depuis le studio : déroulé et questions à venir rafraîchis" });
+      },
+    ),
+  );
   const act: Act = async (action, okText) => {
     const ack = await conn.submit(action);
-    setMessage(ack.ok ? (okText === undefined ? null : { ok: true, text: okText }) : { ok: false, text: ack.reason });
+    // A question this round cannot play: say how to get past it (never a dead end on air).
+    const hint = !ack.ok && action.type === "question.present" && / ne peut pas jouer /.test(ack.reason) ? " — « Passer la question » pour la sauter" : "";
+    setMessage(ack.ok ? (okText === undefined ? null : { ok: true, text: okText }) : { ok: false, text: `${ack.reason}${hint}` });
     return ack.ok;
   };
   const kb = createKeyBuzzers(view, act);
@@ -84,6 +95,9 @@ function App() {
                 <span class="c-game-label">Partie en cours</span>
                 <span class="c-game-title">{v().game.title}</span>
                 <span class="c-game-meta q-mono">{v().participants.length}/{v().game.maxPlayers} j.</span>
+                <Show when={v().studioPatchedAt}>
+                  {(at) => <span class="c-game-edited" title="La partie a été modifiée depuis le studio pendant le show">modifiée {new Date(at()).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })}</span>}
+                </Show>
                 <span class="c-game-change">Changer</span>
               </button>
               <span class="q-tally" data-on={ON_AIR_PHASES.has(v().phase) ? "air" : undefined}>{ON_AIR_PHASES.has(v().phase) ? "Antenne" : "Hors antenne"}</span>
@@ -118,7 +132,7 @@ function App() {
           const onAirLayers = () => layers().filter((l) => v().layers[l.id] === true).length;
           return (
             <div class="c-grid">
-              <Rundown view={v()} readonly={readonly()} act={act} onRegrade={(round, question) => setRegrading({ round, question })} />
+              <Rundown view={v()} readonly={readonly()} act={act} fixing={regrading()} onRegrade={(round, question) => { const r = regrading(); setRegrading(r !== null && r.round === round && r.question === question ? null : { round, question }); }} />
 
               <main class="c-center">
                 <Transport view={v()} readonly={readonly()} now={now()} act={act} />
@@ -126,8 +140,16 @@ function App() {
                 <Show when={v().skipped.length > 0}><p class="c-message c-err">{v().skipped.length} action(s) devenue(s) sans effet après un undo.</p></Show>
                 <Show when={regradeTarget()}>
                   {(q) => (
-                    <section class="c-card">
-                      <h2 class="q-panel-title">Corriger la réponse</h2>
+                    <section class="c-card c-fix-card">
+                      <div class="c-fix-head">
+                        <h2 class="q-panel-title">Corriger la réponse · {v().rundown[regrading()?.round ?? 0]?.title} · Q{(regrading()?.question ?? 0) + 1}</h2>
+                        <Button kind="ghost" onClick={() => setRegrading(null)}>Fermer</Button>
+                      </div>
+                      <p class="c-fix-note">
+                        {v().question === null || v().question?.id === q().id
+                          ? "Correction en coulisse : rien ne change à l'écran, seuls les points de cette question sont recalculés."
+                          : `Correction en coulisse : « ${v().question?.prompt.text ?? ""} » reste à l'antenne, seuls les points de la question ci-dessous sont recalculés.`}
+                      </p>
                       <Show when={q().id} keyed>{(_id: string) => <RegradeEditor question={q()} act={act} withToken={withToken} onClose={() => setRegrading(null)} />}</Show>
                     </section>
                   )}
@@ -262,7 +284,12 @@ function Transport(p: { readonly view: ControlView; readonly readonly: boolean; 
         <div class="c-keys">
           <Button kind="secondary" disabled={p.view.phase !== "open"} onClick={() => void p.act({ type: "timer.set", remainingMs: Math.max(0, (p.view.timer?.endsAt ?? p.now) - p.now) + 10_000 })}>+10 s</Button>
           <Button kind="secondary" disabled={p.view.phase !== "open" || p.view.timer === null} onClick={() => void p.act({ type: "timer.stop" })}>Stop chrono</Button>
-          <Button kind="secondary" disabled={!inQuestion()} onClick={() => void confirmDialog({ title: "Passer cette question sans la révéler ?", message: "Aucun point n'est attribué pour cette question.", confirm: "Passer la question", danger: true }).then((ok) => ok && p.act({ type: "question.next" }, "Question passée"))}>Passer la question</Button>
+          <Show
+            when={!inQuestion() && p.view.phase === "idle" && p.view.round !== null}
+            fallback={<Button kind="secondary" disabled={!inQuestion()} onClick={() => void confirmDialog({ title: "Passer cette question sans la révéler ?", message: "Aucun point n'est attribué pour cette question.", confirm: "Passer la question", danger: true }).then((ok) => ok && p.act({ type: "question.next" }, "Question passée"))}>Passer la question</Button>}
+          >
+            <Button kind="secondary" title="Sauter la question suivante sans la jouer (par exemple si elle ne peut pas être jouée dans cette manche)" onClick={() => void confirmDialog({ title: "Passer la question suivante sans la jouer ?", message: p.view.nextQuestion === null ? "Elle n'est pas présentée et ne rapporte aucun point." : `« ${p.view.nextQuestion.text} » n'est pas présentée et ne rapporte aucun point. On passe à celle d'après.`, confirm: "Passer la question", danger: true }).then((ok) => { const t = nextTarget(p.view); return ok && t !== null && p.act({ type: "question.skip", ...t }, "Question passée : la suivante est prête"); })}>Passer la question</Button>
+          </Show>
           <Button kind="ghost" title="Ctrl+Z" onClick={() => void p.act({ type: "undo" }, "Dernière action annulée")}>↶ Annuler</Button>
         </div>
         <StakesBar class="c-stakes" view={p.view} act={(a, label) => p.act(a, label)} />
@@ -338,7 +365,7 @@ function OnAir(p: { readonly view: ControlView; readonly readonly: boolean; read
 }
 
 /** Left column: rounds (collapsible), questions with their state; a click presents one when idle in its round. */
-function Rundown(p: { readonly view: ControlView; readonly readonly: boolean; readonly act: Act; readonly onRegrade: (round: number, question: number) => void }): JSX.Element {
+function Rundown(p: { readonly view: ControlView; readonly readonly: boolean; readonly act: Act; readonly fixing: { round: number; question: number } | null; readonly onRegrade: (round: number, question: number) => void }): JSX.Element {
   const [toggled, setToggled] = createSignal<ReadonlySet<number>>(new Set());
   const air = () => onAirTarget(p.view);
   const next = () => nextTarget(p.view);
@@ -369,15 +396,26 @@ function Rundown(p: { readonly view: ControlView; readonly readonly: boolean; re
                 {(q) => {
                   const t = { roundIndex: r.index, questionIndex: q.index };
                   const state = () => (sameTarget(t, air()) ? "air" : sameTarget(t, next()) ? "next" : q.played ? "played" : "todo");
+                  const why = () =>
+                    p.readonly ? "Poste en lecture seule"
+                    : p.view.round?.index !== r.index ? "Démarrer cette manche pour choisir ses questions"
+                    : p.view.phase !== "idle" ? "Une question est en cours : la révéler puis « Suivante » (ou « Passer la question ») avant d'en choisir une autre"
+                    : null;
+                  const present = async () => {
+                    // A played question is only replayed on purpose (its points are given again).
+                    if (q.played && !(await confirmDialog({ title: `Rejouer la question ${q.index + 1} ?`, message: `« ${q.text} » a déjà été jouée : elle repasse à l'antenne et ses points seront attribués une nouvelle fois. Pour changer sa réponse sans la rejouer : « Corriger ».`, confirm: "Rejouer à l'antenne", danger: true }))) return;
+                    await p.act({ type: "question.present", questionIndex: q.index });
+                  };
+                  const fixingThis = () => p.fixing !== null && p.fixing.round === r.index && p.fixing.question === q.index;
                   return (
-                    <div class="c-q-row">
-                      <button type="button" class="c-q" data-state={state()} data-current={String(state() === "air")} data-played={String(q.played)} title={q.text} disabled={p.readonly || p.view.phase !== "idle" || p.view.round?.index !== r.index} onClick={() => void p.act({ type: "question.present", questionIndex: q.index })}>
+                    <div class="c-q-row" data-fixing={String(fixingThis())}>
+                      <button type="button" class="c-q" data-state={state()} data-current={String(state() === "air")} data-played={String(q.played)} title={why() ?? (q.played ? `${q.text} — déjà jouée : cliquer pour la rejouer` : `${q.text} — cliquer pour la présenter`)} disabled={why() !== null} onClick={() => void present()}>
                         <span class="c-q-n q-mono">{q.index + 1}</span>
                         <span class="c-q-t">{q.text}</span>
                         <Show when={q.played}><span class="c-q-ok">✓</span></Show>
                       </button>
                       <Show when={q.played && !p.readonly}>
-                        <button type="button" class="c-q-fix" title="Corriger la réponse et recalculer les points" onClick={() => p.onRegrade(r.index, q.index)}>Corriger</button>
+                        <button type="button" class="c-q-fix" aria-pressed={fixingThis()} title="Corriger la réponse et recalculer les points (sans rien changer à l'écran)" onClick={() => p.onRegrade(r.index, q.index)}>{fixingThis() ? "Fermer" : "Corriger"}</button>
                       </Show>
                     </div>
                   );

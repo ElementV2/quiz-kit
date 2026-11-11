@@ -321,6 +321,8 @@ export const BaseView = z.strictObject({
   leaderboard: z.array(LeaderboardRow),
   /** Live stakes of the question on air (or the next one between questions): shown on air as « ×5 » / « 500 pts ». */
   stakes: z.strictObject({ points: z.number().int().nullable(), multiplier: z.number().nullable() }).nullable().default(null),
+  /** Bumped by every live edit of the game (`game.patch`): screens refetch the look (theme, scenes) when it moves. */
+  gameVersion: z.number().int().default(0),
   /**
    * Which question a `question.setStakes` sent now would target (the one on air, else the next one; null on a board
    * between cells — pick the cell first — or when no stakes are possible). `points` is false where the mechanic
@@ -400,6 +402,8 @@ export const ControlView = BaseView.extend({
   readonly: z.boolean(),
   /** The host drives the question flow (`host.setDrive`). */
   hostDrives: z.boolean(),
+  /** Last « Envoyer au direct » from the studio (server time), null if none. */
+  studioPatchedAt: z.number().nullable().default(null),
   /** The live game: title and who may play (a full game refuses new players / seats). */
   game: z.strictObject({ title: z.string(), mode: z.enum(["solo", "teams", "crowd"]), minPlayers: z.number().int(), maxPlayers: z.number().int(), rounds: z.number().int() }),
   notes: z.string().nullable(),

@@ -140,7 +140,7 @@ export class StandbyMirror {
     if (this.copying) return;
     this.copying = true;
     try {
-      const missing = gameMediaHashes(this.opts.runtime().session.game).filter((h) => this.opts.media.pathOf(h) === null);
+      const missing = gameMediaHashes(this.opts.runtime().current.state.game).filter((h) => this.opts.media.pathOf(h) === null);
       this.status.mediaMissing = missing.length;
       for (const hash of missing) {
         if (this.stopped) return;

@@ -12,6 +12,7 @@ const view = (over: Partial<HostView>): HostView => ({
   timer: null,
   stakes: null,
   stakesTarget: null,
+  gameVersion: 0,
   mechanic: null,
   leaderboard: [],
   layers: {},

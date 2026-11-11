@@ -97,6 +97,8 @@ describe("review #2 — tokens never reach the logs", () => {
       revoke: () => ({ origins: [], secureOrigins: [], entries: [] }),
       joinCode: () => "123456",
       newSession: () => ({ id: "ses_x" }),
+      liveGameId: () => null,
+      setLiveGameId: () => undefined,
       media: new MediaStore(mkdtempSync(join(tmpdir(), "quiz-media-"))),
       library: new GameLibrary(mkdtempSync(join(tmpdir(), "quiz-lib-"))),
       join: () => ({ ok: false as const, error: "unused" }),
@@ -138,6 +140,8 @@ describe("media are served with their own type and cache header (SVG logo, studi
       revoke: () => ({ origins: [], secureOrigins: [], entries: [] }),
       joinCode: () => "123456",
       newSession: () => ({ id: "ses_x" }),
+      liveGameId: () => null,
+      setLiveGameId: () => undefined,
       media,
       library: new GameLibrary(mkdtempSync(join(tmpdir(), "quiz-lib-"))),
       join: () => ({ ok: false as const, error: "unused" }),
@@ -374,3 +378,38 @@ describe("second review", () => {
     expect(tokenOf(s, "host")).not.toBe(before);
   });
 });
+
+describe("review #8 — « Envoyer au direct » and names", () => {
+  it("apply-live: only the live game, base version required, stale copy refused, then applied and saved", async () => {
+    const s = await boot();
+    const t = tokenOf(s, "control");
+    const base = `http://127.0.0.1:${s.port}`;
+    const post = (path: string, body?: unknown) => fetch(`${base}${path}?t=${t}`, body === undefined ? { method: "POST" } : { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+    await fetch(`${base}/api/games/g_rev?t=${t}`, { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ game: DEMO_GAME }) });
+    expect((await post("/api/games/g_rev/apply-live", { game: DEMO_GAME, baseVersion: 0 })).status).toBe(409); // not live yet
+    const launched = await post("/api/games/g_rev/launch");
+    expect(launched.status).toBe(200);
+    expect((await post("/api/games/g_rev/apply-live", { game: DEMO_GAME })).status).toBe(400); // no base version
+    for (const a of [...OPEN, { type: "question.edit", text: "Corrigée en régie ?" } as const]) s.runtime.submit(a, CTL, null);
+    const stale = await post("/api/games/g_rev/apply-live", { game: DEMO_GAME, baseVersion: 0 });
+    expect(stale.status).toBe(409);
+    expect(JSON.stringify(await stale.json())).toContain("a changé depuis");
+    const live = (await (await fetch(`${base}/api/live/game?t=${t}`)).json()) as { game: typeof DEMO_GAME; gameVersion: number }; // oxlint-disable-line typescript/no-unsafe-type-assertion -- test-only
+    expect(live.game.questions.find((q) => q.id === "q_capital_fr")?.prompt.text).toBe("Corrigée en régie ?");
+    const ok = await post("/api/games/g_rev/apply-live", { game: { ...live.game, title: "Renommée en direct" }, baseVersion: live.gameVersion });
+    expect(ok.status).toBe(200);
+    expect(s.runtime.current.state.game.title).toBe("Renommée en direct");
+  });
+
+  it("a display name made only of invisible characters is refused over WS", async () => {
+    const s = await boot();
+    const c = await rawSocket(s);
+    hello(c.ws, tokenOf(s, "control"));
+    await wait(80);
+    c.ws.send(JSON.stringify({ t: "intent", key: "k_rev_name_1", action: { type: "player.add", participantId: "p_9", displayName: "​​", channel: "seat", seat: 1 } }));
+    await wait(120);
+    expect(c.messages.find((m) => m["t"] === "ack" && m["key"] === "k_rev_name_1")).toMatchObject({ ok: false, code: "invalid" });
+    c.ws.close();
+  });
+});
+

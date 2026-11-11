@@ -2,6 +2,7 @@ import { HOST_DRIVE_ACTIONS, isAllowed, type Action, type ActionOf, type Actor, 
 import type { AnyMechanic, FixedJudgement, Judgement, MechanicEnv, Registry } from "./mechanic.ts";
 import { assertNever, err, ok, type Rejection, type Result } from "./result.ts";
 import type { Rng } from "./rng.ts";
+import { livePatchProblem } from "./live-patch.ts";
 import { pointsFor, roundHalfAway } from "./scoring.ts";
 import { currentQuestion, currentRound, participantTotal, teamTotal, type GameState, type QuestionRecord } from "./state.ts";
 
@@ -55,11 +56,28 @@ function reduceAllowed(s: GameState, a: Action, ctx: Ctx, registry: Registry): R
     case "question.edit": {
       const q = QUESTION_PHASES.has(s.phase) ? currentQuestion(s) : null;
       if (q === null) return err("wrong-phase", "aucune question à l'antenne");
-      return ok({ ...s, game: { ...s.game, questions: s.game.questions.map((x) => (x.id === q.id ? { ...x, prompt: { ...x.prompt, text: a.text } } : x)) } });
+      return ok({ ...s, gameVersion: ctx.seq, game: { ...s.game, questions: s.game.questions.map((x) => (x.id === q.id ? { ...x, prompt: { ...x.prompt, text: a.text } } : x)) } });
     }
 
     case "question.regrade":
       return regrade(s, a, ctx, registry);
+
+    case "game.patch": {
+      if (a.baseVersion !== s.gameVersion) return err("conflict", "la partie en direct a changé depuis (corrections en régie ou autre envoi) : recharger la version du direct dans le studio");
+      const currentMechanic = currentRound(s) === null ? null : registry.get(currentRound(s)?.mechanic ?? "");
+      const problem = livePatchProblem(s, a.game, currentMechanic?.freeOrder === true);
+      if (problem !== null) return err("conflict", problem);
+      // Every mechanic config of the patched game must be valid for its mechanic (same check as at present).
+      for (const r of a.game.format.rounds) {
+        const m = registry.get(r.mechanic);
+        if (m === null) return err("unsupported", `type de manche inconnu de cette version : ${r.title}`);
+        if (!m.configSchema.safeParse(r.mechanicConfig).success) return err("invalid", `réglages invalides pour la manche « ${r.title} »`);
+      }
+      // Stakes set ahead belong to a question: dropped if another question now sits at that place.
+      const st = s.stakes;
+      const keepStakes = st === null || s.game.format.rounds[st.roundIndex]?.questions[st.questionIndex] === a.game.format.rounds[st.roundIndex]?.questions[st.questionIndex];
+      return ok({ ...s, game: a.game, gameVersion: ctx.seq, studioPatchedAt: ctx.at, stakes: keepStakes ? st : null });
+    }
 
     case "question.setStakes": {
       // Explicit target, journaled as sent (review 5 I1): the current round, a question not revealed yet.
@@ -120,6 +138,9 @@ function reduceAllowed(s: GameState, a: Action, ctx: Ctx, registry: Registry): R
 
     case "question.reveal":
       return reveal(s, ctx, registry);
+
+    case "question.skip":
+      return skipUpcoming(s, a, ctx, registry);
 
     case "question.next": {
       if (!QUESTION_PHASES.has(s.phase)) return err("wrong-phase", "aucune question en cours");
@@ -296,6 +317,45 @@ function envOf(s: GameState, ctx: Ctx): MechanicEnv {
   return { at: ctx.at, rng: ctx.rng, phase: s.phase, lockedAt: s.lockedAt };
 }
 
+/**
+ * `question.skip` between two questions: the upcoming question is passed without being played (e.g. it cannot be
+ * played by this round, or the host drops it). Nothing is scored; the one after becomes the next. Never blocks the
+ * show on one bad question. The last one passed ends the round like a normal « Suivante ».
+ */
+function skipUpcoming(s: GameState, a: ActionOf<"question.skip">, ctx: Ctx, registry: Registry): R {
+  if (s.phase !== "idle" || s.roundIndex === null) return err("wrong-phase", "passer une question : seulement entre deux questions");
+  const round = currentRound(s);
+  if (round === null) return err("not-found", "manche inconnue");
+  const m = registry.get(round.mechanic);
+  if (m?.freeOrder === true) return err("conflict", "plateau : choisir directement une autre case");
+  const index = (s.questionIndex ?? -1) + 1;
+  if (index >= round.questions.length) return err("wrong-phase", "plus de question à passer dans cette manche");
+  // Explicit target: a duplicate (double press, two posts) is refused instead of passing one more question.
+  if (a.roundIndex !== s.roundIndex || a.questionIndex !== index) return err("conflict", "cette question n'est plus la suivante (déjà passée ou jouée)");
+  const isLastQuestion = index + 1 >= round.questions.length;
+  // The round ends here: the mechanic banks what it carried (ladder: the step reached), as if the passed question
+  // had been presented then left unplayed — so its state is built like at present (progression of the previous one).
+  let carried: readonly FixedJudgement[] = [];
+  if (isLastQuestion && m !== null && s.carry !== null && s.carry.id === m.id) {
+    const cfg = m.configSchema.safeParse(round.mechanicConfig);
+    const byId = new Map(s.game.questions.map((q) => [q.id, q]));
+    const questions = round.questions.flatMap((id) => byId.get(id) ?? []);
+    const question = questions[index];
+    const init = cfg.success && question !== undefined
+      ? m.init(cfg.data, question, envOf(s, ctx), { previous: { state: s.carry.state, revealed: s.carry.revealed, questionIndex: s.carry.questionIndex }, questionIndex: index, questionsLeft: 0, questions })
+      : null;
+    // Unplayable here (the usual reason to pass it): nothing is built, nothing banked — never a refusal.
+    if (init !== null && init.ok) carried = m.closeRound(init.value, "presenting");
+  }
+  const mult = stakesFor(s)?.multiplier ?? null;
+  const staked = mult === null ? carried : carried.map((j) => ({ ...j, points: roundHalfAway(j.points * mult) }));
+  const ledger = [...s.ledger, ...fixedEntries(s, ctx, staked, round.questions[index] ?? null, 0)]; // same question id as a last « Suivante »
+  const isLastRound = nextRoundIndex({ ...s, ledger }) === null;
+  const phase = !isLastQuestion ? "idle" : isLastRound ? "game.end" : "round.end";
+  const stakes = s.stakes !== null && s.stakes.roundIndex === s.roundIndex && s.stakes.questionIndex === index ? null : s.stakes;
+  return ok({ ...s, phase, questionIndex: index, stakes, ledger });
+}
+
 function present(s: GameState, a: ActionOf<"question.present">, ctx: Ctx, registry: Registry): R {
   if (s.phase !== "idle" || s.roundIndex === null) return err("wrong-phase", "démarrer une manche avant de présenter");
   const round = currentRound(s);
@@ -450,7 +510,7 @@ function replaceFromReserve(s: GameState, a: ActionOf<"question.replaceFromReser
   const rounds = s.game.format.rounds.map((r, i) =>
     i === ri ? { ...r, questions: r.questions.map((q, qi) => (qi === index ? a.reserveId : q)), reserve: r.reserve.filter((q) => q !== a.reserveId) } : r,
   );
-  const swapped: GameState = { ...s, game: { ...s.game, format: { ...s.game.format, rounds } } };
+  const swapped: GameState = { ...s, gameVersion: ctx.seq, game: { ...s.game, format: { ...s.game.format, rounds } } };
   if (!onAir) return ok(swapped);
   // The replaced question restarts from scratch: no answer given to the old one is kept.
   return present({ ...swapped, phase: "idle" }, { type: "question.present", questionIndex: index }, ctx, registry);
@@ -503,7 +563,7 @@ function regrade(s: GameState, a: ActionOf<"question.regrade">, ctx: Ctx, regist
     if (!r.ok) return r;
     mechanic = { id: live.id, state: r.value };
   }
-  return ok({ ...s, game: { ...s.game, questions: s.game.questions.map((q) => (q.id === question.id ? question : q)) }, ledger, history, mechanic });
+  return ok({ ...s, gameVersion: ctx.seq, game: { ...s.game, questions: s.game.questions.map((q) => (q.id === question.id ? question : q)) }, ledger, history, mechanic });
 }
 
 /** Ledger entries for mechanic-decided points (player or team target); 0 points and unknown targets write nothing. */

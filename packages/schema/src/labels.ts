@@ -68,6 +68,7 @@ export const ACTION_LABEL_FR: Readonly<Partial<Record<ActionType, string>>> = {
   "question.lock": "fermer les réponses",
   "question.reveal": "révéler",
   "question.next": "passer à la suite",
+  "question.skip": "passer une question sans la jouer",
   "question.replaceFromReserve": "remplacer par une question de réserve",
   "question.edit": "modifier la question",
   "question.regrade": "corriger la réponse",

@@ -117,8 +117,11 @@ export class SessionRuntime {
     this.monotonic = opts.monotonic ?? (() => performance.now());
     const events = store.events(session.id);
     const raw = store.latestSnapshot(session.id);
-    const snap = raw === null ? null : GameState.safeParse(raw.state);
-    if (raw !== null && snap !== null && !snap.success) log.warn({ seq: raw.seq }, "snapshot invalide ignoré, rejeu complet");
+    // A snapshot written before `gameVersion` existed would default it to 0 while a full replay gives the seq of
+    // the last correction: a studio send checked on it could later replay differently. Full replay instead.
+    const versioned = raw !== null && typeof raw.state === "object" && raw.state !== null && "gameVersion" in raw.state;
+    const snap = raw === null || !versioned ? null : GameState.safeParse(raw.state);
+    if (raw !== null && (snap === null || !snap.success)) log.warn({ seq: raw.seq }, "snapshot invalide ou ancien ignoré, rejeu complet");
     this.game = replay(session, events, registry, raw !== null && snap?.success === true ? { seq: raw.seq, state: snap.data } : undefined);
     for (const e of events) if (e.idempotencyKey !== null) this.accepted.set(e.idempotencyKey, { seq: e.seq, fp: journalFingerprint(e.actor, e.action) });
     log.info({ sessionId: session.id, events: events.length, lastSeq: this.game.state.lastSeq }, "session rechargée depuis le journal");

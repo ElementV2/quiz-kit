@@ -5,6 +5,8 @@ import { GameDocument, TEMPLATES } from "@quiz/schema";
 import { Button, Panel, isDialogOpen, confirmDialog } from "@quiz/ui";
 import "@quiz/ui/ui.css";
 import "./studio.css";
+import { defaultRegistry } from "@quiz/engine";
+import { roundIssues } from "./format-logic.ts";
 import { blankGame } from "./question-factories.ts";
 import { api, type GameSummary } from "./api.ts";
 import { ContentEditor } from "./content-editor.tsx";
@@ -66,6 +68,8 @@ function App() {
     load(r.data);
     setGameId(id);
     setDirty(false);
+    setLiveSent(histTick());
+    setLiveBase(null); // the library copy: synced with the live document below if it is the live game
   };
   /** A new game exists right away: saved to the library, listed and selected (no hidden draft). */
   const create = async (from: GameDocument | null) => {
@@ -165,6 +169,103 @@ function App() {
   });
   const [menuFor, setMenuFor] = createSignal<string | null>(null);
   const [newMenu, setNewMenu] = createSignal(false);
+  // Which library game is live (polled): « EN DIRECT » + « Envoyer au direct » when it is the one being edited.
+  const [live, { refetch: refetchLive }] = createResource(() => api.live().catch(() => null));
+  onMount(() => {
+    const t = setInterval(() => void refetchLive(), 5000);
+    onCleanup(() => clearInterval(t));
+  });
+  const isLive = () => gameId() !== null && live()?.gameId === gameId();
+  /** Edits made since the last « Envoyer au direct » (the live game is a copy: it changes only when sent). */
+  const [liveSent, setLiveSent] = createSignal(0);
+  const liveBehind = () => isLive() && histTick() !== liveSent();
+  /** `gameVersion` of the live document the open game matches (null: not synced with the live yet). */
+  const [liveBase, setLiveBase] = createSignal<number | null>(null);
+  /** Loads the live document (control-room corrections included) in place of the library copy. */
+  let syncing = false;
+  const syncFromLive = async (): Promise<boolean> => {
+    if (syncing) return false;
+    syncing = true;
+    const id = gameId();
+    const tick = histTick();
+    const r = await api.liveGame().catch(() => null);
+    syncing = false;
+    const doc = r === null || r.gameId !== id ? null : GameDocument.safeParse(r.game);
+    if (r === null || doc === null || !doc.success) return false;
+    if (histTick() !== tick || gameId() !== id) return false; // typed meanwhile: never overwrite an edit
+    if (r.gameVersion === liveBase()) return true; // already this version: keep the undo history
+    load(doc.data);
+    setDirty(false);
+    setLiveSent(histTick());
+    setLiveBase(r.gameVersion);
+    return true;
+  };
+  // The live game changed elsewhere (corrections in the control room, another studio): follow it while nothing
+  // is waiting to be sent; otherwise the next send says so and offers to reload.
+  createEffect(() => {
+    const l = live();
+    if (!isLive() || l === null || l === undefined) return;
+    if (l.gameVersion !== liveBase() && !liveBehind()) void syncFromLive();
+  });
+  createEffect(() => {
+    // Another game went live (a failed poll keeps the last answer: it says nothing about the version).
+    const l = live();
+    if (l !== null && l !== undefined && l.gameId !== gameId()) setLiveBase(null);
+  });
+  const reloadLive = async (title: string, message: string) => {
+    const reload = await confirmDialog({ title, message, confirm: "Recharger la version du direct", cancel: "Garder mon écran", danger: true });
+    if (reload && (await syncFromLive())) setMsg({ ok: true, text: "Version du direct rechargée : refaire vos changements puis « Envoyer au direct »" });
+  };
+  const sendLive = async () => {
+    const id = gameId();
+    const v = validation();
+    if (id === null || !v.success) {
+      setMsg({ ok: false, text: "À corriger avant d'envoyer au direct : la partie a des problèmes (voir ⚠ en haut)." });
+      return;
+    }
+    if (!(await playableOrConfirm("envoyer au direct"))) return;
+    const base = liveBase();
+    if (base === null) {
+      // Never guess the version: this screen may miss corrections made in the control room.
+      await reloadLive("Version du direct inconnue", "Cet écran n'a pas encore été comparé à la partie en direct (corrections possibles en régie). Recharger la version du direct ? Vos changements non envoyés seront perdus : notez-les avant.");
+      return;
+    }
+    try {
+      const sentAt = histTick();
+      const r = await api.applyLive(id, v.data, base);
+      setLiveBase(r.gameVersion);
+      setLiveSent(sentAt);
+      if (histTick() === sentAt) setDirty(r.warning !== undefined);
+      setMsg(r.warning === undefined ? { ok: true, text: "Envoyé au direct : régie, sorties et tablettes sont à jour" } : { ok: false, text: `Envoyé au direct, ${r.warning}` });
+      void refetchLive();
+    } catch (e) {
+      const reason = e instanceof Error ? e.message : "échec";
+      if (/a changé depuis/.test(reason)) {
+        await reloadLive("La partie en direct a changé", "Elle a été modifiée depuis votre dernier envoi (correction en régie ou autre studio). Recharger la version du direct ? Vos changements non envoyés seront perdus : notez-les avant.");
+        return;
+      }
+      setMsg({ ok: false, text: `Refusé par le direct : ${reason}` });
+    }
+  };
+
+  /**
+   * Questions a round cannot play (e.g. a poll in a QCM round): said before going live, so nobody discovers it on
+   * air. Not blocking — the control room can pass them — but the operator decides knowingly.
+   */
+  const playableOrConfirm = async (what: string): Promise<boolean> => {
+    const doc = game.doc;
+    const issues = doc.format.rounds.flatMap((r, ri) => roundIssues(doc, ri, defaultRegistry).map((i) => `${r.title} : ${i.message}`));
+    if (issues.length === 0) return true;
+    const shown = issues.slice(0, 4).join(" · ") + (issues.length > 4 ? ` · et ${issues.length - 4} autre(s)` : "");
+    return confirmDialog({
+      title: `${issues.length} question(s) ne pourront pas être jouées`,
+      message: `${shown}. Corriger dans « Format » (changer le type de la manche ou déplacer la question), ou ${what} quand même : en régie, « Passer la question » les sautera.`,
+      confirm: `${what[0]?.toUpperCase() ?? ""}${what.slice(1)} quand même`,
+      cancel: "Corriger d'abord",
+      danger: true,
+    });
+  };
+
   /** « Lancer en direct »: saved first, then every screen (control, outputs, host, tablets) switches to it. */
   const launchLive = async () => {
     const id = gameId();
@@ -173,11 +274,17 @@ function App() {
       setMsg({ ok: false, text: "À corriger avant de lancer : la partie a des problèmes (voir ⚠ en haut)." });
       return;
     }
+    if (!(await playableOrConfirm("lancer"))) return;
     const ok = await confirmDialog({ title: `Lancer « ${game.doc.title} » en direct ?`, message: "La régie, les sorties OBS / vMix, l'animateur et les tablettes passent sur cette partie. La partie en cours reste dans le journal.", confirm: "Lancer en direct", danger: true });
     if (!ok) return;
     await save();
     try {
+      const launched = histTick();
       const r = await api.launch(id);
+      // The live game is exactly this screen (saved just before): version 0 of the new session.
+      setLiveSent(launched);
+      setLiveBase(0);
+      void refetchLive();
       setMsg({ ok: true, text: `En direct · code joueurs ${r.joinCode}` });
     } catch (e) {
       setMsg({ ok: false, text: `Lancement impossible : ${e instanceof Error ? e.message : "échec"}` });
@@ -250,7 +357,13 @@ function App() {
         </div>
         <Show when={!validation().success}><span class="s-bad s-problems" title={validation().error?.issues.map((i) => `${i.path.join(".")} : ${i.message}`).join("\n")}>⚠ {validation().error?.issues.length} problème(s)</span></Show>
         <Button kind={dirty() && !validation().success ? "danger" : "secondary"} onClick={() => void save()} title={dirty() && !validation().success ? "Pas d'enregistrement automatique tant que la partie a des problèmes" : "Enregistrement automatique · Ctrl + S pour forcer"}>{saving() ? "Enregistrement…" : dirty() ? (validation().success ? "Modifications…" : "Non enregistré") : "Enregistré ✓"}</Button>
-        <Button kind="secondary" onClick={() => void launchLive()} title="Enregistre puis bascule tous les écrans sur cette partie">Lancer en direct</Button>
+        <Show
+          when={isLive()}
+          fallback={<Button kind="secondary" onClick={() => void launchLive()} title="Enregistre puis bascule tous les écrans sur cette partie">Lancer en direct</Button>}
+        >
+          <span class="q-tally s-live-tag" data-on="air" title={`En direct : ${live()?.players ?? 0} joueur(s)`}>En direct</span>
+          <Button kind={liveBehind() ? "primary" : "secondary"} disabled={!liveBehind()} onClick={() => void sendLive()} title="Appliquer vos changements à la partie en cours (ce qui a déjà été joué ne bouge pas)">{liveBehind() ? "Envoyer au direct" : "Direct à jour ✓"}</Button>
+        </Show>
         <Show when={gameId()}>{(id) => <a class="q-btn q-btn-secondary" href={api.exportUrl(id())}>Exporter .quiz</a>}</Show>
       </header>
       <div class="s-body" data-tab={tab()}>

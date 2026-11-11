@@ -30,7 +30,7 @@ export function ProgramPreview(p: { readonly src: string }): JSX.Element {
 /** Manual / auto-hold layers of the current game's scenes (or the built-in presets). */
 export function useLayers(view: () => ControlView | null) {
   const [layers] = createResource(
-    () => view()?.sessionId,
+    () => { const v = view(); return v === null ? undefined : `${v.sessionId}:${v.gameVersion}`; },
     async () => {
       const r = await api<{ scenes: { layers: { id: string; name: string; mode: string }[] }[] }>("/api/presentation").catch(() => ({ scenes: [] }));
       const scenes = r.scenes.length > 0 ? r.scenes : Object.values(OUTPUT_SCENES);

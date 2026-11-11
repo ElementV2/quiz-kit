@@ -134,17 +134,26 @@ function fold(session: Session, events: readonly Event[], cancelledBy: ReadonlyM
 function undoTarget(g: Game, explicit: number | undefined): Result<number, Rejection> {
   const skipped = new Set(g.skipped.map((s) => s.seq));
   const hasEffect = (seq: number): boolean => !g.cancelledBy.has(seq) && !skipped.has(seq);
+  // A studio send (`game.patch`) was checked against the state it was sent on: undoing (or redoing) anything
+  // before it would replay it on another state and could drop it silently. Undo stops at the last one.
+  let barrier = 0;
+  for (const e of g.events) if (e.action.type === "game.patch" && hasEffect(e.seq)) barrier = e.seq;
+  const crosses = (e: Event): boolean => e.seq < barrier || (e.action.type === "undo" && (e.action.targetSeq ?? 0) < barrier);
+  const barrierMsg = "impossible d'annuler une action d'avant le dernier envoi du studio : corriger à la main (scores, joueurs, réponse)";
   if (explicit !== undefined) {
     const e = g.events.find((x) => x.seq === explicit);
     if (e === undefined) return err("not-found", `événement ${explicit} inconnu`);
     if (g.cancelledBy.has(explicit)) return err("conflict", `événement ${explicit} déjà annulé`);
     if (skipped.has(explicit)) return err("conflict", `événement ${explicit} déjà sans effet`);
     if (isNeverUndone(e.action.type)) return err("forbidden", "ce réglage ne s'annule pas : envoyer le réglage inverse");
+    if (crosses(e)) return err("forbidden", barrierMsg);
     return ok(explicit);
   }
   for (let i = g.events.length - 1; i >= 0; i--) {
     const e = g.events[i];
-    if (e !== undefined && isUndoableByDefault(e.action.type) && hasEffect(e.seq)) return ok(e.seq);
+    if (e === undefined) continue;
+    if (e.seq < barrier) return err("forbidden", barrierMsg);
+    if (isUndoableByDefault(e.action.type) && hasEffect(e.seq)) return ok(e.seq);
   }
   return err("not-found", "rien à annuler");
 }

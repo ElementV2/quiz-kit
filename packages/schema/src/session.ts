@@ -16,10 +16,10 @@ export const DisplayName = z.string().trim().min(1).max(40);
 
 /**
  * What a client-typed name becomes before entering the journal: no control characters, no bidi overrides /
- * isolates / marks (they could disguise a name on air). Joiners stay (ZWJ builds emojis like 👩‍🚀).
+ * isolates / marks, zero-width spaces (they could disguise or blank a name on air). Joiners stay (ZWJ builds emojis like 👩‍🚀).
  */
 export function cleanDisplayName(name: string): string {
-  return name.replaceAll(/[\p{Cc}\u200E\u200F\u202A-\u202E\u2066-\u2069]/gu, "").trim();
+  return name.replaceAll(/[\p{Cc}\u200B\u200E\u200F\u202A-\u202E\u2060\u2066-\u2069\uFEFF]/gu, "").trim();
 }
 
 export const Participant = z.strictObject({

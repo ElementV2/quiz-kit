@@ -153,6 +153,13 @@ question jouée ailleurs garde ses points.
 (révéler quelques secondes après, ou réduire le délai). L'animateur reçoit tout le conducteur (réponses et
 notes, pour lire à l'avance) : son écran ne doit pas être visible des caméras ni du public.
 `host.setDrive` ne s'annule jamais (`NEVER_UNDONE`) : reprendre la main = `host.setDrive { enabled: false }`.
+`question.skip { roundIndex, questionIndex }` passe, entre deux questions, celle qui vient sans la jouer (question
+injouable dans la manche, question abandonnée) : rien n'est marqué, elle n'entre ni dans `played` ni dans `history`
+(le déroulé la montre « non jouée »). Cible explicite : un double appui est refusé. La dernière question passée
+termine la manche comme une « Suivante » (une manche à paliers verse le palier atteint ; si la question passée est injouable dans la manche, rien n'est versé : corriger à la main). Refusé sur un plateau.
+`game.patch` (studio, « Envoyer au direct », doc 07) non plus : renvoyer le document précédent. Il est refusé si
+`baseVersion ≠ gameVersion` ; `question.regrade`, `question.edit`, `question.replaceFromReserve` et `game.patch`
+incrémentent `gameVersion`. Règles de ce qui peut changer : `live-patch.ts` (`livePatchProblem`).
 
 ### Corrections en direct (phase 3, implémentées)
 

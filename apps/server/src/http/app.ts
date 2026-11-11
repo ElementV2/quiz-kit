@@ -27,6 +27,9 @@ export type HttpDeps = {
   readonly revoke: (linkId: string) => Links;
   readonly joinCode: () => string;
   readonly newSession: (game: GameDocument) => { id: string };
+  /** Which library game the live session came from (« Envoyer au direct » only for that one). */
+  readonly liveGameId: () => string | null;
+  readonly setLiveGameId: (sessionId: string, gameId: string) => void;
   readonly media: MediaStore;
   readonly library: GameLibrary;
   readonly join: (name: string) => { ok: true; token: string; participantId: string } | { ok: false; error: string };
@@ -167,15 +170,16 @@ export function buildHttpApp(deps: HttpDeps, options: FastifyServerOptions): Fas
   /** Every link (with tokens) + the join code, for the control room — requires the control token. */
   app.get<{ Querystring: { t?: string } }>("/api/links", async (req, reply) => {
     if (!controlToken(deps, req)) return reply.code(401).send({ error: "jeton régie requis" });
-    return { ...deps.links(), joinCode: deps.joinCode(), title: deps.runtime().session.game.title };
+    return { ...deps.links(), joinCode: deps.joinCode(), title: deps.runtime().current.state.game.title };
   });
 
   /** Look of the current game (theme + scenes): public data, any valid role token. Outputs refetch it on a game switch. */
   app.get<{ Querystring: { t?: string } }>("/api/presentation", async (req, reply) => {
     const r = verifyToken(deps.secret, req.query.t ?? "", { now: deps.clock(), show: deps.show, isRevoked: deps.isRevoked });
     if (!r.ok) return reply.code(401).send({ error: "jeton requis" });
-    const s = deps.runtime().session;
-    return { sessionId: s.id, theme: s.game.theme ?? null, scenes: s.game.scenes };
+    const rt = deps.runtime();
+    const game = rt.current.state.game; // live edits (game.patch) included
+    return { sessionId: rt.session.id, gameVersion: rt.current.state.gameVersion, theme: game.theme ?? null, scenes: game.scenes };
   });
 
   /** Live status for the control room: presence + journal health (polled every few seconds). */
@@ -246,6 +250,7 @@ export function buildHttpApp(deps: HttpDeps, options: FastifyServerOptions): Fas
     const g = deps.library.get(req.params.id);
     if (g === null) return reply.code(404).send({ error: "partie inconnue" });
     const s = deps.newSession(g);
+    deps.setLiveGameId(s.id, req.params.id);
     return { sessionId: s.id, title: g.title, joinCode: deps.joinCode() };
   });
   /** `.quiz` export: game + its media in one zip, to move a game to the show machine. */
@@ -434,6 +439,45 @@ export function buildHttpApp(deps: HttpDeps, options: FastifyServerOptions): Fas
     };
   });
 
+  /** What is live: the library game it came from (null for a CSV / template quick game) and its title. */
+  app.get<{ Querystring: { t?: string } }>("/api/live", async (req, reply) => {
+    if (!staffToken(deps, req)) return reply.code(401).send({ error: "jeton régie ou studio requis" });
+    const st = deps.runtime().current.state;
+    return { gameId: deps.liveGameId(), title: st.game.title, phase: st.phase, players: st.participants.length, gameVersion: st.gameVersion };
+  });
+
+  /** The live document itself (with corrections made in the control room) and its version: what the studio edits. */
+  app.get<{ Querystring: { t?: string } }>("/api/live/game", async (req, reply) => {
+    if (!staffToken(deps, req)) return reply.code(401).send({ error: "jeton régie ou studio requis" });
+    const st = deps.runtime().current.state;
+    return { gameId: deps.liveGameId(), game: st.game, gameVersion: st.gameVersion };
+  });
+
+  /**
+   * « Envoyer au direct » (studio): the edited game, if it is the live one, replaces the live document through the
+   * journaled `game.patch` (refused when it would break what was played / what is on air). Saved to the library too.
+   */
+  app.post<{ Querystring: { t?: string }; Params: { id: string } }>("/api/games/:id/apply-live", async (req, reply) => {
+    if (!staffToken(deps, req)) return reply.code(401).send({ error: "jeton régie ou studio requis" });
+    if (deps.liveGameId() !== req.params.id) return reply.code(409).send({ error: "cette partie n'est pas celle en direct : la lancer d'abord (régie, onglet Parties)" });
+    const body = z.strictObject({ game: z.unknown(), baseVersion: z.number().int().min(0) }).safeParse(req.body);
+    if (!body.success) return reply.code(400).send({ error: "version de base manquante : recharger la partie en direct" });
+    const doc = loadGameDocument(body.data.game);
+    if (!doc.ok) return reply.code(400).send({ error: "partie invalide : corriger les problèmes signalés dans le studio" });
+    const ack = await new Promise<{ ok: true; seq: number } | { ok: false; reason: string }>((resolve) => {
+      deps.runtime().enqueue({ type: "game.patch", game: doc.value, baseVersion: body.data.baseVersion }, { role: "control", id: "studio" }, null, (a) => resolve(a.ok ? { ok: true, seq: a.eventSeq } : { ok: false, reason: a.reason }));
+    });
+    if (!ack.ok) return reply.code(409).send({ error: ack.reason });
+    // The version of THIS send (its seq), not the current one: a correction committed in the same batch is newer.
+    const gameVersion = ack.seq;
+    try {
+      deps.library.put(req.params.id, doc.value);
+    } catch {
+      return { ok: true, gameVersion, warning: "appliqué au direct, mais pas enregistré dans la bibliothèque : enregistrer (Ctrl+S)" };
+    }
+    return { ok: true, gameVersion };
+  });
+
   /** Starts a new game from a game document (imported CSV, template). Control token only; journaled. */
   app.post<{ Querystring: { t?: string } }>("/api/session", async (req, reply) => {
     if (!controlToken(deps, req)) return reply.code(401).send({ error: "jeton régie requis" });
@@ -476,7 +520,7 @@ export function buildHttpApp(deps: HttpDeps, options: FastifyServerOptions): Fas
     const links = deps.links();
     const live = deps.runtime().current.state;
     return {
-      title: deps.runtime().session.game.title,
+      title: deps.runtime().current.state.game.title,
       players: live.participants.length,
       maxPlayers: live.game.format.participants.max,
       joinCode: deps.joinCode(),

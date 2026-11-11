@@ -216,6 +216,8 @@ async function boot(config: Config, opts: { timers?: Timers; broadcastIntervalMs
     links: () => links,
     joinCode: () => joinCodeOf(getRuntime().session.id),
     newSession: (game: GameDocument) => switchSession(game),
+    liveGameId: () => store.getMeta(`live-game:${getRuntime().session.id}`),
+    setLiveGameId: (sid: string, gameId: string) => store.setMeta(`live-game:${sid}`, gameId),
     media,
     library,
     join: joinPlayer,
@@ -263,7 +265,7 @@ async function boot(config: Config, opts: { timers?: Timers; broadcastIntervalMs
   const firstRuntime = runtime;
   // A standby never drives vMix (the primary does); attached at promotion.
   if (config.standbyOf === undefined) vmix.attach(runtime, readVmix());
-  transport = new WsTransport({ runtime: getRuntime, secret, show: config.show, isRevoked, clock, log: http.log, preload: (viewer) => preloads.for(viewer, getRuntime().session.game) });
+  transport = new WsTransport({ runtime: getRuntime, secret, show: config.show, isRevoked, clock, log: http.log, preload: (viewer) => preloads.for(viewer, getRuntime().current.state.game) });
   const runtimeOpts = { broadcastIntervalMs: opts.broadcastIntervalMs ?? 25 };
 
   /**

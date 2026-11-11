@@ -26,6 +26,11 @@ export const api = {
   },
   exportUrl: (id: string): string => withToken(`/api/games/${id}/export`),
   launch: async (id: string): Promise<{ joinCode: string }> => json(await fetch(withToken(`/api/games/${id}/launch`), { method: "POST" })),
+  live: async (): Promise<{ gameId: string | null; title: string; phase: string; players: number; gameVersion: number }> => json(await fetch(withToken("/api/live"))),
+  /** The live document (corrections made in the control room included) and its version. */
+  liveGame: async (): Promise<{ gameId: string | null; game: unknown; gameVersion: number }> => json(await fetch(withToken("/api/live/game"))),
+  applyLive: async (id: string, game: GameDocument, baseVersion: number): Promise<{ ok: true; gameVersion: number; warning?: string }> =>
+    json(await fetch(withToken(`/api/games/${id}/apply-live`), { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ game, baseVersion }) })),
   importQuiz: async (file: File): Promise<{ id: string; title: string; media: number; missing: number }> =>
     json(await fetch(withToken("/api/import"), { method: "POST", headers: { "content-type": "application/zip" }, body: file })),
   /**

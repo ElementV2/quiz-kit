@@ -58,6 +58,7 @@ function base(s: GameState, audience: Audience, participantId: string | null, re
     leaderboard: audience === "player" ? leaderboard(s).slice(0, PLAYER_LEADERBOARD_ROWS) : leaderboard(s),
     layers: s.layers,
     stakes: stakesView(s),
+    gameVersion: s.gameVersion,
     stakesTarget: stakesTargetOf(s, registry),
     teamBoard: teamBoard(s),
   };
@@ -200,6 +201,7 @@ function controlView(game: Game, readonly: boolean, registry: Registry): Control
     ...base(s, "control", null, registry),
     readonly,
     hostDrives: s.hostDrives,
+    studioPatchedAt: s.studioPatchedAt,
     game: { title: s.game.title, mode: s.game.format.participants.mode, minPlayers: s.game.format.participants.min, maxPlayers: s.game.format.participants.max, rounds: s.game.format.rounds.length },
     notes: currentQuestion(s)?.notes ?? null,
     nextQuestion: next(s, registry),

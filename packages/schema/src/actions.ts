@@ -2,7 +2,7 @@ import { z } from "zod";
 import { AnswerSpec } from "./content.ts";
 import { OptionId, ParticipantId, QuestionId, ScoreEntryId, TeamId } from "./ids.ts";
 import type { Role } from "./roles.ts";
-import { DisplayName, ParticipantStatus, ScoreTarget, Channel } from "./session.ts";
+import { DisplayName, GameDocument, ParticipantStatus, ScoreTarget, Channel } from "./session.ts";
 
 const action = <T extends string, S extends z.core.$ZodLooseShape>(type: T, shape: S) =>
   z.strictObject({ type: z.literal(type), ...shape });
@@ -34,6 +34,11 @@ export const Action = z.discriminatedUnion("type", [
   action("question.lock", {}),
   action("question.reveal", {}),
   action("question.next", {}),
+  /**
+   * Between two questions: passes the upcoming one without playing it (e.g. a question this round cannot play).
+   * Explicit target (from `BaseView.stakesTarget` / the next question): a duplicate press never passes a second one.
+   */
+  action("question.skip", { roundIndex: z.number().int().min(0), questionIndex: z.number().int().min(0) }),
   // Live corrections (doc 09)
   /**
    * Swaps a question of the current round for one of its reserve questions. Question on (presenting → judging):
@@ -52,6 +57,15 @@ export const Action = z.discriminatedUnion("type", [
     questionIndex: z.number().int().min(0),
     points: z.number().int().min(0).max(1_000_000).nullable(),
     multiplier: z.number().min(0.5).max(100).nullable(),
+  }),
+  /**
+   * The live game edited in the studio (« Envoyer au direct »): the whole new document, applied if it does not break
+   * what was played or what is on air (engine `livePatchProblem`). Journaled: replay applies it at the same point.
+   */
+  action("game.patch", {
+    game: z.lazy(() => GameDocument),
+    /** `gameVersion` the edit was made on: refused if the live game changed since (control-room corrections). */
+    baseVersion: z.number().int().min(0),
   }),
   /** Fixes the text of the question on air (typo). */
   action("question.edit", { text: z.string().trim().min(1).max(2000) }),
@@ -139,7 +153,7 @@ const CONTROL_ONLY: readonly ActionType[] = [
   "question.next", "timer.set", "timer.stop", "player.add", "player.rename", "player.setStatus",
   "player.setTeam", "player.setSeat", "player.remove", "team.add", "undo", "layer.take", "layer.out",
   "element.reveal", "joker.use", "ladder.stop", "poll.control", "poll.steal", "question.replaceFromReserve", "question.edit",
-  "host.setDrive", "question.setStakes",
+  "host.setDrive", "question.setStakes", "game.patch", "question.skip",
 ];
 
 /**
@@ -148,7 +162,7 @@ const CONTROL_ONLY: readonly ActionType[] = [
  */
 export const HOST_DRIVE_ACTIONS: ReadonlySet<ActionType> = new Set<ActionType>([
   "game.start", "round.start", "question.present", "question.open", "question.lock", "question.reveal", "question.next",
-  "element.reveal", "timer.set", "timer.stop", "joker.use", "ladder.stop", "poll.control", "poll.steal", "question.setStakes",
+  "element.reveal", "timer.set", "timer.stop", "joker.use", "ladder.stop", "poll.control", "poll.steal", "question.setStakes", "question.skip",
 ]);
 const SCORING: readonly ActionType[] = ["score.adjust", "score.setTotal", "score.void", "question.regrade"];
 
@@ -183,7 +197,7 @@ export function isUndoableByDefault(type: ActionType): boolean {
  * later events were accepted (review 3 B1: undoing `host.setDrive` erased everything the host had driven).
  * To change it back, send the opposite action.
  */
-export const NEVER_UNDONE: ReadonlySet<ActionType> = new Set<ActionType>(["host.setDrive"]);
+export const NEVER_UNDONE: ReadonlySet<ActionType> = new Set<ActionType>(["host.setDrive", "game.patch"]);
 
 export function isNeverUndone(type: ActionType): boolean {
   return NEVER_UNDONE.has(type);

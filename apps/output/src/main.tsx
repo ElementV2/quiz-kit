@@ -34,7 +34,8 @@ const sound = params.get("sound") === "on";
 function Output() {
   const conn = createQuizConnection({ persist: false, preview: new URLSearchParams(location.search).get("preview") === "1" });
   // Refetch the look whenever the game changes (session id in the view).
-  const [presentation] = createResource(() => conn.view()?.sessionId, fetchPresentation);
+  // Refetched on a game switch AND on every live edit of the game (gameVersion: theme / scenes changed in the studio).
+  const [presentation] = createResource(() => { const v = conn.view(); return v === null ? undefined : `${v.sessionId}:${v.gameVersion}`; }, fetchPresentation);
   const sceneId = createMemo(() => {
     const v = conn.viewer();
     if (v?.role === "output") return v.scene;
