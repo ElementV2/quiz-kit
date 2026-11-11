@@ -77,8 +77,16 @@ export const choice = defineMechanic<ChoiceConfig, ChoiceState>({
     return null;
   },
 
+  endsRound() {
+    return false;
+  },
+
+  closeRound() {
+    return [];
+  },
+
   judge(s): Judgement[] {
-    return s.answers.map((a) => ({ participantId: a.participantId, outcome: sameSet(a.optionIds, s.correct) ? "correct" : "wrong", answeredAt: a.at }));
+    return s.answers.map((a) => ({ kind: "rule", participantId: a.participantId, outcome: sameSet(a.optionIds, s.correct) ? "correct" : "wrong", answeredAt: a.at }));
   },
 
   removeParticipant(s, participantId) {

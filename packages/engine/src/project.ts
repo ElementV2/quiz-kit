@@ -1,8 +1,8 @@
-import { PLAYER_LEADERBOARD_ROWS, type BaseView, type ControlView, type HostView, type LeaderboardRow, type OutputView, type PlayerView, type View, type Viewer } from "@quiz/schema";
+import { PLAYER_LEADERBOARD_ROWS, type BaseView, type ControlView, type HostView, type LeaderboardRow, type OutputView, type PlayerView, type TeamLeaderboardRow, type View, type Viewer } from "@quiz/schema";
 import type { Game } from "./game.ts";
-import type { Audience, Registry } from "./mechanic.ts";
+import type { Audience, Judgement, Registry } from "./mechanic.ts";
 import { assertNever } from "./result.ts";
-import { currentQuestion, currentRound, nextQuestion, participantTotal, type GameState } from "./state.ts";
+import { currentQuestion, currentRound, nextQuestion, participantTotal, teamTotal, type GameState } from "./state.ts";
 
 /**
  * Role-filtered view (ADR-0004). The only way state leaves the server.
@@ -48,7 +48,31 @@ function base(s: GameState, audience: Audience, participantId: string | null, re
     mechanic: m === null || s.mechanic === null ? null : m.project(s.mechanic.state, { audience, phase: s.phase, participantId }),
     // Players get the top only: a full 500-row board in every tablet view would make each broadcast O(n²).
     leaderboard: audience === "player" ? leaderboard(s).slice(0, PLAYER_LEADERBOARD_ROWS) : leaderboard(s),
+    teamBoard: teamBoard(s),
   };
+}
+
+/** Memoised per (ledger, teams) identity like the player leaderboard. Teams are few: sent to everyone. */
+const teamBoardCache = new WeakMap<object, WeakMap<object, TeamLeaderboardRow[]>>();
+
+export function teamBoard(s: GameState): TeamLeaderboardRow[] {
+  let inner = teamBoardCache.get(s.ledger);
+  if (inner === undefined) {
+    inner = new WeakMap();
+    teamBoardCache.set(s.ledger, inner);
+  }
+  const cached = inner.get(s.teams);
+  if (cached !== undefined) return cached;
+  const rows = s.teams.map((t, order) => ({ t, order, total: teamTotal(s, t.id) })).toSorted((a, b) => b.total - a.total || a.order - b.order);
+  let rank = 0;
+  let prev: number | null = null;
+  const board = rows.map((r, i) => {
+    if (r.total !== prev) rank = i + 1;
+    prev = r.total;
+    return { teamId: r.t.id, name: r.t.name, color: r.t.color, total: r.total, rank };
+  });
+  inner.set(s.teams, board);
+  return board;
 }
 
 function playerView(s: GameState, participantId: string | null, registry: Registry): PlayerView {
@@ -57,8 +81,7 @@ function playerView(s: GameState, participantId: string | null, registry: Regist
   const myAnswer = me === undefined || m === null || s.mechanic === null ? null : m.answerOf(s.mechanic.state, me.id);
   let myResult: PlayerView["myResult"] = null;
   if (s.phase === "revealed" && me !== undefined && m !== null && s.mechanic !== null) {
-    const j = m.judge(s.mechanic.state).find((x) => x.participantId === me.id);
-    myResult = j === undefined ? "none" : j.outcome;
+    myResult = resultOf(m.judge(s.mechanic.state), me.id, me.teamId);
   }
   return {
     role: "player",
@@ -68,6 +91,18 @@ function playerView(s: GameState, participantId: string | null, registry: Regist
     myResult,
     canAnswer: s.phase === "open" && me !== undefined && me.status === "active",
   };
+}
+
+/** A player's result: any correct judgement concerning them (or their team) wins over wrong ones. */
+function resultOf(judgements: readonly Judgement[], participantId: string, teamId: string | null): PlayerView["myResult"] {
+  let result: PlayerView["myResult"] = "none";
+  for (const j of judgements) {
+    const mine = j.kind === "rule" ? j.participantId === participantId : "participantId" in j.target ? j.target.participantId === participantId : j.target.teamId === teamId;
+    if (!mine) continue;
+    if (j.outcome === "correct") return "correct";
+    result = "wrong";
+  }
+  return result;
 }
 
 function controlView(game: Game, readonly: boolean, registry: Registry): ControlView {

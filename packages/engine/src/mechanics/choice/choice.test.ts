@@ -8,7 +8,7 @@ import { choice } from "./choice.ts";
 
 const answerFor = (view: View, picks: readonly number[]): Action | null => {
   const m = view.mechanic;
-  if (m === null) return { type: "answer.submit", participantId: "p_1", answer: { kind: "choice", optionIds: ["a"] } };
+  if (m === null || m.mechanic !== "choice") return { type: "answer.submit", participantId: "p_1", answer: { kind: "choice", optionIds: ["a"] } };
   const ids = [...new Set(picks.map((p) => m.options[p % m.options.length]?.id ?? "a"))].slice(0, m.maxPick);
   return { type: "answer.submit", participantId: "p_1", answer: { kind: "choice", optionIds: ids } };
 };
@@ -50,7 +50,7 @@ describe("choice projections", () => {
 
   it("refuses poll / oral questions", () => {
     const oral: Question = { id: "q_oral", prompt: { text: "?" }, answerSpec: { kind: "oral", expected: "x" }, hints: [], tags: [] };
-    const r = choice.init({}, oral, { at: 0, phase: "idle", rng: { next: () => 0, int: () => 0, shuffle: (x) => [...x] } });
+    const r = choice.init({}, oral, { at: 0, phase: "idle", rng: { next: () => 0, int: () => 0, shuffle: (x) => [...x] } }, { previous: null, questionIndex: 0, questionsLeft: 0 });
     expect(r).toMatchObject({ ok: false, error: { code: "unsupported" } });
   });
 });

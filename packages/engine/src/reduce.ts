@@ -1,5 +1,5 @@
 import { isAllowed, type Action, type ActionOf, type Actor, type Participant, type ScoreEntry, type ScoreTarget } from "@quiz/schema";
-import type { AnyMechanic, MechanicEnv, Registry } from "./mechanic.ts";
+import type { AnyMechanic, FixedJudgement, MechanicEnv, Registry } from "./mechanic.ts";
 import { assertNever, err, ok, type Rejection, type Result } from "./result.ts";
 import type { Rng } from "./rng.ts";
 import { pointsFor } from "./scoring.ts";
@@ -39,7 +39,7 @@ function reduceAllowed(s: GameState, a: Action, ctx: Ctx, registry: Registry): R
       }
       const index = a.roundIndex ?? (s.roundIndex === null ? 0 : s.roundIndex + 1);
       if (s.game.format.rounds[index] === undefined) return err("not-found", `manche ${index} inexistante`);
-      return ok({ ...s, phase: "idle", roundIndex: index, questionIndex: null });
+      return ok({ ...s, phase: "idle", roundIndex: index, questionIndex: null, carry: null, roundLedgerStart: s.ledger.length });
     }
 
     case "question.present":
@@ -91,25 +91,46 @@ function reduceAllowed(s: GameState, a: Action, ctx: Ctx, registry: Registry): R
       if (!QUESTION_PHASES.has(s.phase)) return err("wrong-phase", "aucune question en cours");
       const round = currentRound(s);
       const qi = s.questionIndex ?? 0;
-      const isLastQuestion = round === null || qi + 1 >= round.questions.length;
+      const m = s.mechanic === null ? null : registry.get(s.mechanic.id);
+      const endsRound = m !== null && s.mechanic !== null && m.endsRound(s.mechanic.state, s.phase);
+      const isLastQuestion = round === null || qi + 1 >= round.questions.length || endsRound;
       const isLastRound = s.roundIndex === null || s.roundIndex + 1 >= s.game.format.rounds.length;
       const phase = !isLastQuestion ? "idle" : isLastRound ? "game.end" : "round.end";
-      return ok({ ...s, phase, mechanic: null, timer: null, openedAt: null, lockedAt: null, windowMs: null });
+      const carry = s.mechanic === null ? s.carry : { id: s.mechanic.id, state: s.mechanic.state, revealed: s.phase === "revealed", questionIndex: qi };
+      // A round ending here lets the mechanic bank what was not scored by a reveal (ladder skipped / stopped).
+      const question = currentQuestion(s);
+      const closing = isLastQuestion && m !== null && s.mechanic !== null && question !== null ? m.closeRound(s.mechanic.state, s.phase) : [];
+      const ledger = [...s.ledger, ...fixedEntries(s, ctx, closing, question?.id ?? null, 0)];
+      return ok({ ...s, phase, ledger, mechanic: null, carry, timer: null, openedAt: null, lockedAt: null, windowMs: null });
     }
 
     case "answer.submit": {
       if (s.phase !== "open") return err("wrong-phase", "les réponses ne sont pas ouvertes");
-      if ((ctx.actor.role === "player" || ctx.actor.role === "seat") && ctx.actor.id !== a.participantId) {
-        return err("forbidden", "un joueur ne répond que pour lui-même");
-      }
-      const p = s.participants.find((x) => x.id === a.participantId);
-      if (p === undefined) return err("not-found", "joueur inconnu");
-      if (p.status !== "active") return err("forbidden", `joueur ${p.status}`);
+      const who = checkPlayerIntent(s, a.participantId, ctx);
+      if (!who.ok) return who;
       return withMechanic(s, registry, (m, state) => m.submit(state, a.participantId, a.answer, envOf(s, ctx)));
     }
 
+    case "buzz": {
+      if (s.phase !== "open") return err("wrong-phase", "les buzzers ne sont pas ouverts");
+      const who = checkPlayerIntent(s, a.participantId, ctx);
+      if (!who.ok) return who;
+      return mechanicAction(s, a, ctx, registry);
+    }
+
     case "answer.judge":
-      return withMechanic(s, registry, (m, state) => m.onAction(state, a, envOf(s, ctx)) ?? err("unsupported", `la mécanique ${m.id} ne gère pas ${a.type}`));
+      if (a.participantId !== undefined && !s.participants.some((p) => p.id === a.participantId)) return err("not-found", "joueur inconnu");
+      return mechanicAction(s, a, ctx, registry);
+
+    case "poll.control":
+    case "poll.steal":
+      if (!s.teams.some((t) => t.id === a.teamId)) return err("not-found", "équipe inconnue");
+      return mechanicAction(s, a, ctx, registry);
+
+    case "element.reveal":
+    case "joker.use":
+    case "ladder.stop":
+      return mechanicAction(s, a, ctx, registry);
 
     case "score.adjust":
       return addEntry(s, a.target, a.delta, a.reason, a.note ?? null, ctx);
@@ -163,9 +184,12 @@ function reduceAllowed(s: GameState, a: Action, ctx: Ctx, registry: Registry): R
     {
       if (!s.participants.some((p) => p.id === a.participantId)) return err("not-found", "joueur inconnu");
       const without = { ...s, participants: s.participants.filter((p) => p.id !== a.participantId) };
-      // Purge their answer: an id reused later must not inherit it (no leak, no phantom score).
-      if (s.mechanic === null) return ok(without);
-      return withMechanic(without, registry, (m, state) => ok(m.removeParticipant(state, a.participantId)));
+      // Purge their answer (and carried progression): an id reused later must not inherit it (no leak, no phantom score).
+      const carryMechanic = s.carry === null ? null : registry.get(s.carry.id);
+      // Unknown carried mechanic (cannot purge it): drop the carry rather than keep stale progression.
+      const purged = s.carry === null ? without : carryMechanic === null ? { ...without, carry: null } : { ...without, carry: { ...s.carry, state: carryMechanic.removeParticipant(s.carry.state, a.participantId) } };
+      if (s.mechanic === null) return ok(purged);
+      return withMechanic(purged, registry, (m, state) => ok(m.removeParticipant(state, a.participantId)));
     }
 
     case "team.add":
@@ -196,7 +220,8 @@ function present(s: GameState, a: ActionOf<"question.present">, ctx: Ctx, regist
   if (m === null) return err("unsupported", `mécanique inconnue : ${round.mechanic}`);
   const cfg = m.configSchema.safeParse(round.mechanicConfig);
   if (!cfg.success) return err("invalid", `configuration de mécanique invalide : ${cfg.error.message}`);
-  const init = m.init(cfg.data, question, envOf(s, ctx));
+  const previous = s.carry !== null && s.carry.id === m.id ? { state: s.carry.state, revealed: s.carry.revealed, questionIndex: s.carry.questionIndex } : null;
+  const init = m.init(cfg.data, question, envOf(s, ctx), { previous, questionIndex: index, questionsLeft: round.questions.length - index - 1 });
   if (!init.ok) return init;
   return ok({ ...s, phase: "presenting", questionIndex: index, mechanic: { id: m.id, state: init.value }, timer: null, openedAt: null, lockedAt: null, windowMs: null });
 }
@@ -209,20 +234,48 @@ function reveal(s: GameState, ctx: Ctx, registry: Registry): R {
   const m = registry.get(s.mechanic.id);
   if (m === null) return err("unsupported", `mécanique inconnue : ${s.mechanic.id}`);
   if (s.openedAt === null) return err("conflict", "réponses jamais ouvertes");
-  const judgements = m.judge(s.mechanic.state);
   const window = { openedAt: s.openedAt, durationMs: s.windowMs };
   const entries: ScoreEntry[] = [];
-  for (const j of judgements) {
-    const p = s.participants.find((x) => x.id === j.participantId);
-    if (p === undefined) continue; // removed meanwhile
-    const delta = pointsFor(round.scoring, j, window);
-    if (delta === 0) continue;
-    entries.push(entry(ctx, entries.length, { participantId: p.id }, p.teamId, delta, "auto", null, question.id));
+  const fixed: FixedJudgement[] = [];
+  for (const j of m.judge(s.mechanic.state)) {
+    switch (j.kind) {
+      case "rule": {
+        const p = s.participants.find((x) => x.id === j.participantId);
+        if (p === undefined) continue; // removed meanwhile
+        const delta = pointsFor(round.scoring, j, window);
+        if (delta !== 0) entries.push(entry(ctx, entries.length, { participantId: p.id }, p.teamId, delta, "auto", null, question.id));
+        break;
+      }
+      case "fixed":
+        fixed.push(j);
+        break;
+      default:
+        return assertNever(j);
+    }
   }
-  // Replaying a question (doc 09 "rejouer") replaces its automatic points instead of adding to them.
-  const ledger = s.ledger.map((e) => (e.reason === "auto" && e.questionId === question.id && !e.voided ? { ...e, voided: true } : e));
+  entries.push(...fixedEntries(s, ctx, fixed, question.id, entries.length));
+  // Replaying a question (doc 09 "rejouer") replaces its automatic points instead of adding to them —
+  // within the current round only: the same question used by another round keeps its points.
+  const ledger = s.ledger.map((e, i) => (i >= s.roundLedgerStart && e.reason === "auto" && e.questionId === question.id && !e.voided ? { ...e, voided: true } : e));
   const played = s.played.includes(question.id) ? s.played : [...s.played, question.id];
   return ok({ ...s, phase: "revealed", timer: null, ledger: [...ledger, ...entries], played });
+}
+
+/** Ledger entries for mechanic-decided points (player or team target); 0 points and unknown targets write nothing. */
+function fixedEntries(s: GameState, ctx: Ctx, judgements: readonly FixedJudgement[], questionId: string | null, from: number): ScoreEntry[] {
+  const out: ScoreEntry[] = [];
+  for (const j of judgements) {
+    if (j.points === 0) continue;
+    if ("participantId" in j.target) {
+      const pid = j.target.participantId;
+      const p = s.participants.find((x) => x.id === pid);
+      if (p !== undefined) out.push(entry(ctx, from + out.length, { participantId: p.id }, p.teamId, j.points, "auto", null, questionId));
+    } else {
+      const tid = j.target.teamId;
+      if (s.teams.some((t) => t.id === tid)) out.push(entry(ctx, from + out.length, { teamId: tid }, tid, j.points, "auto", null, questionId));
+    }
+  }
+  return out;
 }
 
 function entry(ctx: Ctx, n: number, target: ScoreTarget, teamId: string | null, delta: number, reason: ScoreEntry["reason"], note: string | null, questionId: string | null): ScoreEntry {
@@ -251,6 +304,21 @@ function updateParticipant(s: GameState, id: string, f: (p: Participant) => Resu
   const r = f(p);
   if (!r.ok) return r;
   return ok({ ...s, participants: s.participants.map((x) => (x.id === id ? r.value : x)) });
+}
+
+/** A player acts only for themselves, and only while active (control may act on their behalf). */
+function checkPlayerIntent(s: GameState, participantId: string, ctx: Ctx): Result<Participant, Rejection> {
+  if ((ctx.actor.role === "player" || ctx.actor.role === "seat") && ctx.actor.id !== participantId) {
+    return err("forbidden", "un joueur n'agit que pour lui-même");
+  }
+  const p = s.participants.find((x) => x.id === participantId);
+  if (p === undefined) return err("not-found", "joueur inconnu");
+  if (p.status !== "active") return err("forbidden", `joueur ${p.status}`);
+  return ok(p);
+}
+
+function mechanicAction(s: GameState, a: Action, ctx: Ctx, registry: Registry): R {
+  return withMechanic(s, registry, (m, state) => m.onAction(state, a, envOf(s, ctx)) ?? err("unsupported", `la mécanique ${m.id} ne gère pas ${a.type}`));
 }
 
 function withMechanic(s: GameState, registry: Registry, f: (m: AnyMechanic, state: unknown) => Result<unknown, Rejection>): R {

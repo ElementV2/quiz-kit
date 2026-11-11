@@ -1,7 +1,7 @@
 import { For, Show, createMemo, createResource, createSignal, onCleanup, onMount } from "solid-js";
 import { render } from "solid-js/web";
 import { gameFromQuestions, parseQuestionsCsv, type Action, type ControlView, type Participant } from "@quiz/schema";
-import { optionLetter, secondsLeft } from "@quiz/renderer";
+import { asChoice, optionLetter, secondsLeft } from "@quiz/renderer";
 import { Button, Panel, StatusPill, createQuizConnection, tokenFromUrl } from "@quiz/ui";
 import "@quiz/ui/ui.css";
 import "./control.css";
@@ -117,9 +117,9 @@ function App() {
                   {(q) => (
                     <div class="c-current">
                       <p class="c-prompt">{q().prompt.text}</p>
-                      <Show when={v().mechanic?.mechanic === "choice" ? v().mechanic : null}>
+                      <Show when={asChoice(v().mechanic)}>
                         {(mm) => {
-                          const m = () => (mm().mechanic === "choice" ? mm() : null);
+                          const m = () => mm();
                           return (
                             <div class="c-opts">
                               <For each={m()?.options ?? []}>

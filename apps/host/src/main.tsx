@@ -1,7 +1,7 @@
 import { For, Show, createMemo, createSignal, onCleanup } from "solid-js";
 import { render } from "solid-js/web";
 import type { HostView } from "@quiz/schema";
-import { optionLetter, secondsLeft } from "@quiz/renderer";
+import { asChoice, optionLetter, secondsLeft } from "@quiz/renderer";
 import { Panel, StatusPill, createQuizConnection } from "@quiz/ui";
 import "@quiz/ui/ui.css";
 import "./host.css";
@@ -37,9 +37,9 @@ function App() {
                 </Panel>
               )}
             </Show>
-            <Show when={v().mechanic?.mechanic === "choice" ? v().mechanic : null}>
+            <Show when={asChoice(v().mechanic)}>
               {(mm) => {
-                const m = () => (mm().mechanic === "choice" ? mm() : null);
+                const m = () => mm();
                 const answer = () => m()?.options.filter((o) => m()?.correct?.includes(o.id) === true).map((o) => o.label).join(" + ") ?? "";
                 return (
                   <>

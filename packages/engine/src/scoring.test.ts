@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { pointsFor } from "./scoring.ts";
 
-const j = (outcome: "correct" | "wrong", answeredAt: number) => ({ participantId: "p_1", outcome, answeredAt }) as const;
+const j = (outcome: "correct" | "wrong", answeredAt: number) => ({ kind: "rule", participantId: "p_1", outcome, answeredAt }) as const;
 const w = { openedAt: 1000, durationMs: 10_000 };
 
 describe("pointsFor", () => {

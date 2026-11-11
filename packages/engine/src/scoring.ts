@@ -14,7 +14,7 @@ export type ScoringWindow = {
  * - correct: base, minus linear timeDecay down to minPoints over the window, times multipliers.
  * - wrong:   penalty (≤ 0) times multipliers, 0 if no penalty component.
  */
-export function pointsFor(rule: ScoringRule, j: Judgement, w: ScoringWindow): number {
+export function pointsFor(rule: ScoringRule, j: Extract<Judgement, { kind: "rule" }>, w: ScoringWindow): number {
   let base = 0;
   let penalty = 0;
   let factor = 1;
@@ -46,8 +46,8 @@ export function pointsFor(rule: ScoringRule, j: Judgement, w: ScoringWindow): nu
   return roundHalfAway(points * factor);
 }
 
-/** Symmetric rounding (7.5 → 8, -7.5 → -8), never -0. */
-function roundHalfAway(x: number): number {
+/** Symmetric rounding (7.5 → 8, -7.5 → -8), never -0. Shared by mechanics computing their own points. */
+export function roundHalfAway(x: number): number {
   const r = Math.sign(x) * Math.round(Math.abs(x));
   return r === 0 ? 0 : r;
 }

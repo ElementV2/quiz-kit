@@ -35,6 +35,16 @@ export function layerVisible(layer: Layer, phase: Phase, taken: Readonly<Record<
   }
 }
 
+export type ChoiceView = Extract<MechanicView, { mechanic: "choice" }>;
+export type PollBoardView = Extract<MechanicView, { mechanic: "poll-board" }>;
+export type BuzzerView = Extract<MechanicView, { mechanic: "buzzer" }>;
+export type LadderView = Extract<MechanicView, { mechanic: "ladder" }>;
+/** Narrowing helpers (one per mechanic view): use them in `<Show when={asChoice(v.mechanic)}>`. */
+export const asChoice = (m: MechanicView | null | undefined): ChoiceView | null => (m?.mechanic === "choice" ? m : null);
+export const asPollBoard = (m: MechanicView | null | undefined): PollBoardView | null => (m?.mechanic === "poll-board" ? m : null);
+export const asBuzzer = (m: MechanicView | null | undefined): BuzzerView | null => (m?.mechanic === "buzzer" ? m : null);
+export const asLadder = (m: MechanicView | null | undefined): LadderView | null => (m?.mechanic === "ladder" ? m : null);
+
 /** State of one answer option, for styling (doc 02 ZoneState). */
 export function optionState(m: MechanicView, optionId: string, myAnswer: readonly string[] | null): ZoneState {
   if (m.mechanic !== "choice") return "idle";

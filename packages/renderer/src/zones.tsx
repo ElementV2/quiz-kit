@@ -1,6 +1,6 @@
 import { For, Show, createEffect, createSignal, onCleanup, type Component, type JSX } from "solid-js";
 import type { View, Zone, ZoneType } from "@quiz/schema";
-import { estimateFontSize, optionLetter, optionShare, optionState, readPath, secondsLeft } from "./logic.ts";
+import { asChoice, estimateFontSize, optionLetter, optionShare, optionState, readPath, secondsLeft } from "./logic.ts";
 
 export type ZoneProps = { readonly zone: Zone; readonly view: View; readonly serverNow: () => number; readonly mediaUrl: (hash: string) => string };
 
@@ -63,9 +63,9 @@ const AnswerListZone: Component<ZoneProps> = (p) => {
   const columns = () => num(p.zone, "columns", 2);
   const gap = () => num(p.zone, "gap", 16);
   return (
-    <Show when={m()?.mechanic === "choice" ? m() : null}>
+    <Show when={asChoice(m())}>
       {(mech) => {
-        const opts = () => (mech().mechanic === "choice" ? mech().options : []);
+        const opts = () => mech().options;
         const rows = () => Math.ceil(opts().length / columns());
         const cellH = () => (p.zone.rect.h - gap() * (rows() - 1)) / Math.max(1, rows());
         const cellW = () => (p.zone.rect.w - gap() * (columns() - 1)) / columns();

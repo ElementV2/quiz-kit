@@ -1,6 +1,6 @@
 import { For, Match, Show, Switch, createEffect, createMemo, createSignal, onCleanup } from "solid-js";
 import { render } from "solid-js/web";
-import { optionLetter, secondsLeft } from "@quiz/renderer";
+import { asChoice, optionLetter, secondsLeft } from "@quiz/renderer";
 import type { PlayerView } from "@quiz/schema";
 import { StatusPill, createQuizConnection, tokenFromUrl } from "@quiz/ui";
 import "@quiz/ui/ui.css";
@@ -163,13 +163,9 @@ function Game(props: { token: string }) {
                 <Show when={v().timer}>{(t) => <span class={`p-timer${secondsLeft(t().endsAt, now()) <= 5 ? " p-timer-low" : ""}`}>⏱ {secondsLeft(t().endsAt, now())}</span>}</Show>
               </div>
               <h1 class="p-prompt">{v().question?.prompt.text}</h1>
-              <Show when={v().mechanic?.mechanic === "choice" ? v().mechanic : null}>
+              <Show when={asChoice(v().mechanic)}>
                 {(mm) => {
-                  const m = () => {
-                    const x = mm();
-                    if (x.mechanic !== "choice") throw new Error("unreachable");
-                    return x;
-                  };
+                  const m = () => mm();
                   return (
                     <div class="p-options" data-count={m().options.length}>
                       <For each={m().options}>

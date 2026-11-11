@@ -33,7 +33,7 @@ export class Bot {
 
   private maybeAnswer(): void {
     const v = this.client.view;
-    if (v === null || v.role !== "player" || !v.canAnswer || v.me === null || v.question === null || v.mechanic === null) return;
+    if (v === null || v.role !== "player" || !v.canAnswer || v.me === null || v.question === null || v.mechanic?.mechanic !== "choice") return;
     const qid = v.question.id;
     if (this.answered.has(qid) || v.myAnswer !== null) return;
     this.answered.add(qid);
