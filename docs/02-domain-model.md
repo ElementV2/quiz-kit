@@ -22,7 +22,9 @@ sont des fonctions pures `vN → vN+1` testées sur des fixtures.
 ## Format
 
 - `Format` : `id`, `name`, `participants` ({ mode: solo | teams | crowd, min, max, teamSize? }),
-  `rounds[]`, `jokers[]`, `tieBreak`, `defaults`.
+  `rounds[]`, `jokers[]`, `tieBreak`, `defaults`. Seul `participants.max` agit (plafond de joueurs) ; `mode`,
+  `min` et `teamSize` restent pour la compatibilité des documents, sans effet : on joue en équipes dès que la
+  régie en crée, sinon chacun pour soi (le studio ne les montre plus).
 - `Round` : `id`, `title`, `mechanic` (id de mécanique enregistrée), `mechanicConfig` (validée par le
   schéma de la mécanique), `source` (set + filtre + nombre), `reserve[]`, `timer`, `scoring`, `endCondition`.
 - `ScoringRule` : composition (`base`, `timeDecay`, `hintDecay`, `proportional`, `ladder`, `multiplier`, `penalty`).

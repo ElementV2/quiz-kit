@@ -8,7 +8,6 @@ import { MECHANICS, MIXED_CATEGORIES, normalizeRule, SCORING_LABEL, mechanicLabe
 import { kindLabel } from "./question-factories.ts";
 import { clone, hex, snapshot, type Update } from "./util.ts";
 
-const PARTICIPANTS = [["solo", "Joueurs individuels"], ["teams", "Équipes"], ["crowd", "Public (grand nombre)"]] as const;
 /** The number a scoring block edits. */
 function scoreValue(c: ScoringComponent): number {
   if (c.type === "timeDecay") return c.minPoints;
@@ -34,16 +33,7 @@ export function FormatEditor(p: { doc: GameDocument; update: Update }): JSX.Elem
       <Panel title="Format de la partie">
         <div class="s-format-head">
           <label class="s-field"><span class="s-label">Nom du format</span><input value={p.doc.format.name} onInput={(e) => { const v = e.currentTarget.value; if (v.length > 0) fmt((f) => { f.name = v; }, "fname"); }} /></label>
-          <label class="s-field"><span class="s-label">Qui joue</span>
-            <select value={p.doc.format.participants.mode} onChange={(e) => { const m = PARTICIPANTS.find(([v]) => v === e.currentTarget.value)?.[0]; if (m !== undefined) fmt((f) => { f.participants.mode = m; }); }}>
-              <For each={PARTICIPANTS}>{([v, label]) => <option value={v}>{label}</option>}</For>
-            </select>
-          </label>
-          <label class="s-field"><span class="s-label">Minimum</span><NumField min={0} value={p.doc.format.participants.min} onChange={(v) => fmt((f) => { f.participants.min = Math.max(0, Math.round(v)); })} /></label>
-          <label class="s-field"><span class="s-label">Maximum</span><NumField min={1} value={p.doc.format.participants.max} onChange={(v) => fmt((f) => { f.participants.max = Math.max(1, Math.round(v)); })} /></label>
-          <Show when={p.doc.format.participants.mode === "teams"}>
-            <label class="s-field"><span class="s-label">Joueurs par équipe</span><NumField min={1} value={p.doc.format.participants.teamSize} placeholder="libre" onChange={(v) => fmt((f) => { f.participants.teamSize = Math.max(1, Math.round(v)); })} onEmpty={() => fmt((f) => { delete f.participants.teamSize; })} /></label>
-          </Show>
+          <label class="s-field"><span class="s-label">Joueurs maximum</span><NumField min={1} value={p.doc.format.participants.max} onChange={(v) => fmt((f) => { f.participants.max = Math.max(1, Math.round(v)); f.participants.min = Math.min(f.participants.min, f.participants.max); })} /></label>
           <label class="s-field"><span class="s-label">En cas d'égalité</span>
             <select value={p.doc.format.tieBreak} onChange={(e) => { const v = e.currentTarget.value === "speed" ? "speed" : "control"; fmt((f) => { f.tieBreak = v; }); }}>
               <option value="speed">rapidité cumulée (le plus rapide gagne)</option>

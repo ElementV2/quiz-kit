@@ -285,8 +285,8 @@ async function boot(config: Config, opts: { timers?: Timers; broadcastIntervalMs
   /**
    * Launches a new game without restarting anything: the old session stays in the journal; every connected screen is
    * re-welcomed on the new one — no link to paste again. `keepPlayers` (default): the players of the current game come along — same ids (their
-   * `/play` tokens carry the participant id, so phones stay in), same seats, same teams when the new game is played
-   * in teams, scores back to zero; the join code stays the same. Journaled as ordinary player / team actions of the
+   * `/play` tokens carry the participant id, so phones stay in), same seats, same teams (the ones the control room
+   * made), scores back to zero; the join code stays the same. Journaled as ordinary player / team actions of the
    * new session, before any screen is re-welcomed (nobody sees an empty game).
    */
   function switchSession(game: GameDocument, keepPlayers = true): Session & { kept: number; dropped: number } {
@@ -301,9 +301,8 @@ async function boot(config: Config, opts: { timers?: Timers; broadcastIntervalMs
       if (!keepPlayers) return;
       store.setMeta(`join-code:${next.id}`, joinCodeOf(previous.session.id));
       const who = { role: "control", id: "relaunch" } as const;
-      // Teams first (team game only), in one commit; players only get a team that really exists.
-      const teamGame = game.format.participants.mode === "teams";
-      const teamActs = teamGame ? before.teams.map((t) => ({ action: { type: "team.add", teamId: t.id, name: t.name, color: t.color } as const, actor: who })) : [];
+      // Teams first (the control room made them: they are kept), in one commit; players only get a team that really exists.
+      const teamActs = before.teams.map((t) => ({ action: { type: "team.add", teamId: t.id, name: t.name, color: t.color } as const, actor: who }));
       const created = new Set(rt.submitMany(teamActs).flatMap((a, i) => { const id = teamActs[i]?.action.teamId; return a.ok && id !== undefined ? [id] : []; }));
       // Players in one commit too (one fsync, whatever their number): never a long freeze of the show loop.
       const people = before.participants.filter((p) => !p.id.startsWith(BOT_PREFIX)); // rehearsal bots belong to the old game

@@ -232,7 +232,7 @@ function GamesTab(p: { readonly view: ControlView; readonly readonly: boolean })
         <span class="c-game-label">En cours sur tous les écrans</span>
         <h3 class="c-live-title">{g().title}</h3>
         <p class="muted">
-          {g().rounds} manche{g().rounds > 1 ? "s" : ""} · {g().mode === "teams" ? "en équipes" : g().mode === "crowd" ? "public" : "joueurs individuels"} ·{" "}
+          {g().rounds} manche{g().rounds > 1 ? "s" : ""} · {p.view.teams.length > 0 ? `${p.view.teams.length} équipe${p.view.teams.length > 1 ? "s" : ""}` : "joueurs individuels"} ·{" "}
           <span class="q-mono" classList={{ "c-full": full() }}>{p.view.participants.length} / {g().maxPlayers} joueur{g().maxPlayers > 1 ? "s" : ""}</span>
         </p>
         <Show when={full()}><p class="c-warn-line">Partie complète : plus aucun joueur ni siège ne peut rejoindre. Lancer une autre partie, ou augmenter le maximum dans le studio (onglet Format).</p></Show>

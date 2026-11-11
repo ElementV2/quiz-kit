@@ -46,8 +46,8 @@ Voir `05-reliability.md`.
 ## Lancer / relancer une partie (onglet « Parties »)
 
 Par défaut, les joueurs de la partie en cours **suivent** dans la nouvelle partie : mêmes identifiants (le jeton
-`/play` d'un téléphone porte l'identifiant du joueur, il reste valable), mêmes sièges, mêmes équipes si la nouvelle
-partie se joue en équipes, même code partie ; les scores repartent de zéro. Les bots de répétition ne suivent pas.
+`/play` d'un téléphone porte l'identifiant du joueur, il reste valable), mêmes sièges, mêmes équipes (celles que la
+régie a créées), même code partie ; les scores repartent de zéro. Les bots de répétition ne suivent pas.
 Au-delà du maximum de joueurs de la nouvelle partie, les derniers ne sont pas repris (le message le dit).
 Les remplaçants et joueurs en attente gardent ce statut ; les éliminés et déconnectés repartent actifs. Le code
 partie restant le même, un joueur exclu peut revenir avec : décocher la case pour obtenir un nouveau code.

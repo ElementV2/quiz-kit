@@ -35,9 +35,6 @@ export function livePatchProblem(s: GameState, next: GameDocument, freeOrder = f
   if (next.format.participants.max < s.participants.length) {
     return `la partie a ${s.participants.length} joueur(s) : le maximum ne peut pas descendre à ${next.format.participants.max}`;
   }
-  if (next.format.participants.mode !== cur.format.participants.mode && s.participants.length > 0) {
-    return "des joueurs sont déjà là : la partie ne passe plus d'équipes à solo (ou l'inverse)";
-  }
   const byId = new Map(next.questions.map((q) => [q.id, q]));
   // Every question already revealed stays, with its answer (history, results, regrade decide from it).
   for (const h of s.history) {

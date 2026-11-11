@@ -336,7 +336,7 @@ export const MIXED_CATEGORIES: readonly MixedCategoryInfo[] = [
     id: "poll",
     label: "Sondage",
     kinds: ["poll"],
-    explain: "Retrouver les réponses d'un sondage. La main se donne à une équipe (partie en équipes) ou à un joueur (partie individuelle). Points = % des réponses trouvées.",
+    explain: "Retrouver les réponses d'un sondage. La main se donne à une équipe (si la régie en a créé) ou à un joueur. Points = % des réponses trouvées.",
     ownPoints: true,
     fields: [
       { key: "mode", kind: "enum", label: "Qui marque", options: [{ value: "per-answer", label: "chacun marque les réponses qu'il trouve" }, { value: "bank", label: "la banque entière à qui gagne la question (règle télé)" }] },
