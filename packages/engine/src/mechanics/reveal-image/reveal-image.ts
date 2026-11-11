@@ -36,6 +36,7 @@ export const revealImage = defineMechanic<RevealImageConfig, RevealImageState>({
   id: "reveal-image",
   configSchema: RevealImageConfig,
   stateSchema: RevealImageState,
+  ownPoints: true,
   hidesPromptMedia: true,
 
   init(cfg, question, env) {

@@ -25,6 +25,8 @@ export const QuestionRecord = z.strictObject({
   windowMs: z.number().int().nullable(),
   /** Ledger entries written by this reveal (voided and rewritten by a regrade). */
   entryIds: z.array(z.string()),
+  /** Live stakes applied at this reveal (kept so a regrade scores identically). */
+  stakes: z.strictObject({ points: z.number().int().nullable(), multiplier: z.number().nullable() }).nullable().default(null),
   /** Response time (ms after opening) of every right answer: the `speed` tie-break sums them. */
   correctMs: z.array(z.strictObject({ participantId: z.string(), ms: z.number().int().min(0) })).default([]),
 });
@@ -65,6 +67,8 @@ export const GameState = z.strictObject({
   layers: z.record(z.string(), z.boolean()),
   /** One record per revealed (round, question). Default: snapshots written before phase 3 stay readable. */
   history: z.array(QuestionRecord).default([]),
+  /** Live stakes for one question (`question.setStakes`): the round / question index they apply to. */
+  stakes: z.strictObject({ roundIndex: z.number().int(), questionIndex: z.number().int(), points: z.number().int().nullable(), multiplier: z.number().nullable() }).nullable().default(null),
   /** The host may drive the question flow from their tablet (`host.setDrive`, HOST_DRIVE_ACTIONS). */
   hostDrives: z.boolean().default(false),
 });
@@ -93,6 +97,7 @@ export function initialState(session: Session): GameState {
     layers: {},
     history: [],
     hostDrives: false,
+    stakes: null,
   };
 }
 

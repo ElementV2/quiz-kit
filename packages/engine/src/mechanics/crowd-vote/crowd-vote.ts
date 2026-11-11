@@ -65,6 +65,7 @@ export const crowdVote = defineMechanic<CrowdVoteConfig, CrowdVoteState>({
   id: "crowd-vote",
   configSchema: CrowdVoteConfig,
   stateSchema: CrowdVoteState,
+  ownPoints: true,
 
   init(cfg, question) {
     const a = question.answerSpec;

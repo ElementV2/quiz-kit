@@ -12,7 +12,7 @@ import type { MediaStore } from "../media/media-store.ts";
 import { GameLibrary, exportQuiz, importQuiz } from "../media/library.ts";
 import { verifyToken } from "../tokens.ts";
 import { decide, participantTotal, type Registry } from "@quiz/engine";
-import { AnswerSpec, QuestionId } from "@quiz/schema";
+import { AnswerSpec, QuestionId, cleanDisplayName } from "@quiz/schema";
 import { buildResults, resultsCsv, resultsHtml } from "../results.ts";
 import type { Rehearsal } from "../rehearsal.ts";
 import type { ChatHub } from "../chat/chat-hub.ts";
@@ -30,6 +30,8 @@ export type HttpDeps = {
   readonly media: MediaStore;
   readonly library: GameLibrary;
   readonly join: (name: string) => { ok: true; token: string; participantId: string } | { ok: false; error: string };
+  /** A free seat tablet seats its player itself (name typed on the tablet). */
+  readonly claimSeat: (seat: number, name: string) => { ok: true; participantId: string } | { ok: false; error: string };
   readonly secret: string;
   readonly show: string;
   readonly isRevoked: (jti: string) => boolean;
@@ -233,8 +235,14 @@ export function buildHttpApp(deps: HttpDeps, options: FastifyServerOptions): Fas
     return deps.library.delete(req.params.id) ? { ok: true } : reply.code(404).send({ error: "partie inconnue" });
   });
   /** Launches a library game live (control room only). */
+  // Control room or studio (« Lancer en direct » on the game being edited): every screen switches, journaled.
   app.post<{ Querystring: { t?: string }; Params: { id: string } }>("/api/games/:id/launch", async (req, reply) => {
-    if (!controlToken(deps, req)) return reply.code(401).send({ error: "jeton régie requis" });
+    if (!staffToken(deps, req)) return reply.code(401).send({ error: "jeton régie ou studio requis" });
+    // From the studio only while nothing is played (lobby, no player): a show in progress is switched by the control room.
+    const live = deps.runtime().current.state;
+    if (roleOf(deps, req) === "studio" && (live.phase !== "lobby" || live.participants.length > 0)) {
+      return reply.code(409).send({ error: `« ${live.game.title} » est en cours (${live.participants.length} joueur(s)) : changer de partie depuis la régie (onglet Parties)` });
+    }
     const g = deps.library.get(req.params.id);
     if (g === null) return reply.code(404).send({ error: "partie inconnue" });
     const s = deps.newSession(g);
@@ -466,8 +474,11 @@ export function buildHttpApp(deps: HttpDeps, options: FastifyServerOptions): Fas
       staffAttempts.delete(req.ip);
     }
     const links = deps.links();
+    const live = deps.runtime().current.state;
     return {
       title: deps.runtime().session.game.title,
+      players: live.participants.length,
+      maxPlayers: live.game.format.participants.max,
       joinCode: deps.joinCode(),
       origins: links.origins,
       local,
@@ -483,6 +494,22 @@ export function buildHttpApp(deps: HttpDeps, options: FastifyServerOptions): Fas
     return { staffCode: deps.rotateStaffCode() };
   });
 
+  /**
+   * Seat tablets (`/seat/<n>`): while nobody sits at the seat, the tablet itself seats its player by name — no code,
+   * no wait for the control room (doc 09). The seat token proves which seat; a taken seat is refused (409).
+   */
+  app.post<{ Querystring: { t?: string } }>("/api/seat/claim", async (req, reply) => {
+    const bearer = req.headers.authorization?.replace(/^Bearer\s+/i, "");
+    const r = verifyToken(deps.secret, req.query.t ?? bearer ?? "", { now: deps.clock(), show: deps.show, isRevoked: deps.isRevoked });
+    if (!r.ok || r.claims.role !== "seat") return reply.code(401).send({ error: "lien de siège requis" });
+    const body = z.strictObject({ name: z.string().trim().min(1).max(40) }).safeParse(req.body);
+    if (!body.success) return reply.code(400).send({ error: "Prénom ou pseudo requis (40 caractères max.)" });
+    const name = cleanDisplayName(body.data.name);
+    if (name === "") return reply.code(400).send({ error: "Prénom ou pseudo requis (40 caractères max.)" });
+    const res = deps.claimSeat(r.claims.seat, name);
+    return res.ok ? { participantId: res.participantId } : reply.code(409).send({ error: res.error });
+  });
+
   const joinAttempts = new Map<string, { windowStart: number; count: number }>();
   /** `/play`: a player joins with the code + a nickname, gets their own token (doc 09). */
   app.post("/api/join", async (req, reply) => {
@@ -496,7 +523,9 @@ export function buildHttpApp(deps: HttpDeps, options: FastifyServerOptions): Fas
     const body = JoinBody.safeParse(req.body);
     if (!body.success) return reply.code(400).send({ error: "Code à 6 chiffres et pseudo requis" });
     if (body.data.code !== deps.joinCode()) return reply.code(403).send({ error: "Code incorrect" });
-    const r = deps.join(body.data.name);
+    const name = cleanDisplayName(body.data.name);
+    if (name === "") return reply.code(400).send({ error: "Pseudo requis" });
+    const r = deps.join(name);
     if (!r.ok) return reply.code(409).send({ error: r.error });
     return { token: r.token, participantId: r.participantId };
   });

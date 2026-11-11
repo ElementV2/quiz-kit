@@ -105,10 +105,17 @@ async function boot(config: Config, opts: { timers?: Timers; broadcastIntervalMs
   const secret = loadSecret(dataDir, store);
   // Built-in templates are seeded once into the library (editable copies; deleting one does not bring it back).
   const library = new GameLibrary(dataDir);
-  if (store.getMeta("templates-seeded") === null) {
-    for (const t of TEMPLATES) if (library.get(t.id) === null) library.put(t.id, t.game);
-    store.setMeta("templates-seeded", "1");
+  // Each built-in template is offered once: new templates of a newer version appear, a deleted one never comes back.
+  const firstSeed = store.getMeta("templates-seeded") === null;
+  for (const t of TEMPLATES) {
+    const key = `template-seeded:${t.id}`;
+    if (store.getMeta(key) !== null) continue;
+    // Data dirs seeded before per-template tracking: the original templates were offered already.
+    const offeredBefore = !firstSeed && ["g_modele_qcm", "g_modele_paliers", "g_modele_sondage", "g_modele_buzzer"].includes(t.id);
+    if (!offeredBefore && library.get(t.id) === null && !library.put(t.id, t.game).ok) continue; // retried next start
+    store.setMeta(key, "1");
   }
+  store.setMeta("templates-seeded", "1");
   const media = new MediaStore(dataDir, { ffmpeg: process.env["QUIZ_FFMPEG"] ?? "ffmpeg", ffprobe: process.env["QUIZ_FFPROBE"] ?? "ffprobe" });
   const preloads = new PreloadCache(media);
 
@@ -183,6 +190,14 @@ async function boot(config: Config, opts: { timers?: Timers; broadcastIntervalMs
     return { ok: true, participantId, token: signToken(secret, { v: 1, show: config.show, jti: `player-${participantId}`, exp: null, role: "player", participantId }) };
   };
 
+  const claimSeat = (seat: number, name: string): { ok: true; participantId: string } | { ok: false; error: string } => {
+    const rt = getRuntime();
+    if (rt.current.state.participants.some((p) => p.seat === seat)) return { ok: false, error: `le siège ${seat} est déjà pris` };
+    const participantId = newId("p");
+    const ack = rt.submit({ type: "player.add", participantId, displayName: name, seat, channel: "seat" }, { role: "control", id: `seat-${seat}` }, null);
+    return ack.ok ? { ok: true, participantId } : { ok: false, error: ack.reason };
+  };
+
   const rehearsal = new Rehearsal(opts.timers ?? realTimers);
   let mirror: StandbyMirror | null = null;
   const vmix = new VmixDriver();
@@ -204,6 +219,7 @@ async function boot(config: Config, opts: { timers?: Timers; broadcastIntervalMs
     media,
     library,
     join: joinPlayer,
+    claimSeat,
     revoke,
     secret,
     show: config.show,
@@ -222,6 +238,7 @@ async function boot(config: Config, opts: { timers?: Timers; broadcastIntervalMs
         // Split brain guard (review 4 I3): the primary answered recently → it is probably still running the show.
         const seen = mirror.status.lastContactAt;
         if (!force && seen !== null && clock() - seen < 8000) return "le principal répond encore (il y a moins de 8 s) : vérifier qu'il est vraiment arrêté, ou forcer la bascule";
+        if (!force && mirror.status.diverged !== null) return `ce secours ne suit plus le principal (${mirror.status.diverged}) : basculer dessus donnerait un état différent ; forcer seulement en connaissance de cause`;
         mirror.promote();
         vmix.attach(getRuntime(), readVmix()); // only the active server drives vMix (review 4 m1)
         http.log.warn({ sessionId: getRuntime().session.id, forced: force }, "BASCULE : ce serveur de secours prend le show");

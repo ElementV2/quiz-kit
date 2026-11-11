@@ -120,6 +120,7 @@ export const pollBoard = defineMechanic<PollBoardConfig, PollBoardState>({
   id: "poll-board",
   configSchema: PollBoardConfig,
   stateSchema: PollBoardState,
+  ownPoints: true,
 
   init(cfg, question) {
     const spec = question.answerSpec;

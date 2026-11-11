@@ -115,6 +115,13 @@ export interface Mechanic<C, S> {
    * judged right then skipped without reveal keeps its value). Absent: nothing is written (default).
    */
   onSkip?(state: S): readonly FixedJudgement[];
+  /**
+   * Points are decided by the mechanic (fixed judgements only: board, poll-board, allocation, hints…): live
+   * stakes can multiply them, never replace them with a points value.
+   */
+  readonly ownPoints?: boolean;
+  /** Live stakes make no sense (ladder: the gain of the whole climb is at stake on every question). */
+  readonly noStakes?: boolean;
   /** Smaller state kept in the reveal history (must judge / regrade / project identically). Absent: as is. */
   compact?(state: S): S;
 }

@@ -2,7 +2,7 @@ import { HOST_DRIVE_ACTIONS, isAllowed, type Action, type ActionOf, type Actor, 
 import type { AnyMechanic, FixedJudgement, Judgement, MechanicEnv, Registry } from "./mechanic.ts";
 import { assertNever, err, ok, type Rejection, type Result } from "./result.ts";
 import type { Rng } from "./rng.ts";
-import { pointsFor } from "./scoring.ts";
+import { pointsFor, roundHalfAway } from "./scoring.ts";
 import { currentQuestion, currentRound, participantTotal, teamTotal, type GameState, type QuestionRecord } from "./state.ts";
 
 /** Everything comes from the event (ADR-0010): no clock, no global randomness. */
@@ -43,7 +43,7 @@ function reduceAllowed(s: GameState, a: Action, ctx: Ctx, registry: Registry): R
       const following = nextRoundIndex(s);
       const index = a.roundIndex ?? following ?? -1;
       if (s.game.format.rounds[index] === undefined) return err("not-found", `manche ${index} inexistante`);
-      return ok({ ...s, phase: "idle", roundIndex: index, questionIndex: null, carry: null, roundLedgerStart: s.ledger.length });
+      return ok({ ...s, phase: "idle", roundIndex: index, questionIndex: null, carry: null, roundLedgerStart: s.ledger.length, stakes: null });
     }
 
     case "question.present":
@@ -60,6 +60,24 @@ function reduceAllowed(s: GameState, a: Action, ctx: Ctx, registry: Registry): R
 
     case "question.regrade":
       return regrade(s, a, ctx, registry);
+
+    case "question.setStakes": {
+      // Explicit target, journaled as sent (review 5 I1): the current round, a question not revealed yet.
+      if (s.roundIndex === null || a.roundIndex !== s.roundIndex) return err("conflict", "la mise vise une autre manche que la manche en cours");
+      const round = currentRound(s);
+      if (round === null || round.questions[a.questionIndex] === undefined) return err("not-found", "question inexistante dans la manche");
+      const onAir = QUESTION_PHASES.has(s.phase) ? s.questionIndex : null;
+      if (onAir === a.questionIndex && s.phase === "revealed") return err("wrong-phase", "question déjà révélée : corriger les points à la main ou rejouer");
+      if (s.history.some((h) => h.roundIndex === a.roundIndex && h.questionIndex === a.questionIndex) && onAir !== a.questionIndex) return err("conflict", "question déjà jouée");
+      const m = registry.get(round.mechanic);
+      if (m?.noStakes === true) return err("unsupported", "pas de mise sur les paliers : c'est le gain de toute la montée qui est en jeu");
+      if (a.points !== null && m?.ownPoints === true) return err("unsupported", "cette mécanique décide de ses points : utiliser un multiplicateur (×2, ×5…)");
+      // One stakes slot: a question on air keeps its stakes until it is left (review 6 m1).
+      const onAirStaked = onAir !== null && s.stakes !== null && s.stakes.roundIndex === s.roundIndex && s.stakes.questionIndex === onAir;
+      if (onAirStaked && a.questionIndex !== onAir) return err("conflict", "la question à l'antenne a une mise : la régler après elle");
+      if (a.points === null && a.multiplier === null) return ok({ ...s, stakes: null });
+      return ok({ ...s, stakes: { roundIndex: a.roundIndex, questionIndex: a.questionIndex, points: a.points, multiplier: a.multiplier } });
+    }
 
     case "question.open": {
       if (s.phase !== "presenting") return err("wrong-phase", "présenter la question avant d'ouvrir les réponses");
@@ -115,11 +133,16 @@ function reduceAllowed(s: GameState, a: Action, ctx: Ctx, registry: Registry): R
       const question = currentQuestion(s);
       const closing = isLastQuestion && m !== null && s.mechanic !== null && question !== null ? m.closeRound(s.mechanic.state, s.phase) : [];
       const skipped = s.phase !== "revealed" && m?.onSkip !== undefined && s.mechanic !== null ? m.onSkip(s.mechanic.state) : [];
-      const ledger = [...s.ledger, ...fixedEntries(s, ctx, [...skipped, ...closing], question?.id ?? null, 0)];
+      // Live stakes also apply to points written here (board cell judged then skipped, review 5 I3).
+      const mult = stakesFor(s)?.multiplier ?? null;
+      const staked = mult === null ? [...skipped, ...closing] : [...skipped, ...closing].map((j) => ({ ...j, points: roundHalfAway(j.points * mult) }));
+      const ledger = [...s.ledger, ...fixedEntries(s, ctx, staked, question?.id ?? null, 0)];
       // Flow (format.flow): the round that follows depends on the final scores of this one; null = game over.
       const isLastRound = s.roundIndex === null || nextRoundIndex({ ...s, ledger }) === null;
       const phase = !isLastQuestion ? "idle" : isLastRound ? "game.end" : "round.end";
-      return ok({ ...s, phase, ledger, mechanic: null, carry, timer: null, openedAt: null, lockedAt: null, windowMs: null });
+      // Stakes belong to one question: gone once it is left (unless set ahead for the next one).
+      const stakes = s.stakes !== null && s.stakes.roundIndex === s.roundIndex && s.stakes.questionIndex === qi ? null : s.stakes;
+      return ok({ ...s, phase, ledger, mechanic: null, carry, timer: null, openedAt: null, lockedAt: null, windowMs: null, stakes });
     }
 
     case "answer.submit": {
@@ -169,7 +192,7 @@ function reduceAllowed(s: GameState, a: Action, ctx: Ctx, registry: Registry): R
 
     case "player.add": {
       if (s.participants.some((p) => p.id === a.participantId)) return err("conflict", "identifiant de joueur déjà pris");
-      if (s.participants.length >= s.game.format.participants.max) return err("conflict", "nombre maximum de joueurs atteint");
+      if (s.participants.length >= s.game.format.participants.max) return err("conflict", `partie complète : « ${s.game.title} » accepte ${s.game.format.participants.max} joueur${s.game.format.participants.max > 1 ? "s" : ""} au maximum (la régie peut lancer une autre partie)`);
       if (a.seat !== undefined && s.participants.some((p) => p.seat === a.seat)) return err("conflict", `siège ${a.seat} déjà occupé`);
       if (a.teamId !== undefined && !s.teams.some((t) => t.id === a.teamId)) return err("not-found", "équipe inconnue");
       const p: Participant = {
@@ -323,6 +346,8 @@ function reveal(s: GameState, ctx: Ctx, registry: Registry): R {
   if (m === null) return err("unsupported", `mécanique inconnue : ${s.mechanic.id}`);
   if (s.openedAt === null) return err("conflict", "réponses jamais ouvertes");
   const window = { openedAt: s.openedAt, durationMs: s.windowMs };
+  const stakes = stakesFor(s);
+  const rule = stakedRule(round.scoring, stakes);
   const entries: ScoreEntry[] = [];
   const fixed: FixedJudgement[] = [];
   for (const j of m.judge(s.mechanic.state)) {
@@ -330,12 +355,12 @@ function reveal(s: GameState, ctx: Ctx, registry: Registry): R {
       case "rule": {
         const p = s.participants.find((x) => x.id === j.participantId);
         if (p === undefined) continue; // removed meanwhile
-        const delta = pointsFor(round.scoring, j, window);
+        const delta = pointsFor(rule, j, window);
         if (delta !== 0) entries.push(entry(ctx, entries.length, { participantId: p.id }, p.teamId, delta, "auto", null, question.id));
         break;
       }
       case "fixed":
-        fixed.push(j);
+        fixed.push(stakes?.multiplier == null ? j : { ...j, points: roundHalfAway(j.points * stakes.multiplier) });
         break;
       default:
         return assertNever(j);
@@ -351,7 +376,7 @@ function reveal(s: GameState, ctx: Ctx, registry: Registry): R {
   const played = s.played.includes(question.id) ? s.played : [...s.played, question.id];
   const roundIndex = s.roundIndex ?? 0;
   const questionIndex = s.questionIndex ?? 0;
-  const record = { roundIndex, questionIndex, questionId: question.id, mechanicId: m.id, state: m.compact === undefined ? s.mechanic.state : m.compact(s.mechanic.state), openedAt: s.openedAt, windowMs: s.windowMs, entryIds: entries.map((e) => e.id), correctMs: correctTimes(m, s.mechanic.state, s.openedAt) };
+  const record = { roundIndex, questionIndex, questionId: question.id, mechanicId: m.id, state: m.compact === undefined ? s.mechanic.state : m.compact(s.mechanic.state), openedAt: s.openedAt, windowMs: s.windowMs, entryIds: entries.map((e) => e.id), correctMs: correctTimes(m, s.mechanic.state, s.openedAt), stakes };
   const history = [...s.history.filter((h) => h.roundIndex !== roundIndex || h.questionIndex !== questionIndex), record];
   return ok({ ...s, phase: "revealed", timer: null, ledger: [...ledger, ...entries], played, history });
 }
@@ -371,20 +396,43 @@ function correctTimes(m: AnyMechanic, state: unknown, openedAt: number): { parti
 }
 
 /** Ledger entries of a set of judgements (rule points use the round's ScoringRule and the given answer window). */
-function judgementEntries(s: GameState, ctx: Ctx, judgements: readonly Judgement[], round: Round, questionId: string, window: { openedAt: number; durationMs: number | null }, reason: ScoreEntry["reason"]): ScoreEntry[] {
+function judgementEntries(s: GameState, ctx: Ctx, judgements: readonly Judgement[], round: Round, questionId: string, window: { openedAt: number; durationMs: number | null }, reason: ScoreEntry["reason"], stakes: Stakes | null): ScoreEntry[] {
   const entries: ScoreEntry[] = [];
   const fixed: FixedJudgement[] = [];
+  const rule = stakedRule(round.scoring, stakes);
   for (const j of judgements) {
     if (j.kind === "fixed") {
-      fixed.push(j);
+      fixed.push(stakes?.multiplier == null ? j : { ...j, points: roundHalfAway(j.points * stakes.multiplier) });
       continue;
     }
     const p = s.participants.find((x) => x.id === j.participantId);
     if (p === undefined) continue;
-    const delta = pointsFor(round.scoring, j, window);
+    const delta = pointsFor(rule, j, window);
     if (delta !== 0) entries.push(entry(ctx, entries.length, { participantId: p.id }, p.teamId, delta, reason, null, questionId));
   }
   return [...entries, ...fixedEntries(s, ctx, fixed, questionId, entries.length).map((e) => ({ ...e, reason }))];
+}
+
+type Stakes = { readonly points: number | null; readonly multiplier: number | null };
+
+/** Stakes set for the question on air (null when none, or set for another question). */
+function stakesFor(s: GameState): Stakes | null {
+  const st = s.stakes;
+  return st !== null && st.roundIndex === s.roundIndex && st.questionIndex === s.questionIndex ? { points: st.points, multiplier: st.multiplier } : null;
+}
+
+/** The round's rule with live stakes: base points replaced (time decay scaled alike), multiplier appended. */
+export function stakedRule(rule: Round["scoring"], stakes: Stakes | null): Round["scoring"] {
+  if (stakes === null) return rule;
+  let out = rule;
+  if (stakes.points !== null) {
+    const base = rule.reduce((sum, c) => (c.type === "base" ? sum + c.points : sum), 0);
+    const ratio = base === 0 ? 1 : stakes.points / base;
+    const withoutBase = rule.filter((c) => c.type !== "base").map((c) => (c.type === "timeDecay" ? { ...c, minPoints: Math.round(c.minPoints * ratio) } : c));
+    out = [{ type: "base", points: stakes.points }, ...withoutBase];
+  }
+  if (stakes.multiplier !== null) out = [...out, { type: "multiplier", factor: stakes.multiplier }];
+  return out;
 }
 
 function replaceFromReserve(s: GameState, a: ActionOf<"question.replaceFromReserve">, ctx: Ctx, registry: Registry): R {
@@ -437,7 +485,7 @@ function regrade(s: GameState, a: ActionOf<"question.regrade">, ctx: Ctx, regist
     const teamAtScoring = new Map<string, string | null>();
     for (const e of ledger) if (voided.has(e.id) && "participantId" in e.target) teamAtScoring.set(e.target.participantId, e.teamId);
     ledger = ledger.map((e) => (voided.has(e.id) && !e.voided ? { ...e, voided: true } : e));
-    const fresh = judgementEntries({ ...s, ledger }, ctx, m.judge(r.value), round, question.id, { openedAt: h.openedAt ?? 0, durationMs: h.windowMs }, "regrade")
+    const fresh = judgementEntries({ ...s, ledger }, ctx, m.judge(r.value), round, question.id, { openedAt: h.openedAt ?? 0, durationMs: h.windowMs }, "regrade", h.stakes)
       .map((e, i) => ({
         ...e,
         // Unique ids across several records rewritten by the same event.

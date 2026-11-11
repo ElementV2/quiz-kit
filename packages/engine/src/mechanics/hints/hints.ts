@@ -19,6 +19,7 @@ export const hints = defineMechanic<ProgressiveConfig, HintsState>({
   id: "hints",
   configSchema: HintsConfig,
   stateSchema: HintsState,
+  ownPoints: true,
 
   init(cfg, question) {
     if (question.hints.length === 0) return err("invalid", "la question n'a aucun indice");

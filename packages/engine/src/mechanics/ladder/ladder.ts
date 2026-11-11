@@ -151,6 +151,7 @@ export const ladder = defineMechanic<LadderConfig, LadderState>({
   id: "ladder",
   configSchema: LadderConfig,
   stateSchema: LadderState,
+  noStakes: true,
 
   init(cfg, question, _env, round) {
     const spec = question.answerSpec;

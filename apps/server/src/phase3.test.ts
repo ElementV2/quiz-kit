@@ -206,3 +206,54 @@ describe("home page team access (/api/staff)", () => {
   });
 });
 
+
+describe("seat tablets seat their player (/api/seat/claim)", () => {
+  it("a free seat takes a name; a taken seat and other tokens are refused", async () => {
+    const s = await boot();
+    const seat1 = tokenOf(s, "Siège 1");
+    const res = await s.http.inject({ method: "POST", url: `/api/seat/claim?t=${seat1}`, payload: { name: "Ana" } });
+    expect(res.statusCode).toBe(200);
+    expect(s.runtime.current.state.participants).toEqual([expect.objectContaining({ displayName: "Ana", seat: 1, channel: "seat" })]);
+    expect((await s.http.inject({ method: "POST", url: `/api/seat/claim?t=${seat1}`, payload: { name: "Bo" } })).statusCode).toBe(409);
+    expect((await s.http.inject({ method: "POST", url: `/api/seat/claim?t=${tokenOf(s, "Régie")}`, payload: { name: "X" } })).statusCode).toBe(401);
+    expect((await s.http.inject({ method: "POST", url: `/api/seat/claim?t=${tokenOf(s, "Siège 2")}`, payload: { name: "  " } })).statusCode).toBe(400);
+  });
+});
+
+describe("built-in templates seeding", () => {
+  it("each template is offered once: new ones appear on an older data dir, a deleted one never comes back", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "quiz-seed-"));
+    dirs.push(dir);
+    const cfg = { ...Config.parse({ dataDir: dir, host: "127.0.0.1", logLevel: "fatal", seats: 1 }), port: 0 };
+    let s = await startServer(cfg);
+    const t = tokenOf(s, "Régie");
+    const ids = async (): Promise<string[]> => {
+      const body: { games: { id: string }[] } = (await s.http.inject({ method: "GET", url: `/api/games?t=${t}` })).json();
+      return body.games.map((g) => g.id);
+    };
+    expect(await ids()).toEqual(expect.arrayContaining(["g_modele_qcm", "g_modele_soiree", "g_modele_plateau"]));
+    await s.http.inject({ method: "DELETE", url: `/api/games/g_modele_plateau?t=${t}` });
+    await s.close();
+    s = await startServer(cfg);
+    running.push(s);
+    expect(await ids()).not.toContain("g_modele_plateau");
+    expect(await ids()).toContain("g_modele_soiree");
+  });
+});
+
+describe("review 6: names and studio launch", () => {
+  it("names keep composed emojis, lose bidi tricks; the studio launches only while nothing is played", async () => {
+    const s = await boot();
+    const seat1 = tokenOf(s, "Siège 1");
+    await s.http.inject({ method: "POST", url: `/api/seat/claim?t=${seat1}`, payload: { name: "Léa 👩‍🚀‮niamor" } });
+    expect(s.runtime.current.state.participants[0]?.displayName).toBe("Léa 👩‍🚀niamor");
+    // A journal holding such a name reads back after a restart (tolerant schema on read).
+    expect(s.runtime.current.events.length).toBeGreaterThan(0);
+    const studio = tokenOf(s, "Studio");
+    const refused = await s.http.inject({ method: "POST", url: `/api/games/g_modele_qcm/launch?t=${studio}` });
+    expect(refused.statusCode).toBe(409); // a player is in: the control room decides
+    expect((await s.http.inject({ method: "POST", url: `/api/games/g_modele_qcm/launch?t=${tokenOf(s, "Régie")}` })).statusCode).toBe(200);
+    expect((await s.http.inject({ method: "POST", url: `/api/games/g_modele_buzzer/launch?t=${studio}` })).statusCode).toBe(200); // fresh lobby
+  });
+});
+

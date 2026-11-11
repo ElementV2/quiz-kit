@@ -14,7 +14,7 @@ import type { SessionRuntime } from "./runtime/session-runtime.ts";
  * Both servers must share `secret.key` so that every link and token works on either.
  */
 
-const Page = z.object({ session: Session, events: z.array(Event), lastSeq: z.number().int(), next: z.number().int().nullable(), build: z.string().optional() });
+const Page = z.object({ session: Session, events: z.array(Event), lastSeq: z.number().int(), next: z.number().int().nullable(), build: z.string() });
 
 export type StandbyStatus = {
   mode: "standby" | "promoted";
@@ -82,7 +82,12 @@ export class StandbyMirror {
   }
 
   private async follow(): Promise<void> {
-    if (this.status.diverged !== null) return; // stopped following: an operator must look
+    if (this.status.diverged !== null) {
+      // Stopped following, but keep watching whether the primary is alive (the split-brain guard needs it).
+      const res = await this.get(`${this.opts.primary.replace(/\/+$/, "")}/health`).catch(() => null);
+      if (res !== null) this.status.lastContactAt = this.opts.clock();
+      return;
+    }
     let rt = this.opts.runtime();
     const ours = rt.current.events.at(-1)?.seq ?? 0;
     // Ask from our last event (not after it): it must be the same on the primary, else the journals forked.
@@ -90,6 +95,8 @@ export class StandbyMirror {
     for (let page = 0; page < 20; page++) {
       const res = await this.get(`${this.opts.primary.replace(/\/+$/, "")}/api/journal?from=${from}`);
       if (this.stopped) return; // promoted meanwhile: never touch the journal again (review 4 I1)
+      // Any HTTP answer means the primary process is alive (even a 500 / 401): what the split-brain guard needs.
+      this.status.lastContactAt = this.opts.clock();
       if (!res.ok) throw new Error(res.status === 401 ? "jeton régie du principal refusé (secret.key différent ?)" : `principal : HTTP ${res.status}`);
       const p = Page.parse(await res.json());
       if (this.stopped) return;

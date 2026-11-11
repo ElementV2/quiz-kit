@@ -57,6 +57,7 @@ export const allocation = defineMechanic<AllocationConfig, AllocationState>({
   id: "allocation",
   configSchema: AllocationConfig,
   stateSchema: AllocationState,
+  ownPoints: true,
 
   init(cfg, question) {
     const a = question.answerSpec;

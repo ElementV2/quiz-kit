@@ -11,7 +11,16 @@ export type ParticipantStatus = z.infer<typeof ParticipantStatus>;
 export const Channel = z.enum(["seat", "play", "buzzer", "twitch", "youtube"]);
 export type Channel = z.infer<typeof Channel>;
 
+/** Tolerant on purpose: journals written earlier must always read back. New names are cleaned at input (`cleanDisplayName`). */
 export const DisplayName = z.string().trim().min(1).max(40);
+
+/**
+ * What a client-typed name becomes before entering the journal: no control characters, no bidi overrides /
+ * isolates / marks (they could disguise a name on air). Joiners stay (ZWJ builds emojis like 👩‍🚀).
+ */
+export function cleanDisplayName(name: string): string {
+  return name.replaceAll(/[\p{Cc}\u200E\u200F\u202A-\u202E\u2066-\u2069]/gu, "").trim();
+}
 
 export const Participant = z.strictObject({
   id: ParticipantId,

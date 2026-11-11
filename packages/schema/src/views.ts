@@ -319,6 +319,14 @@ export const BaseView = z.strictObject({
   timer: z.strictObject({ endsAt: z.number().int(), durationMs: z.number().int() }).nullable(),
   mechanic: MechanicView.nullable(),
   leaderboard: z.array(LeaderboardRow),
+  /** Live stakes of the question on air (or the next one between questions): shown on air as « ×5 » / « 500 pts ». */
+  stakes: z.strictObject({ points: z.number().int().nullable(), multiplier: z.number().nullable() }).nullable().default(null),
+  /**
+   * Which question a `question.setStakes` sent now would target (the one on air, else the next one; null on a board
+   * between cells — pick the cell first — or when no stakes are possible). `points` is false where the mechanic
+   * decides its own points (board, poll-board, allocation, hints…): only a multiplier applies there.
+   */
+  stakesTarget: z.strictObject({ roundIndex: z.number().int(), questionIndex: z.number().int(), points: z.boolean() }).nullable().default(null),
   /** Manual layers TAKEN by the control room (renderer: `manual` / `auto-hold` layers). */
   layers: z.record(z.string(), z.boolean()).default({}),
   /** Team totals (member points at scoring time + team entries, e.g. poll-board banks), ranked. Empty without teams. */
@@ -392,6 +400,8 @@ export const ControlView = BaseView.extend({
   readonly: z.boolean(),
   /** The host drives the question flow (`host.setDrive`). */
   hostDrives: z.boolean(),
+  /** The live game: title and who may play (a full game refuses new players / seats). */
+  game: z.strictObject({ title: z.string(), mode: z.enum(["solo", "teams", "crowd"]), minPlayers: z.number().int(), maxPlayers: z.number().int(), rounds: z.number().int() }),
   notes: z.string().nullable(),
   nextQuestion: z.strictObject({ id: QuestionId, text: z.string() }).nullable(),
   participants: z.array(Participant),

@@ -41,6 +41,18 @@ export const Action = z.discriminatedUnion("type", [
    * (default: the next one). Refused once revealed (undo, or regrade).
    */
   action("question.replaceFromReserve", { reserveId: QuestionId, questionIndex: z.number().int().min(0).optional() }),
+  /**
+   * Live stakes (« cette question vaut 500 points », « ×5 ») for the question on air — or, between questions,
+   * the next one. `points` replaces the round's base points (time decay scaled alike), `multiplier` multiplies
+   * every point the question gives (rule and mechanic points). Both null = back to the round's rule.
+   */
+  action("question.setStakes", {
+    /** Explicit target (from `BaseView.stakesTarget`): replay never has to guess which question was meant. */
+    roundIndex: z.number().int().min(0),
+    questionIndex: z.number().int().min(0),
+    points: z.number().int().min(0).max(1_000_000).nullable(),
+    multiplier: z.number().min(0.5).max(100).nullable(),
+  }),
   /** Fixes the text of the question on air (typo). */
   action("question.edit", { text: z.string().trim().min(1).max(2000) }),
   /**
@@ -127,7 +139,7 @@ const CONTROL_ONLY: readonly ActionType[] = [
   "question.next", "timer.set", "timer.stop", "player.add", "player.rename", "player.setStatus",
   "player.setTeam", "player.setSeat", "player.remove", "team.add", "undo", "layer.take", "layer.out",
   "element.reveal", "joker.use", "ladder.stop", "poll.control", "poll.steal", "question.replaceFromReserve", "question.edit",
-  "host.setDrive",
+  "host.setDrive", "question.setStakes",
 ];
 
 /**
@@ -136,7 +148,7 @@ const CONTROL_ONLY: readonly ActionType[] = [
  */
 export const HOST_DRIVE_ACTIONS: ReadonlySet<ActionType> = new Set<ActionType>([
   "game.start", "round.start", "question.present", "question.open", "question.lock", "question.reveal", "question.next",
-  "element.reveal", "timer.set", "timer.stop", "joker.use", "ladder.stop", "poll.control", "poll.steal",
+  "element.reveal", "timer.set", "timer.stop", "joker.use", "ladder.stop", "poll.control", "poll.steal", "question.setStakes",
 ]);
 const SCORING: readonly ActionType[] = ["score.adjust", "score.setTotal", "score.void", "question.regrade"];
 

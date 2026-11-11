@@ -1,3 +1,4 @@
+import { cleanDisplayName } from "@quiz/schema";
 import type { IncomingMessage, Server } from "node:http";
 import type { Duplex } from "node:stream";
 import { WebSocketServer, type RawData, type WebSocket } from "ws";
@@ -234,7 +235,8 @@ export class WsTransport {
           return;
         }
         const key = m.key;
-        runtime.enqueue(m.action, actor, key, (ack) => this.send(conn, toAckMessage({ ...ack, key })));
+        const action = m.action.type === "player.add" || m.action.type === "player.rename" ? { ...m.action, displayName: cleanDisplayName(m.action.displayName) || m.action.displayName } : m.action;
+        runtime.enqueue(action, actor, key, (ack) => this.send(conn, toAckMessage({ ...ack, key })));
         return;
       }
       case "pong":

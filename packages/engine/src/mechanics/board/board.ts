@@ -92,6 +92,7 @@ export const board: Mechanic<BoardConfig, BoardState> = {
   id: "board",
   configSchema: BoardConfig,
   stateSchema: BoardState,
+  ownPoints: true,
   freeOrder: true,
 
   init(cfg, question, _env, round) {

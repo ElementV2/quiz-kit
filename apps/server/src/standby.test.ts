@@ -88,5 +88,8 @@ describe("hot standby divergence (review 4 I2)", () => {
     for (let i = 0; i < 40 && (await status()).standby.diverged === null; i++) await new Promise((r) => setTimeout(r, 50));
     expect((await status()).standby.diverged).toContain("journal différent");
     expect(standby.runtime.current.state.teams.map((t) => t.id)).toEqual(["t_x"]); // nothing of the primary mixed in
+    // Promotion of a diverged standby is refused (review 5 I4) — the primary is alive anyway (contact kept).
+    const res = await standby.http.inject({ method: "POST", url: `/api/standby/promote?t=${controlToken(standby)}`, payload: {} });
+    expect(res.statusCode).toBe(409);
   });
 });

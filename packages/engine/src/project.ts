@@ -57,8 +57,32 @@ function base(s: GameState, audience: Audience, participantId: string | null, re
     // Players get the top only: a full 500-row board in every tablet view would make each broadcast O(n²).
     leaderboard: audience === "player" ? leaderboard(s).slice(0, PLAYER_LEADERBOARD_ROWS) : leaderboard(s),
     layers: s.layers,
+    stakes: stakesView(s),
+    stakesTarget: stakesTargetOf(s, registry),
     teamBoard: teamBoard(s),
   };
+}
+
+/** The question a stakes change sent now targets: on air, else the next one (never guessed on a board). */
+function stakesTargetOf(s: GameState, registry: Registry): BaseView["stakesTarget"] {
+  const round = currentRound(s);
+  if (round === null || s.roundIndex === null || s.phase === "revealed" || s.phase === "round.end" || s.phase === "game.end") return null;
+  const m = registry.get(round.mechanic);
+  if (m === null || m.noStakes === true) return null;
+  let questionIndex: number;
+  if (s.mechanic !== null && s.questionIndex !== null) questionIndex = s.questionIndex;
+  else if (m.freeOrder === true) return null; // board between cells: the next cell is not known yet
+  else questionIndex = s.questionIndex === null ? 0 : s.questionIndex + 1;
+  if (round.questions[questionIndex] === undefined) return null;
+  return { roundIndex: s.roundIndex, questionIndex, points: m.ownPoints !== true };
+}
+
+/** Stakes of the question the next stakes change would target (on air, or the next one). */
+function stakesView(s: GameState): BaseView["stakes"] {
+  const st = s.stakes;
+  if (st === null || st.roundIndex !== s.roundIndex) return null;
+  const target = s.mechanic !== null ? s.questionIndex : s.questionIndex === null ? 0 : s.questionIndex + 1;
+  return st.questionIndex === target ? { points: st.points, multiplier: st.multiplier } : null;
 }
 
 /** Between two questions of a round whose mechanic shows something meanwhile (board grid). */
@@ -176,6 +200,7 @@ function controlView(game: Game, readonly: boolean, registry: Registry): Control
     ...base(s, "control", null, registry),
     readonly,
     hostDrives: s.hostDrives,
+    game: { title: s.game.title, mode: s.game.format.participants.mode, minPlayers: s.game.format.participants.min, maxPlayers: s.game.format.participants.max, rounds: s.game.format.rounds.length },
     notes: currentQuestion(s)?.notes ?? null,
     nextQuestion: next(s, registry),
     participants: s.participants,
