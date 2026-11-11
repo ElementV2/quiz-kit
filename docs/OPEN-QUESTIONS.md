@@ -38,6 +38,9 @@
 
 - [ ] Performances WebGL (PixiJS) dans OBS et vMix : bench phase 2. Pas de doc officielle sur l'accélération GPU de
       l'input vMix ni sur la case « Browser Source Hardware Acceleration » d'OBS.
+      Procédure : ajouter `&fx=full&bench=1` (puis `&fx=light`) au lien de sortie dans OBS et dans vMix, lire le
+      compteur fps 5 min. Mesuré en Chromium headless (Playwright) : 60 fps en `full`. Garder `light` par défaut
+      tant que le bench réel n'est pas fait.
 - [ ] Version de Chromium dans vMix 29 (non mentionnée dans les notes de version).
 - [ ] ag-psd : écriture des noms / positions de calques, à confirmer dans les types installés (phase 2).
 - [ ] Twitch : coût exact de `channel.chat.message`, débit max par connexion, keepalive par défaut.

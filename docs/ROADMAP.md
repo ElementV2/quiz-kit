@@ -45,7 +45,7 @@ Règle : une phase n'est terminée que quand ses critères de sortie passent. Co
 
 - [x] Mode Contenu (tableur), mode Scènes (canvas, zones, bindings, inspecteur d'états, simulation)
 - [x] Thèmes (tokens, motion) + génération depuis 2 couleurs (contraste WCAG) — matériaux, sons et logo : à compléter
-- [ ] Moments + couche PixiJS + niveaux de qualité — **bench OBS / vMix**
+- [x] Moments + couche PixiJS + niveaux de qualité (`?fx=full|light|off`, défaut `light`) — **bench OBS / vMix à faire par l'équipe** (`?bench=1` affiche les fps)
 - [ ] Import de design reçu (calque de référence, tracé de zones, découpe, 9-slice, états dérivés)
 - [x] Export gabarit (PNG/SVG + fiche CSV) + réimport par nommage — fiche PDF : à faire
 - [x] Médias : stockage par hash, transcodage ffmpeg, contrôles à l'import

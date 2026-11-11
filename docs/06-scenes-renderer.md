@@ -26,6 +26,10 @@ plein écran 90). Modes `auto`, `manual` (TAKE/OUT), `auto-hold` (le moteur pré
   podium, élimination, barrage) : timeline d'anims + particules + son.
 - Effets (particules, lumières, reflets) dans une **couche WebGL PixiJS** au-dessus du DOM.
   Niveaux de qualité : complet / allégé / désactivé. Bench dans OBS et vMix avant de choisir le défaut.
+  **Implémenté** : `detectMoments(prev, next)` (renderer, pur, testé) compare deux vues projetées — jamais
+  rejoué au rechargement ; `Effects` charge PixiJS à la demande (rien si `?fx=off`), fond transparent, CSP
+  stricte conservée grâce à `pixi.js/unsafe-eval` (polyfills sans `eval`). Paramètres du lien de sortie :
+  `?fx=full|light|off` (défaut `light`), `?bench=1` (émission continue + compteur fps).
 
 ## Thèmes
 

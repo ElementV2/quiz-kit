@@ -5,5 +5,5 @@ import solid from "vite-plugin-solid";
 export default defineConfig({
   base: "/apps/output/",
   plugins: [solid()],
-  build: { outDir: "dist", emptyOutDir: true, target: "es2022", sourcemap: true },
+  build: { outDir: "dist", emptyOutDir: true, target: "es2022", sourcemap: true, chunkSizeWarningLimit: 700 }, // PixiJS chunk (~620 kB) is lazy: loaded only when ?fx≠off
 });

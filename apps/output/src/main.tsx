@@ -1,7 +1,7 @@
 import { Show, createMemo, createResource } from "solid-js";
 import { render } from "solid-js/web";
 import { DEFAULT_THEME, OUTPUT_SCENES, PROGRAM_SCENE, Scene, Theme } from "@quiz/schema";
-import { SceneRenderer } from "@quiz/renderer";
+import { SceneRenderer, parseEffectsLevel } from "@quiz/renderer";
 import { createQuizConnection, tokenFromUrl } from "@quiz/ui";
 
 type Presentation = { theme: Theme | null; scenes: Scene[] };
@@ -22,6 +22,12 @@ async function fetchPresentation(): Promise<Presentation> {
 }
 
 /** /out/<scene>?t=… — 1920×1080, transparent, read-only. A reload gets the exact state from the welcome snapshot. */
+const params = new URLSearchParams(location.search);
+/** `?fx=full|light|off` (default light until the OBS / vMix bench), `?bench=1` shows fps and keeps emitting. */
+const effects = parseEffectsLevel(params.get("fx"));
+const bench = params.get("bench") === "1";
+const preview = params.get("preview") === "1";
+
 function Output() {
   const conn = createQuizConnection({ persist: false, preview: new URLSearchParams(location.search).get("preview") === "1" });
   // Refetch the look whenever the game changes (session id in the view).
@@ -35,7 +41,7 @@ function Output() {
   const theme = () => presentation()?.theme ?? DEFAULT_THEME;
   return (
     <>
-      <SceneRenderer scene={scene()} theme={theme()} view={conn.view()} serverNow={conn.serverNow} mediaUrl={conn.mediaUrl} />
+      <SceneRenderer scene={scene()} theme={theme()} view={conn.view()} serverNow={conn.serverNow} mediaUrl={conn.mediaUrl} effects={preview ? "off" : effects} bench={bench} />
       {/* Operator hint, only while the link is refused: never shown on air once connected. */}
       <Show when={conn.status() === "rejected"}>
         <div style={{ position: "fixed", left: "20px", bottom: "20px", padding: "10px 16px", background: "#7f1d1d", color: "#fff", font: "600 20px system-ui", "border-radius": "10px" }}>

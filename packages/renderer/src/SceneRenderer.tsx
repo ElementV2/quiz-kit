@@ -3,6 +3,8 @@ import { Dynamic } from "solid-js/web";
 import type { Layer, Scene, Theme, View, Zone } from "@quiz/schema";
 import { layerVisible, themeVars } from "./logic.ts";
 import { zoneComponent, type ZoneProps } from "./zones.tsx";
+import { Effects } from "./Effects.tsx";
+import type { EffectsLevel } from "./moments.ts";
 
 export type SceneRendererProps = {
   readonly scene: Scene;
@@ -16,6 +18,10 @@ export type SceneRendererProps = {
   readonly outline?: boolean;
   /** Resolves a media hash to a URL (preloaded blob). Default: `/media/<hash>`. */
   readonly mediaUrl?: (hash: string) => string;
+  /** Moments / particles layer (outputs). Absent = no effects (studio, control previews). */
+  readonly effects?: EffectsLevel;
+  /** Keep emitting particles and show the frame rate (OBS / vMix bench). */
+  readonly bench?: boolean;
 };
 
 /**
@@ -71,6 +77,9 @@ export function SceneRenderer(props: SceneRendererProps): JSX.Element {
             )}
           </For>
         )}
+      </Show>
+      <Show when={props.effects !== undefined && props.effects !== "off"}>
+        <Effects view={props.view} serverNow={props.serverNow} level={props.effects ?? "off"} bench={props.bench === true} width={props.scene.size.w} height={props.scene.size.h} accent={props.theme.colors.accent} />
       </Show>
     </div>
   );

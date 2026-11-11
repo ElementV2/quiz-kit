@@ -106,3 +106,15 @@ test("ladder: the candidate climbs a step, 50:50 hides two answers on air", asyn
   await output.screenshot({ path: "screenshots/ladder-output.png" });
   expect(errors).toEqual([]);
 });
+
+test("effects layer: bench mode loads PixiJS lazily, renders frames, no console error", async ({ browser }) => {
+  const errors: string[] = [];
+  const out = await open(browser, `${path("out-program")}&fx=full&bench=1`, { width: 1920, height: 1080 }, errors);
+  await expect(out.locator(".q-effects canvas")).toHaveCount(1);
+  await expect(out.locator(".q-effects")).toContainText(/[1-9]\d* fps · effets full/, { timeout: 10_000 });
+  await out.screenshot({ path: "screenshots/effects-bench.png" });
+  const off = await open(browser, `${path("out-program")}&fx=off`, { width: 1920, height: 1080 }, errors);
+  await expect(off.locator(".q-zone").first()).toBeVisible();
+  await expect(off.locator(".q-effects")).toHaveCount(0);
+  expect(errors).toEqual([]);
+});
