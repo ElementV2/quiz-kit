@@ -91,6 +91,8 @@ describe("review #2 — tokens never reach the logs", () => {
       runtime: () => { throw new Error("unused"); },
       links: () => ({ origins: [], secureOrigins: [], entries: [] }),
       revoke: () => ({ origins: [], secureOrigins: [], entries: [] }),
+      joinCode: () => "123456",
+      join: () => ({ ok: false as const, error: "unused" }),
       secret: "s",
       show: "main",
       isRevoked: () => false,

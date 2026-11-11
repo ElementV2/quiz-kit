@@ -84,6 +84,12 @@ function controlView(game: Game, readonly: boolean, registry: Registry): Control
     ledger: s.ledger,
     answers: m === null || s.mechanic === null ? [] : m.answers(s.mechanic.state).map((x) => ({ ...x, optionIds: [...x.optionIds] })),
     skipped: [...game.skipped],
+    rundown: s.game.format.rounds.map((r, index) => ({
+      index,
+      title: r.title,
+      mechanic: r.mechanic,
+      questions: r.questions.map((qid, qi) => ({ index: qi, id: qid, text: s.game.questions.find((q) => q.id === qid)?.prompt.text ?? qid, played: s.played.includes(qid) })),
+    })),
     lastSeq: s.lastSeq,
   };
 }

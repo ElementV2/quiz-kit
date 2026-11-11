@@ -5,11 +5,11 @@ export const ALLOWED_DEPS: Readonly<Record<string, readonly string[]>> = {
   "@quiz/protocol": ["@quiz/schema"],
   "@quiz/server": ["@quiz/schema", "@quiz/engine", "@quiz/protocol"],
   "@quiz/renderer": ["@quiz/schema"],
-  "@quiz/ui": [],
+  "@quiz/ui": ["@quiz/schema", "@quiz/protocol"],
   "@quiz/control": ["@quiz/schema", "@quiz/protocol", "@quiz/renderer", "@quiz/ui"],
   "@quiz/host": ["@quiz/schema", "@quiz/protocol", "@quiz/renderer", "@quiz/ui"],
   "@quiz/player": ["@quiz/schema", "@quiz/protocol", "@quiz/renderer", "@quiz/ui"],
-  "@quiz/output": ["@quiz/schema", "@quiz/protocol", "@quiz/renderer"],
+  "@quiz/output": ["@quiz/schema", "@quiz/protocol", "@quiz/renderer", "@quiz/ui"],
   "@quiz/studio": ["@quiz/schema", "@quiz/protocol", "@quiz/renderer", "@quiz/ui", "@quiz/engine"],
   "@quiz/scripts": [],
 };

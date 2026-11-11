@@ -69,6 +69,25 @@
       "rules": {
         "no-underscore-dangle": "off"
       }
+    },
+    {
+      "files": [
+        "**/*.tsx"
+      ],
+      "rules": {
+        "no-unassigned-vars": "off"
+      }
+    },
+    {
+      "files": [
+        "apps/output/**",
+        "apps/control/**",
+        "apps/host/**",
+        "apps/player/**"
+      ],
+      "rules": {
+        "import/no-unassigned-import": "off"
+      }
     }
   ],
   "ignorePatterns": [

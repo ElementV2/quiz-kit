@@ -16,6 +16,7 @@
     "load": "node tools/load.ts"
   },
   "dependencies": {
+    "@fastify/static": "10.1.10",
     "@quiz/engine": "workspace:*",
     "@quiz/protocol": "workspace:*",
     "@quiz/schema": "workspace:*",

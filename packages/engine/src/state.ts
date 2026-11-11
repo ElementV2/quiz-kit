@@ -32,6 +32,8 @@ export const GameState = z.strictObject({
   /** Answer window used by timeDecay: follows the timer actually armed; null without timer. */
   windowMs: z.number().int().nullable(),
   lastSeq: z.number().int(),
+  /** Questions revealed at least once (run-down status). */
+  played: z.array(z.string()),
 });
 export type GameState = z.infer<typeof GameState>;
 
@@ -52,6 +54,7 @@ export function initialState(session: Session): GameState {
     lockedAt: null,
     windowMs: null,
     lastSeq: 0,
+    played: [],
   };
 }
 

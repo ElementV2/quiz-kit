@@ -102,6 +102,15 @@ export const ControlView = BaseView.extend({
   /** Events ignored during the last replay because they became invalid after an undo (ADR-0010). */
   skipped: z.array(z.strictObject({ seq: z.number().int(), type: z.string(), reason: z.string() })),
   lastSeq: z.number().int(),
+  /** Run-down (doc 08): every round and question with its status, for the control room's left column. */
+  rundown: z.array(
+    z.strictObject({
+      index: z.number().int(),
+      title: z.string(),
+      mechanic: z.string(),
+      questions: z.array(z.strictObject({ index: z.number().int(), id: QuestionId, text: z.string(), played: z.boolean() })),
+    }),
+  ),
 });
 export type ControlView = z.infer<typeof ControlView>;
 

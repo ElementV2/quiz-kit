@@ -8,6 +8,7 @@ import type { Config } from "./config.ts";
 import { buildHttpApp, loggerOptions } from "./http/app.ts";
 import { newId } from "./ids.ts";
 import { buildLinks, lanAddresses, linksFile, type Links } from "./links.ts";
+import { signToken } from "./tokens.ts";
 import { realTimers, SessionRuntime, type Clock, type Timers } from "./runtime/session-runtime.ts";
 import { SqliteEventStore } from "./store/sqlite-event-store.ts";
 import { WsTransport } from "./transport/ws-transport.ts";
@@ -121,9 +122,26 @@ async function boot(config: Config, opts: { timers?: Timers; broadcastIntervalMs
     return links;
   };
 
+  // Join code for `/play` (doc 09 « création à l'arrivée ») : 6 digits per session, shown in the control room.
+  const joinKey = `join-code:${session.id}`;
+  let joinCode = store.getMeta(joinKey);
+  if (joinCode === null || !/^\d{6}$/.test(joinCode)) {
+    joinCode = String(randomInt(0, 1_000_000)).padStart(6, "0");
+    store.setMeta(joinKey, joinCode);
+  }
+  const code = joinCode;
+  const joinPlayer = (name: string): { ok: true; token: string; participantId: string } | { ok: false; error: string } => {
+    const participantId = newId("p");
+    const ack = getRuntime().submit({ type: "player.add", participantId, displayName: name, channel: "play" }, { role: "control", id: "join" }, null);
+    if (!ack.ok) return { ok: false, error: ack.reason };
+    return { ok: true, participantId, token: signToken(secret, { v: 1, show: config.show, jti: `player-${participantId}`, exp: null, role: "player", participantId }) };
+  };
+
   const deps = {
     runtime: getRuntime,
     links: () => links,
+    joinCode: () => code,
+    join: joinPlayer,
     revoke,
     secret,
     show: config.show,

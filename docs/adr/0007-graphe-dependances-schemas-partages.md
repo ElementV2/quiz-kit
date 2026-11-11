@@ -11,7 +11,8 @@ vues projetées ». Les types `Action` et `View` n'avaient pas de paquet défini
 ## Décision
 - Les schémas Zod des **actions** (union discriminée) et des **vues par rôle** vivent dans `packages/schema`.
 - Graphe : `schema ← engine`, `schema ← protocol`, `engine + protocol ← server`, `schema ← renderer ← apps`,
-  `protocol ← apps` (client). Seul `apps/studio` peut importer `engine` (simulation d'états).
+  `protocol ← apps` (client). Seul `apps/studio` peut importer `engine` (simulation d'états). `ui` (design system des apps
+  internes) dépend de `schema` et `protocol` : il fournit la connexion réactive partagée (`createQuizConnection`).
 - Vérification : `scripts/check-deps.ts` compare les dépendances `@quiz/*` de chaque `package.json` au graphe
   autorisé (pnpm isole les `node_modules` : un import non déclaré échoue déjà à la résolution). Les imports
   profonds (`@quiz/x/src/...`) sont interdits par lint (`no-restricted-imports`).

@@ -4,13 +4,16 @@
   "private": true,
   "type": "module",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./ui.css": "./src/ui.css"
   },
   "scripts": {
     "test": "vitest run --passWithNoTests",
     "typecheck": "tsc -p tsconfig.json"
   },
   "dependencies": {
+    "@quiz/protocol": "workspace:*",
+    "@quiz/schema": "workspace:*",
     "solid-js": "1.9.19"
   },
   "devDependencies": {

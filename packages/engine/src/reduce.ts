@@ -221,7 +221,8 @@ function reveal(s: GameState, ctx: Ctx, registry: Registry): R {
   }
   // Replaying a question (doc 09 "rejouer") replaces its automatic points instead of adding to them.
   const ledger = s.ledger.map((e) => (e.reason === "auto" && e.questionId === question.id && !e.voided ? { ...e, voided: true } : e));
-  return ok({ ...s, phase: "revealed", timer: null, ledger: [...ledger, ...entries] });
+  const played = s.played.includes(question.id) ? s.played : [...s.played, question.id];
+  return ok({ ...s, phase: "revealed", timer: null, ledger: [...ledger, ...entries], played });
 }
 
 function entry(ctx: Ctx, n: number, target: ScoreTarget, teamId: string | null, delta: number, reason: ScoreEntry["reason"], note: string | null, questionId: string | null): ScoreEntry {
