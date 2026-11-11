@@ -76,4 +76,4 @@ Règle : une phase n'est terminée que quand ses critères de sortie passent. Co
 
 - [ ] Sortie NDI native — étude faite (`docs/studies/ndi.md`) : OBS / vMix émettent le NDI ; module natif seulement sur besoin établi
 - [x] Pilotage des titres vMix par API (`docs/api/vmix.md`)
-- [ ] Éditeur de machine d'états en nodes
+- [x] Éditeur de machine d'états en nodes (studio, Format → Enchaînement ; `format.flow`)

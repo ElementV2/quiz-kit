@@ -113,6 +113,7 @@ test("studio design import: PSD named layers become zones, fonts / colours liste
 
   // PSD template export → re-import: every zone comes back from its layer name.
   const zonesBefore = await studio.locator(".s-zone").count();
+  await studio.getByText("Gabarit pour le graphiste").click(); // folded section of the zone list
   const [dl] = await Promise.all([studio.waitForEvent("download"), studio.getByRole("button", { name: "Gabarit PSD (calques)" }).click()]);
   const file = await dl.path();
   await studio.locator('input[type="file"][accept^=".psd"]').setInputFiles(file);

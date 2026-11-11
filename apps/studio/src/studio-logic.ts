@@ -82,6 +82,7 @@ export function longestText(game: GameDocument, z: Zone): string {
     case "answer-list":
       return game.questions.flatMap((q) => ("options" in q.answerSpec ? q.answerSpec.options.map((o) => o.label) : [])).reduce((a, l) => (l.length > a.length ? l : a), "");
     case "answer-count":
+    case "board-grid":
     case "buzzer":
     case "ladder":
     case "poll-board":

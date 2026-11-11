@@ -27,6 +27,25 @@ export const api = {
   exportUrl: (id: string): string => withToken(`/api/games/${id}/export`),
   importQuiz: async (file: File): Promise<{ id: string; title: string; media: number; missing: number }> =>
     json(await fetch(withToken("/api/import"), { method: "POST", headers: { "content-type": "application/zip" }, body: file })),
+  /**
+   * Whole journal of the current session (replay, doc 09). The server pages it (≤ 2000 events per call):
+   * loop on `next` until null. Raw JSON: validated with Zod by the caller.
+   */
+  journal: async (onProgress?: (loaded: number, lastSeq: number) => void): Promise<{ session: unknown; events: unknown[] }> => {
+    type Page = { session: unknown; events: unknown[]; lastSeq?: number; next?: number | null };
+    let from: number | null = 1;
+    let session: unknown = null;
+    const events: unknown[] = [];
+    while (from !== null) {
+      const page: Page = await json<Page>(await fetch(withToken(`/api/journal?from=${from}`)));
+      session = page.session;
+      events.push(...page.events);
+      onProgress?.(events.length, page.lastSeq ?? events.length);
+      const next: number | null = page.next ?? null;
+      from = next !== null && next > from ? next : null; // never loop on a server that does not page
+    }
+    return { session, events };
+  },
   upload: async (file: File): Promise<Media> => {
     const res = await fetch(withToken(`/api/media?name=${encodeURIComponent(file.name)}`), { method: "POST", headers: { "content-type": file.type || "application/octet-stream" }, body: file });
     return (await json<{ media: Media }>(res)).media;

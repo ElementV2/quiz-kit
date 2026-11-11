@@ -81,8 +81,8 @@ export const Format = z
     tieBreak: z.enum(["speed", "control"]).default("control"),
     /** Absent or empty: rounds follow the list order. */
     flow: z.array(Transition).max(200).optional(),
-    /** Node positions in the studio's flow editor (layout only, never read by the engine). */
-    flowLayout: z.record(RoundId, z.strictObject({ x: z.number(), y: z.number() })).optional(),
+    /** Node positions in the studio's flow editor, by round id or "end" (layout only, never read by the engine). */
+    flowLayout: z.record(z.union([RoundId, z.literal("end")]), z.strictObject({ x: z.number(), y: z.number() })).optional(),
   })
   .superRefine((f, ctx) => {
     const ids = new Set(f.rounds.map((r) => r.id));
