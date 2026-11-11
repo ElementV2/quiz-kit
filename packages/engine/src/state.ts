@@ -30,7 +30,9 @@ export const GameState = z.strictObject({
    * Final mechanic state of the previous question of the current round, handed to the next `init`
    * (round-level mechanics such as ladder). Cleared by `round.start`. Validated like `mechanic`.
    */
-  carry: z.strictObject({ id: z.string(), state: z.unknown(), revealed: z.boolean() }).nullable(),
+  carry: z.strictObject({ id: z.string(), state: z.unknown(), revealed: z.boolean(), questionIndex: z.number().int().min(0) }).nullable(),
+  /** Ledger length at the last `round.start`: replaying a question only voids points of the current round. */
+  roundLedgerStart: z.number().int().min(0),
   timer: TimerState.nullable(),
   openedAt: z.number().int().nullable(),
   lockedAt: z.number().int().nullable(),
@@ -53,6 +55,7 @@ export function initialState(session: Session): GameState {
     ledger: [],
     mechanic: null,
     carry: null,
+    roundLedgerStart: 0,
     timer: null,
     openedAt: null,
     lockedAt: null,

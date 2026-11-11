@@ -61,7 +61,9 @@ Le contrat réel est dans `packages/engine/src/mechanic.ts`. Points notables (ph
 - `init()` reçoit le contexte de manche : l'état final de la question précédente de la même manche
   (`previous`, avec `revealed`) et le nombre de questions restantes. Le cœur le garde dans `GameState.carry`
   (vidé par `round.start`). Seules les mécaniques de manche (`ladder`) s'en servent.
-- `endsRound()` est consulté à `question.next` : `true` termine la manche tout de suite.
+- `endsRound()` est consulté à `question.next` : `true` termine la manche tout de suite. Le `question.next`
+  qui clôt une manche demande à la mécanique `closeRound()` : points `fixed` non écrits par une révélation.
+- Les vues portent `teamBoard` (totaux d'équipe classés, y compris les lignes au nom d'une équipe).
 - Les actions propres aux mécaniques (`buzz`, `answer.judge`, `element.reveal`, `joker.use`, `ladder.stop`,
   `poll.control`, `poll.steal`) passent par `onAction`. Le cœur vérifie avant : rôle, identité du joueur et
   statut actif (`buzz`), existence de l'équipe ou du joueur référencé ; la mécanique vérifie la phase.
@@ -70,7 +72,7 @@ Le contrat réel est dans `packages/engine/src/mechanic.ts`. Points notables (ph
 
 Question `poll` (chaque option a une `value` en %, sinon refus à la présentation). Cases triées par valeur
 décroissante. Config : `maxStrikes` (3), `multiplier` (1).
-`poll.control { teamId }` donne la main (avant ou pendant les réponses) ; réponses ouvertes, la régie /
+`poll.control { teamId }` donne la main (avant le premier jugement ; ensuite, undo) ; réponses ouvertes, la régie /
 l'animateur valide la réponse orale : `answer.judge { optionId, correct: true }` trouve **et révèle** la case,
 `answer.judge { correct: false }` donne une erreur. Toutes les cases trouvées → fin. À `maxStrikes`,
 `poll.steal { teamId }` désigne l'équipe qui vole, dont la réponse unique est jugée de même.
@@ -98,9 +100,13 @@ assurés, défaut `[]`), `jokers` (défaut `["fifty", "audience"]`). Le candidat
 réponse est acceptée dans la manche ; les autres sont refusés. Bonne réponse révélée → palier suivant ;
 mauvaise → retombe au dernier palier assuré atteint, fin ; `ladder.stop` (avant la réponse) garde le palier
 atteint, fin ; dernier palier ou dernière question de la manche → fin. À la fin, `question.next` termine la
-manche (`endsRound`). Le gain final est écrit **une fois** au registre, au `question.reveal` qui termine la
-partie ; les révélations intermédiaires n'écrivent rien. Une question passée sans révélation ne fait pas
-monter. Retirer le candidat remet la partie à zéro.
+manche (`endsRound`, aussi après un `ladder.stop` non révélé). Le gain final est écrit **une fois** au
+registre : au `question.reveal` qui termine la partie, sinon au `question.next` qui clôt la manche
+(`closeRound` : dernière question passée, arrêt sans révélation → palier atteint avant la question). Les
+révélations intermédiaires n'écrivent rien. Une question passée sans révélation ne fait pas monter ; revenir à
+une question déjà jouée est refusé (passer par undo). Retirer le candidat remet la partie à zéro.
+Risque connu : tout joueur actif peut devenir candidat par sa première réponse (le gabarit limite le format
+à 1 participant ; la régie peut répondre pour lui).
 Jokers (`joker.use`, avant la réponse et avant le verrouillage, une fois par partie chacun, visibles de
 tous) : `fifty` masque 2 mauvaises options tirées par `ctx.rng` ; `audience` : le moteur tire le sondage par
 `ctx.rng` (choix le plus simple, sans saisie régie) — 35 à 75 % pour la bonne réponse, le reste réparti au
@@ -135,7 +141,8 @@ que soit la phase, et tracées avec `reason: manual`. En live, l'humain a le der
 
 ## Règles de score
 
-- Une question **rejouée** (re-présentée puis révélée) remplace ses points automatiques précédents (annulés).
+- Une question **rejouée** (re-présentée puis révélée) remplace ses points automatiques précédents (annulés),
+  dans la manche en cours seulement : la même question utilisée par une autre manche garde ses points.
 - `round.start` sans index est refusé tant qu'il reste des questions dans la manche (sauter = index explicite).
 - La dégressivité (`timeDecay`) suit la fenêtre du chrono réellement armé (prolongation comprise) ; sans chrono,
   pas de dégressivité.

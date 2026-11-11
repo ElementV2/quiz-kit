@@ -206,7 +206,7 @@ describe("poll-board projections", () => {
     const q = DEMO_POLL_GAME.questions[0];
     if (q === undefined || q.answerSpec.kind !== "poll") throw new Error("fixture");
     const shuffled: Question = { ...q, answerSpec: { ...q.answerSpec, options: q.answerSpec.options.toReversed() } };
-    const r = pollBoard.init({ maxStrikes: 3, multiplier: 1 }, shuffled, { at: 0, phase: "idle", rng: createRng(1, 1) }, { previous: null, questionsLeft: 0 });
+    const r = pollBoard.init({ maxStrikes: 3, multiplier: 1 }, shuffled, { at: 0, phase: "idle", rng: createRng(1, 1) }, { previous: null, questionIndex: 0, questionsLeft: 0 });
     if (!r.ok) throw new Error(r.error.message);
     expect(pollBoard.project(r.value, { audience: "host", phase: "presenting", participantId: null })).toMatchObject({ slots: [{ value: 38 }, { value: 22 }, { value: 17 }, { value: 9 }, { value: 6 }] });
   });
@@ -239,10 +239,30 @@ describe("poll-board rejections", () => {
 
   it("refuses non-poll questions and options without value", () => {
     const env = { at: 0, phase: "idle", rng: createRng(1, 1) } as const;
-    const round = { previous: null, questionsLeft: 0 };
+    const round = { previous: null, questionIndex: 0, questionsLeft: 0 };
     const oral: Question = { id: "q_o", prompt: { text: "?" }, answerSpec: { kind: "oral", expected: "x" }, hints: [], tags: [] };
     expect(pollBoard.init({ maxStrikes: 3, multiplier: 1 }, oral, env, round)).toMatchObject({ ok: false, error: { code: "unsupported" } });
     const noValue: Question = { ...oral, answerSpec: { kind: "poll", options: [{ id: "a", label: "A" }] } };
     expect(pollBoard.init({ maxStrikes: 3, multiplier: 1 }, noValue, env, round)).toMatchObject({ ok: false, error: { code: "invalid" } });
+    const negative: Question = { ...oral, answerSpec: { kind: "poll", options: [{ id: "a", label: "A", value: -5 }] } };
+    expect(pollBoard.init({ maxStrikes: 3, multiplier: 1 }, negative, env, round)).toMatchObject({ ok: false, error: { code: "invalid" } });
+  });
+});
+
+describe("review of phase 1 mechanics — poll-board", () => {
+  it("#5 team totals reach every view through teamBoard", () => {
+    const g = play([...OPEN, good("a"), ...END]);
+    for (const viewer of [{ role: "output", scene: "program" }, { role: "player", participantId: "p_3" }] as const) {
+      expect(project(g, viewer, reg).teamBoard).toEqual([
+        { teamId: "t_a", name: "Les Rouges", color: "#ff0000", total: 38, rank: 1 },
+        { teamId: "t_b", name: "Les Bleus", color: "#0000ff", total: 0, rank: 2 },
+      ]);
+    }
+  });
+
+  it("#8 the hand cannot change once play has started", () => {
+    expect(rejection(play([...OPEN, good("a")]), { type: "poll.control", teamId: "t_b" })).toBe("conflict");
+    expect(rejection(play([...OPEN, bad]), { type: "poll.control", teamId: "t_b" })).toBe("conflict");
+    expect(rejection(play(OPEN), { type: "poll.control", teamId: "t_b" })).toBeNull();
   });
 });

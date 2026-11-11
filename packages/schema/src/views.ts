@@ -136,6 +136,15 @@ export const LeaderboardRow = z.strictObject({
 });
 export type LeaderboardRow = z.infer<typeof LeaderboardRow>;
 
+export const TeamLeaderboardRow = z.strictObject({
+  teamId: TeamId,
+  name: z.string(),
+  color: z.string(),
+  total: z.number().int(),
+  rank: z.number().int().min(1),
+});
+export type TeamLeaderboardRow = z.infer<typeof TeamLeaderboardRow>;
+
 /** Rows sent to players: the top of the leaderboard only (their own rank is in `me`). */
 export const PLAYER_LEADERBOARD_ROWS = 10;
 
@@ -155,6 +164,8 @@ export const BaseView = z.strictObject({
   timer: z.strictObject({ endsAt: z.number().int(), durationMs: z.number().int() }).nullable(),
   mechanic: MechanicView.nullable(),
   leaderboard: z.array(LeaderboardRow),
+  /** Team totals (member points at scoring time + team entries, e.g. poll-board banks), ranked. Empty without teams. */
+  teamBoard: z.array(TeamLeaderboardRow).default([]),
 });
 export type BaseView = z.infer<typeof BaseView>;
 

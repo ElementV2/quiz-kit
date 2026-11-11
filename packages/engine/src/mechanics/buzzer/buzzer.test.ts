@@ -182,7 +182,7 @@ describe("buzzer rejections", () => {
 
   it("refuses question kinds other than oral and single", () => {
     const poll: Question = { id: "q_p", prompt: { text: "?" }, answerSpec: { kind: "poll", options: [{ id: "a", label: "A", value: 1 }] }, hints: [], tags: [] };
-    const r = buzzer.init({ lockoutOnWrong: true }, poll, { at: 0, phase: "idle", rng: createRng(1, 1) }, { previous: null, questionsLeft: 0 });
+    const r = buzzer.init({ lockoutOnWrong: true }, poll, { at: 0, phase: "idle", rng: createRng(1, 1) }, { previous: null, questionIndex: 0, questionsLeft: 0 });
     expect(r).toMatchObject({ ok: false, error: { code: "unsupported" } });
   });
 });

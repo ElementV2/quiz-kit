@@ -50,7 +50,7 @@ describe("choice projections", () => {
 
   it("refuses poll / oral questions", () => {
     const oral: Question = { id: "q_oral", prompt: { text: "?" }, answerSpec: { kind: "oral", expected: "x" }, hints: [], tags: [] };
-    const r = choice.init({}, oral, { at: 0, phase: "idle", rng: { next: () => 0, int: () => 0, shuffle: (x) => [...x] } }, { previous: null, questionsLeft: 0 });
+    const r = choice.init({}, oral, { at: 0, phase: "idle", rng: { next: () => 0, int: () => 0, shuffle: (x) => [...x] } }, { previous: null, questionIndex: 0, questionsLeft: 0 });
     expect(r).toMatchObject({ ok: false, error: { code: "unsupported" } });
   });
 });

@@ -9,8 +9,9 @@ import type { Rng } from "../../rng.ts";
  * accepted in the round) answers `single` questions; each right answer climbs one step. A wrong answer
  * falls back to the last safe step reached and ends the round; `ladder.stop` keeps the step reached and
  * ends the round; the top step (or the last question of the round) ends it too. The final gain is written
- * to the ledger once, on the `question.reveal` that ends the ladder (a `fixed` judgement): intermediate
- * reveals write nothing. Progression and used jokers travel from question to question through the
+ * to the ledger once: on the `question.reveal` that ends the ladder (a `fixed` judgement), or on the
+ * `question.next` that ends the round when no reveal did (`closeRound`: last question skipped, stop
+ * without reveal). Intermediate reveals write nothing. Going back to an earlier question is refused. Progression and used jokers travel from question to question through the
  * round context (`GameState.carry`).
  *
  * Jokers, once per game each, before the answer:
@@ -159,8 +160,10 @@ export const ladder = defineMechanic<LadderConfig, LadderState>({
     let jokersUsed: S["jokersUsed"] = [];
     const prev = round.previous;
     if (prev !== null) {
+      // Going back would count the replayed question's step twice: undo is the way to replay.
+      if (round.questionIndex <= prev.questionIndex) return err("conflict", "question de paliers déjà jouée : annuler (undo) pour la rejouer");
       const o = outcomeOf(prev.state);
-      if (prev.revealed && isFinal(prev.state, o)) return err("conflict", "partie de paliers terminée : démarrer une nouvelle manche");
+      if (prev.state.stopped || (prev.revealed && isFinal(prev.state, o))) return err("conflict", "partie de paliers terminée : démarrer une nouvelle manche");
       level = prev.state.level + (prev.revealed && o === "correct" ? 1 : 0);
       candidate = prev.state.candidate;
       jokersUsed = [...prev.state.jokersUsed];
@@ -223,7 +226,15 @@ export const ladder = defineMechanic<LadderConfig, LadderState>({
   },
 
   endsRound(s, phase) {
-    return phase === "revealed" && isFinal(s, outcomeOf(s));
+    // A stop ends the ladder even without reveal (control may skip the reveal).
+    return s.stopped || (phase === "revealed" && isFinal(s, outcomeOf(s)));
+  },
+
+  closeRound(s, phase) {
+    // The reveal that ended the ladder already wrote the gain. Otherwise (last question skipped, stop
+    // without reveal, revealed without answer) the candidate keeps the step reached before this question.
+    if (s.candidate === null || (phase === "revealed" && isFinal(s, outcomeOf(s)))) return [];
+    return [{ kind: "fixed", target: { participantId: s.candidate }, outcome: "correct", points: gainAt(s, s.level) }];
   },
 
   removeParticipant(s, participantId) {

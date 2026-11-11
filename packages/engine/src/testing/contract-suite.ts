@@ -5,7 +5,7 @@ import { createGame, decide, replay, type Game } from "../game.ts";
 import type { AnyMechanic, Registry } from "../mechanic.ts";
 import { project } from "../project.ts";
 import { assertNever } from "../result.ts";
-import { participantTotal } from "../state.ts";
+import { participantTotal, teamTotal } from "../state.ts";
 import { actor, CONTROL, deepFreeze, makeSession } from "./harness.ts";
 
 export type ContractOptions = {
@@ -180,8 +180,13 @@ function checkInvariants(g: Game, opts: ContractOptions): void {
       opts.assertNoLeak?.(v, control);
     }
   }
-  for (const row of project(g, { role: "output", scene: "program" }, opts.registry).leaderboard) {
+  const out = project(g, { role: "output", scene: "program" }, opts.registry);
+  for (const row of out.leaderboard) {
     expect(row.total, "leaderboard total differs from ledger").toBe(participantTotal(s, row.participantId));
+  }
+  expect(out.teamBoard.map((r) => r.teamId).toSorted(), "team board misses teams").toEqual(s.teams.map((t) => t.id).toSorted());
+  for (const row of out.teamBoard) {
+    expect(row.total, "team total differs from ledger").toBe(teamTotal(s, row.teamId));
   }
 }
 
@@ -233,16 +238,19 @@ export function assertContract(opts: ContractOptions, numRuns = 200): Coverage {
         if (cmd.k === "control") cov.controlActions++;
         const before = g.state.ledger.length;
         g = r.value.game;
-        if (intent.action.type === "question.reveal") {
-          cov.reveals++;
-          cov.autoScores += g.state.ledger.length - before;
-        }
+        if (intent.action.type === "question.reveal") cov.reveals++;
+        // Reveals score; so does the question.next that closes a round (ladder ended without reveal).
+        if (intent.action.type === "question.reveal" || intent.action.type === "question.next") cov.autoScores += g.state.ledger.length - before;
         if (intent.action.type === "undo") cov.undos++;
         checkInvariants(g, opts);
       }
       cov.skipped += g.skipped.length;
       const replayed = replay(g.session, g.events, opts.registry);
       expect(replayed.state, "replay differs from live state").toEqual(g.state);
+      // Crash recovery from a mid-show snapshot (carry and mechanic state included) gives the same state.
+      const mid = Math.floor(g.events.length / 2);
+      const snapshot = { seq: mid, state: replay(g.session, g.events.slice(0, mid), opts.registry).state };
+      expect(replay(g.session, g.events, opts.registry, snapshot).state, "replay from snapshot differs").toEqual(g.state);
     }),
     { numRuns },
   );

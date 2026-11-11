@@ -146,3 +146,22 @@ describe("failure cases at question.present", () => {
     expect(present(withRound({ mechanicConfig: { shuffleOptions: "yes" } }))).toMatchObject({ ok: false, error: { code: "invalid" } });
   });
 });
+
+describe("phase 1 review — replay scope and snapshots", () => {
+  it("the same question in two rounds keeps the first round's points", () => {
+    const round = DEMO_GAME.format.rounds[0];
+    if (round === undefined) throw new Error("fixture");
+    const game = { ...DEMO_GAME, format: { ...DEMO_GAME.format, rounds: [{ ...round, questions: ["q_capital_fr"] }, { ...round, id: "r_2", questions: ["q_capital_fr"] }] } };
+    const once = [ctl({ type: "question.present" }), ctl({ type: "question.open" }), answer("p_1", "b"), ctl({ type: "question.lock" }), ctl({ type: "question.reveal" }), ctl({ type: "question.next" })];
+    const g = run(reg, [...START, ...once, ctl({ type: "round.start" }), ...once], createGame(makeSession(game)));
+    expect(g.state.ledger.filter((e) => e.reason === "auto" && !e.voided)).toHaveLength(2);
+  });
+
+  it("a snapshot from an older version (no carry) is ignored without throwing", () => {
+    const g = run(reg, [...OPEN_Q1, answer("p_1", "b")]);
+    const { carry: _carry, roundLedgerStart: _start, ...old } = g.state;
+    // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- test-only: simulates a snapshot written by an older engine
+    const state = old as unknown as typeof g.state;
+    expect(replay(g.session, g.events, reg, { seq: lastSeq(g), state }).state).toEqual(g.state);
+  });
+});

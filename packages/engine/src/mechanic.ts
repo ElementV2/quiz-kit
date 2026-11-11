@@ -36,13 +36,17 @@ export type Judgement =
       readonly points: number;
     };
 
+export type FixedJudgement = Extract<Judgement, { kind: "fixed" }>;
+
 /**
  * What `init` knows about the round. `previous` is the final state of the previous question of the same
  * round (same mechanic), `revealed` telling whether it was revealed or skipped. Round-level mechanics
  * (ladder) carry their progression through it; per-question mechanics ignore it.
  */
 export type RoundContext<S> = {
-  readonly previous: { readonly state: S; readonly revealed: boolean } | null;
+  readonly previous: { readonly state: S; readonly revealed: boolean; readonly questionIndex: number } | null;
+  /** Index of the question being presented in the round. */
+  readonly questionIndex: number;
   /** Questions left in the round after this one. */
   readonly questionsLeft: number;
 };
@@ -69,6 +73,11 @@ export interface Mechanic<C, S> {
   judge(state: S): readonly Judgement[];
   /** Asked on `question.next`: true ends the round now (ladder lost, stopped or top step reached). */
   endsRound(state: S, phase: Phase): boolean;
+  /**
+   * Called on the `question.next` that ends the round: points not written by a reveal (ladder ended by a
+   * skipped last question or a stop without reveal). Written to the ledger like reveal points.
+   */
+  closeRound(state: S, phase: Phase): readonly FixedJudgement[];
   /** Accepted answer of a participant, for the player view. */
   answerOf(state: S, participantId: ParticipantId): readonly string[] | null;
   /** Drops a removed participant's answer (ids may be reused later). */

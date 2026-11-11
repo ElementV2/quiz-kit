@@ -1,5 +1,5 @@
 import { isAllowed, type Action, type ActionOf, type Actor, type Participant, type ScoreEntry, type ScoreTarget } from "@quiz/schema";
-import type { AnyMechanic, MechanicEnv, Registry } from "./mechanic.ts";
+import type { AnyMechanic, FixedJudgement, MechanicEnv, Registry } from "./mechanic.ts";
 import { assertNever, err, ok, type Rejection, type Result } from "./result.ts";
 import type { Rng } from "./rng.ts";
 import { pointsFor } from "./scoring.ts";
@@ -39,7 +39,7 @@ function reduceAllowed(s: GameState, a: Action, ctx: Ctx, registry: Registry): R
       }
       const index = a.roundIndex ?? (s.roundIndex === null ? 0 : s.roundIndex + 1);
       if (s.game.format.rounds[index] === undefined) return err("not-found", `manche ${index} inexistante`);
-      return ok({ ...s, phase: "idle", roundIndex: index, questionIndex: null, carry: null });
+      return ok({ ...s, phase: "idle", roundIndex: index, questionIndex: null, carry: null, roundLedgerStart: s.ledger.length });
     }
 
     case "question.present":
@@ -96,8 +96,12 @@ function reduceAllowed(s: GameState, a: Action, ctx: Ctx, registry: Registry): R
       const isLastQuestion = round === null || qi + 1 >= round.questions.length || endsRound;
       const isLastRound = s.roundIndex === null || s.roundIndex + 1 >= s.game.format.rounds.length;
       const phase = !isLastQuestion ? "idle" : isLastRound ? "game.end" : "round.end";
-      const carry = s.mechanic === null ? s.carry : { id: s.mechanic.id, state: s.mechanic.state, revealed: s.phase === "revealed" };
-      return ok({ ...s, phase, mechanic: null, carry, timer: null, openedAt: null, lockedAt: null, windowMs: null });
+      const carry = s.mechanic === null ? s.carry : { id: s.mechanic.id, state: s.mechanic.state, revealed: s.phase === "revealed", questionIndex: qi };
+      // A round ending here lets the mechanic bank what was not scored by a reveal (ladder skipped / stopped).
+      const question = currentQuestion(s);
+      const closing = isLastQuestion && m !== null && s.mechanic !== null && question !== null ? m.closeRound(s.mechanic.state, s.phase) : [];
+      const ledger = [...s.ledger, ...fixedEntries(s, ctx, closing, question?.id ?? null, 0)];
+      return ok({ ...s, phase, ledger, mechanic: null, carry, timer: null, openedAt: null, lockedAt: null, windowMs: null });
     }
 
     case "answer.submit": {
@@ -182,7 +186,8 @@ function reduceAllowed(s: GameState, a: Action, ctx: Ctx, registry: Registry): R
       const without = { ...s, participants: s.participants.filter((p) => p.id !== a.participantId) };
       // Purge their answer (and carried progression): an id reused later must not inherit it (no leak, no phantom score).
       const carryMechanic = s.carry === null ? null : registry.get(s.carry.id);
-      const purged = s.carry === null || carryMechanic === null ? without : { ...without, carry: { ...s.carry, state: carryMechanic.removeParticipant(s.carry.state, a.participantId) } };
+      // Unknown carried mechanic (cannot purge it): drop the carry rather than keep stale progression.
+      const purged = s.carry === null ? without : carryMechanic === null ? { ...without, carry: null } : { ...without, carry: { ...s.carry, state: carryMechanic.removeParticipant(s.carry.state, a.participantId) } };
       if (s.mechanic === null) return ok(purged);
       return withMechanic(purged, registry, (m, state) => ok(m.removeParticipant(state, a.participantId)));
     }
@@ -215,8 +220,8 @@ function present(s: GameState, a: ActionOf<"question.present">, ctx: Ctx, regist
   if (m === null) return err("unsupported", `mécanique inconnue : ${round.mechanic}`);
   const cfg = m.configSchema.safeParse(round.mechanicConfig);
   if (!cfg.success) return err("invalid", `configuration de mécanique invalide : ${cfg.error.message}`);
-  const previous = s.carry !== null && s.carry.id === m.id ? { state: s.carry.state, revealed: s.carry.revealed } : null;
-  const init = m.init(cfg.data, question, envOf(s, ctx), { previous, questionsLeft: round.questions.length - index - 1 });
+  const previous = s.carry !== null && s.carry.id === m.id ? { state: s.carry.state, revealed: s.carry.revealed, questionIndex: s.carry.questionIndex } : null;
+  const init = m.init(cfg.data, question, envOf(s, ctx), { previous, questionIndex: index, questionsLeft: round.questions.length - index - 1 });
   if (!init.ok) return init;
   return ok({ ...s, phase: "presenting", questionIndex: index, mechanic: { id: m.id, state: init.value }, timer: null, openedAt: null, lockedAt: null, windowMs: null });
 }
@@ -229,10 +234,10 @@ function reveal(s: GameState, ctx: Ctx, registry: Registry): R {
   const m = registry.get(s.mechanic.id);
   if (m === null) return err("unsupported", `mécanique inconnue : ${s.mechanic.id}`);
   if (s.openedAt === null) return err("conflict", "réponses jamais ouvertes");
-  const judgements = m.judge(s.mechanic.state);
   const window = { openedAt: s.openedAt, durationMs: s.windowMs };
   const entries: ScoreEntry[] = [];
-  for (const j of judgements) {
+  const fixed: FixedJudgement[] = [];
+  for (const j of m.judge(s.mechanic.state)) {
     switch (j.kind) {
       case "rule": {
         const p = s.participants.find((x) => x.id === j.participantId);
@@ -241,27 +246,35 @@ function reveal(s: GameState, ctx: Ctx, registry: Registry): R {
         if (delta !== 0) entries.push(entry(ctx, entries.length, { participantId: p.id }, p.teamId, delta, "auto", null, question.id));
         break;
       }
-      case "fixed": {
-        if (j.points === 0) continue;
-        if ("participantId" in j.target) {
-          const pid = j.target.participantId;
-          const p = s.participants.find((x) => x.id === pid);
-          if (p === undefined) continue;
-          entries.push(entry(ctx, entries.length, { participantId: p.id }, p.teamId, j.points, "auto", null, question.id));
-        } else {
-          const tid = j.target.teamId;
-          if (!s.teams.some((t) => t.id === tid)) continue;
-          entries.push(entry(ctx, entries.length, { teamId: tid }, tid, j.points, "auto", null, question.id));
-        }
+      case "fixed":
+        fixed.push(j);
         break;
-      }
       default:
         return assertNever(j);
     }
   }
-  // Replaying a question (doc 09 "rejouer") replaces its automatic points instead of adding to them.
-  const ledger = s.ledger.map((e) => (e.reason === "auto" && e.questionId === question.id && !e.voided ? { ...e, voided: true } : e));
+  entries.push(...fixedEntries(s, ctx, fixed, question.id, entries.length));
+  // Replaying a question (doc 09 "rejouer") replaces its automatic points instead of adding to them —
+  // within the current round only: the same question used by another round keeps its points.
+  const ledger = s.ledger.map((e, i) => (i >= s.roundLedgerStart && e.reason === "auto" && e.questionId === question.id && !e.voided ? { ...e, voided: true } : e));
   return ok({ ...s, phase: "revealed", timer: null, ledger: [...ledger, ...entries] });
+}
+
+/** Ledger entries for mechanic-decided points (player or team target); 0 points and unknown targets write nothing. */
+function fixedEntries(s: GameState, ctx: Ctx, judgements: readonly FixedJudgement[], questionId: string | null, from: number): ScoreEntry[] {
+  const out: ScoreEntry[] = [];
+  for (const j of judgements) {
+    if (j.points === 0) continue;
+    if ("participantId" in j.target) {
+      const pid = j.target.participantId;
+      const p = s.participants.find((x) => x.id === pid);
+      if (p !== undefined) out.push(entry(ctx, from + out.length, { participantId: p.id }, p.teamId, j.points, "auto", null, questionId));
+    } else {
+      const tid = j.target.teamId;
+      if (s.teams.some((t) => t.id === tid)) out.push(entry(ctx, from + out.length, { teamId: tid }, tid, j.points, "auto", null, questionId));
+    }
+  }
+  return out;
 }
 
 function entry(ctx: Ctx, n: number, target: ScoreTarget, teamId: string | null, delta: number, reason: ScoreEntry["reason"], note: string | null, questionId: string | null): ScoreEntry {

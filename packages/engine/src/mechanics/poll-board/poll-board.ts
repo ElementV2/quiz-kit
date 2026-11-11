@@ -56,6 +56,8 @@ function giveHand(s: S, a: ActionOf<"poll.control">, env: MechanicEnv): R {
   if (env.phase !== "presenting" && env.phase !== "open") return err("wrong-phase", "la main se donne avant ou pendant le jeu");
   if (s.stage !== "play") return err("conflict", "le jeu de cette équipe est terminé");
   if (s.controllingTeamId === a.teamId) return err("conflict", "cette équipe a déjà la main");
+  // Changing hands mid-play would hand the other team's bank and strikes over: undo instead.
+  if (s.strikes > 0 || s.slots.some((x) => x.found)) return err("conflict", "le jeu a commencé : annuler (undo) pour changer de main");
   return ok({ ...s, controllingTeamId: a.teamId });
 }
 
@@ -124,7 +126,7 @@ export const pollBoard = defineMechanic<PollBoardConfig, PollBoardState>({
     if (spec.kind !== "poll") return err("unsupported", `la mécanique poll-board ne gère que les sondages (pas ${spec.kind})`);
     const slots: S["slots"] = [];
     for (const o of spec.options) {
-      if (o.value === undefined) return err("invalid", `la réponse « ${o.label} » n'a pas de valeur (%)`);
+      if (o.value === undefined || o.value < 0) return err("invalid", `la réponse « ${o.label} » n'a pas de valeur (%) positive`);
       slots.push({ optionId: o.id, label: o.label, value: o.value, revealed: false, found: false });
     }
     return ok({
@@ -164,6 +166,10 @@ export const pollBoard = defineMechanic<PollBoardConfig, PollBoardState>({
 
   endsRound() {
     return false;
+  },
+
+  closeRound() {
+    return [];
   },
 
   removeParticipant(s) {

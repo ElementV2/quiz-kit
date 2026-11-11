@@ -249,7 +249,45 @@ describe("ladder projections and rejections", () => {
 
   it("refuses non-single questions", () => {
     const oral: Question = { id: "q_o", prompt: { text: "?" }, answerSpec: { kind: "oral", expected: "x" }, hints: [], tags: [] };
-    const r = ladder.init({ steps: [1], safeSteps: [], jokers: [] }, oral, { at: 0, phase: "idle", rng: createRng(1, 1) }, { previous: null, questionsLeft: 0 });
+    const r = ladder.init({ steps: [1], safeSteps: [], jokers: [] }, oral, { at: 0, phase: "idle", rng: createRng(1, 1) }, { previous: null, questionIndex: 0, questionsLeft: 0 });
     expect(r).toMatchObject({ ok: false, error: { code: "unsupported" } });
+  });
+});
+
+describe("review of phase 1 mechanics — ladder", () => {
+  it("#1 a second ladder on the same questions never voids the first one's gain", () => {
+    const round = DEMO_LADDER_GAME.format.rounds[0];
+    if (round === undefined) throw new Error("fixture");
+    const twice: GameDocument = { ...DEMO_LADDER_GAME, format: { ...DEMO_LADDER_GAME.format, rounds: [round, { ...round, id: "r_ladder_2" }] } };
+    const first = play([...START, ...climb(2), ...OPEN, ctl({ type: "ladder.stop" }), ...SHOW, NEXT], twice);
+    expect(first.state.phase).toBe("round.end");
+    const g = run(reg, [ctl({ type: "round.start" }), ...climb(2), ...q(2, true)], first);
+    expect(participantTotal(g.state, "p_1")).toBe(500);
+    expect(autoEntries(g)).toMatchObject([{ delta: 500, questionId: "q_lad_3" }]);
+  });
+
+  it("#2a skipping the last question banks the step reached", () => {
+    const g = play([...START, ...climb(1), ...OPEN, say("a"), NEXT], withConfig({ steps: [200, 500, 1000], safeSteps: [] }, ["q_lad_1", "q_lad_2"]));
+    expect(g.state.phase).toBe("game.end");
+    expect(participantTotal(g.state, "p_1")).toBe(200);
+  });
+
+  it("#2b a stop followed by question.next without reveal banks the step and ends the round", () => {
+    const g = play([...START, ...climb(2), ...OPEN, ctl({ type: "ladder.stop" }), NEXT]);
+    expect(g.state.phase).toBe("game.end");
+    expect(autoEntries(g)).toMatchObject([{ delta: 500, questionId: "q_lad_3" }]);
+    expect(replay(g.session, g.events, reg).state).toEqual(g.state);
+  });
+
+  it("#2c a ladder ended by its reveal is not banked twice by question.next", () => {
+    const g = play([...START, ...climb(4), ...q(4, false), NEXT]);
+    expect(autoEntries(g)).toHaveLength(1);
+    expect(participantTotal(g.state, "p_1")).toBe(1000);
+  });
+
+  it("#3 going back to a question already played is refused (no double step)", () => {
+    const g = play([...START, ...climb(1)]);
+    expect(rejection(g, { type: "question.present", questionIndex: 0 })).toBe("conflict");
+    expect(viewOf(run(reg, [ctl({ type: "question.present", questionIndex: 1 })], g))).toMatchObject({ level: 1 });
   });
 });

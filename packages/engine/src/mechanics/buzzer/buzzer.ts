@@ -99,6 +99,10 @@ export const buzzer = defineMechanic<BuzzerConfig, BuzzerState>({
     return false;
   },
 
+  closeRound() {
+    return [];
+  },
+
   removeParticipant(s, participantId) {
     return { ...s, buzzes: s.buzzes.filter((b) => b.participantId !== participantId) };
   },
