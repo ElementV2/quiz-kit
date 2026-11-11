@@ -6,6 +6,7 @@ import { Button, HomeLink, MECHANIC_LABEL, MechanicPanel, VerdictsPanel, ON_AIR_
 import "@quiz/ui/ui.css";
 import "./control.css";
 import { api, lanOrigin, token, withToken, type LinksResponse, type StatusResponse } from "./api.ts";
+import { StandbyBar } from "./Standby.tsx";
 import { ApiInfo, ChatPanel, StaffCode } from "./Integrations.tsx";
 import { KeyBuzzersPanel, createKeyBuzzers } from "./KeyBuzzers.tsx";
 import { checklist, nextStep } from "./logic.ts";
@@ -131,6 +132,7 @@ function App() {
         <StatusPill status={conn.status()} queued={conn.queued()} detail={conn.statusDetail()} />
         <HomeLink />
       </header>
+      <StandbyBar />
 
       <Show when={view()} fallback={<p class="c-wait">Connexion à la régie…</p>}>
         {(v) => {

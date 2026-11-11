@@ -25,8 +25,9 @@ jetons marchent alors sur les deux), puis démarrer avec
 Le secours lit le journal du principal toutes les 500 ms (`/api/journal`, paginé), l'écrit dans son propre
 journal et le rejoue : même état exact, quelques centaines de ms derrière ; il suit les changements de partie et
 copie les médias manquants. Tant qu'il n'est pas promu : toute action est refusée, aucun chrono n'est armé,
-aucune partie ne peut y être lancée. Régie du secours : `GET /api/standby` (retard en événements, dernier contact,
-erreur) et **« Basculer »** = `POST /api/standby/promote`.
+aucune partie ne peut y être lancée. Régie du secours : un bandeau sous l'en-tête donne l'état de la copie (retard en
+actions, dernier contact, médias manquants, erreur) et le bouton **« Basculer »** (confirmation ; API :
+`GET /api/standby`, `POST /api/standby/promote`). Sur le serveur principal, rien ne s'affiche.
 
 Bascule **manuelle**, jamais automatique : une coupure du seul lien entre les deux PC laisserait sinon deux
 serveurs décider en même temps (split brain). Procédure : constater la panne du principal (écran régie
