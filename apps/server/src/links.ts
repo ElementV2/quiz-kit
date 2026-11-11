@@ -79,8 +79,9 @@ export function formatLinks(links: Links, linksPath: string, interactive: boolea
   const first = links.origins[0] ?? "http://localhost";
   const lines = [
     "",
-    "════════ Quiz — liens à coller dans OBS / vMix / tablettes ════════",
-    `Adresses de ce PC : ${links.origins.join("  ·  ")}`,
+    "════════ Quiz — serveur de show ════════",
+    `Accueil (toute l'équipe) : ${links.origins.map((o) => `${o}/`).join("  ·  ")}`,
+    `Sur ce PC : http://localhost:${new URL(first).port || "80"}/ (accès direct, le code équipe y est affiché)`,
     ...(links.secureOrigins.length > 0 ? [`HTTPS (tablettes) : ${links.secureOrigins.join("  ·  ")}`] : []),
     "Depuis un autre PC, utiliser l'IP du réseau plateau (pas localhost).",
     "",
@@ -94,10 +95,15 @@ export function formatLinks(links: Links, linksPath: string, interactive: boolea
   return lines.join("\n");
 }
 
-/** Full list, one block per origin, written to the data dir. */
-export function linksFile(links: Links): string {
+/** Full list, one block per origin, written to the data dir (with the team code of the home page). */
+export function linksFile(links: Links, staffCode: string): string {
+  const head = [
+    "# Accueil : ouvrir l'adresse du serveur dans un navigateur, puis entrer le code équipe.",
+    ...links.origins.map((o) => `#   ${o}/`),
+    `# Code équipe : ${staffCode}`,
+  ].join("\n");
   const blocks = [...links.origins, ...links.secureOrigins].map((origin) =>
     [`# ${origin}`, ...links.entries.map((e) => `${e.label}\t${origin}${e.path}`)].join("\n"),
   );
-  return `${blocks.join("\n\n")}\n`;
+  return `${head}\n\n${blocks.join("\n\n")}\n`;
 }

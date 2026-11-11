@@ -13,6 +13,20 @@ import { MediaStore } from "./media/media-store.ts";
 import { PreloadCache } from "./media/preload.ts";
 import { GameLibrary } from "./media/library.ts";
 import { realTimers, SessionRuntime, type Clock, type Timers } from "./runtime/session-runtime.ts";
+import { Rehearsal } from "./rehearsal.ts";
+import { startOscServer } from "./control/osc-server.ts";
+import { ChatHub } from "./chat/chat-hub.ts";
+import { VmixConfig, VmixDriver } from "./vmix/driver.ts";
+import { StandbyMirror } from "./standby.ts";
+import { buildId } from "./http/app.ts";
+
+/** A standby must never start its own game: it would diverge from the primary it mirrors. */
+export class StandbyError extends Error {
+  readonly statusCode = 409;
+  constructor() {
+    super("serveur de secours : lancer les parties sur le serveur principal (ou basculer d'abord)");
+  }
+}
 import { SqliteEventStore } from "./store/sqlite-event-store.ts";
 import { WsTransport } from "./transport/ws-transport.ts";
 
@@ -121,9 +135,27 @@ async function boot(config: Config, opts: { timers?: Timers; broadcastIntervalMs
   const hosts = [...lanAddresses(), "localhost", ...config.publicHosts];
   let port = config.port;
   // HTTPS for tablets arrives with ADR-0012 (phase 1). Outputs (OBS / vMix) work over plain HTTP from any PC.
+  /** Team code of the home page: from the config, else generated once and kept in the journal database. */
+  // 8 characters without look-alikes (no 0/O, 1/I/L): ~1e12 combinations, read out loud easily.
+  const STAFF_ALPHABET = "23456789ABCDEFGHJKMNPQRSTUVWXYZ";
+  const freshStaffCode = (): string => Array.from({ length: 8 }, () => STAFF_ALPHABET[randomInt(0, STAFF_ALPHABET.length)] ?? "X").join("");
+  const staffCodeOf = (): string => {
+    if (config.staffCode !== undefined) return config.staffCode;
+    const existing = store.getMeta("staff-code");
+    if (existing !== null && /^[2-9A-HJKMNP-Z]{8}$/.test(existing)) return existing;
+    const fresh = freshStaffCode();
+    store.setMeta("staff-code", fresh);
+    return fresh;
+  };
+  const rotateStaffCode = (): string => {
+    const fresh = freshStaffCode();
+    store.setMeta("staff-code", fresh);
+    writeLinks();
+    return fresh;
+  };
   const makeLinks = (): Links => buildLinks({ secret, show: config.show, outputs: config.outputs, seats: config.seats, hosts, port, tlsPort: null, generation });
   let links = makeLinks();
-  const writeLinks = (): void => writeFileSync(join(dataDir, "links.txt"), linksFile(links), { mode: 0o600 });
+  const writeLinks = (): void => writeFileSync(join(dataDir, "links.txt"), linksFile(links, staffCodeOf()), { mode: 0o600 });
 
   const revoke = (base: string): Links => {
     const entry = links.entries.find((e) => e.id === base);
@@ -151,6 +183,19 @@ async function boot(config: Config, opts: { timers?: Timers; broadcastIntervalMs
     return { ok: true, participantId, token: signToken(secret, { v: 1, show: config.show, jti: `player-${participantId}`, exp: null, role: "player", participantId }) };
   };
 
+  const rehearsal = new Rehearsal(opts.timers ?? realTimers);
+  let mirror: StandbyMirror | null = null;
+  const vmix = new VmixDriver();
+  const vmixPath = join(dataDir, "vmix.json");
+  const readVmix = (): VmixConfig | null => {
+    try {
+      const r = VmixConfig.safeParse(JSON.parse(readFileSync(vmixPath, "utf8")));
+      return r.success ? r.data : null;
+    } catch {
+      return null;
+    }
+  };
+  const chat = new ChatHub({ runtime: () => getRuntime(), timers: opts.timers ?? realTimers, clock, dataDir, twitchClientId: config.twitchClientId, youtubeApiKey: config.youtubeApiKey, log: { info: (o, m) => http.log.info(o, m), warn: (o, m) => http.log.warn(o, m) } }); // http is created below; only called later
   const deps = {
     runtime: getRuntime,
     links: () => links,
@@ -168,11 +213,39 @@ async function boot(config: Config, opts: { timers?: Timers; broadcastIntervalMs
     presence: () => transport?.presence() ?? { total: 0, byRole: {}, seats: [], players: [] },
     health: () => ({ sessionId: getRuntime().session.id, lastSeq: getRuntime().current.state.lastSeq, journal: { ...store.pragmas(), ...getRuntime().journalHealth } }),
     dataDir,
+    rehearsal,
+    chat,
+    standby: {
+      status: () => mirror?.status ?? null,
+      promote: (force: boolean) => {
+        if (mirror === null || mirror.status.mode !== "standby") return "ce serveur n'est pas un serveur de secours en attente";
+        // Split brain guard (review 4 I3): the primary answered recently → it is probably still running the show.
+        const seen = mirror.status.lastContactAt;
+        if (!force && seen !== null && clock() - seen < 8000) return "le principal répond encore (il y a moins de 8 s) : vérifier qu'il est vraiment arrêté, ou forcer la bascule";
+        mirror.promote();
+        vmix.attach(getRuntime(), readVmix()); // only the active server drives vMix (review 4 m1)
+        http.log.warn({ sessionId: getRuntime().session.id, forced: force }, "BASCULE : ce serveur de secours prend le show");
+        return null;
+      },
+    },
+    vmix: {
+      status: () => ({ ...vmix.status }),
+      config: () => vmix.current,
+      set: (c: VmixConfig | null) => {
+        writeFileSync(vmixPath, JSON.stringify(c), { mode: 0o600 });
+        vmix.attach(getRuntime(), c);
+      },
+    },
+    staffCode: staffCodeOf,
+    rotateStaffCode,
+    registry: defaultRegistry,
   };
   const http = buildHttpApp(deps, { logger: loggerOptions(config.logLevel), bodyLimit: 4 * 1024 * 1024 });
   // 25 ms broadcast coalescing: a burst of 500 answers becomes a few broadcasts, invisible on screen (40 fps).
   runtime = new SessionRuntime(store, defaultRegistry, session, clock, opts.timers ?? realTimers, http.log, { broadcastIntervalMs: opts.broadcastIntervalMs ?? 25 });
   const firstRuntime = runtime;
+  // A standby never drives vMix (the primary does); attached at promotion.
+  if (config.standbyOf === undefined) vmix.attach(runtime, readVmix());
   transport = new WsTransport({ runtime: getRuntime, secret, show: config.show, isRevoked, clock, log: http.log, preload: (viewer) => preloads.for(viewer, getRuntime().session.game) });
   const runtimeOpts = { broadcastIntervalMs: opts.broadcastIntervalMs ?? 25 };
 
@@ -181,16 +254,46 @@ async function boot(config: Config, opts: { timers?: Timers; broadcastIntervalMs
    * journal; every connected screen is re-welcomed on the new one — no link to paste again.
    */
   function switchSession(game: GameDocument): Session {
+    if (mirror !== null && mirror.status.mode === "standby") throw new StandbyError();
     const next: Session = { schemaVersion: 1, id: newId("ses"), game, seed: randomInt(0, 0xffff_ffff), createdAt: clock() };
     store.createSession(next);
-    const old = getRuntime();
-    runtime = new SessionRuntime(store, defaultRegistry, next, clock, opts.timers ?? realTimers, http.log, runtimeOpts);
-    old.close();
-    transport?.rewelcomeAll();
-    http.log.info({ sessionId: next.id, title: game.title }, "nouvelle partie");
+    openSession(next);
     return next;
   }
+  /** Swaps the live session (new game, or the standby following its primary): every screen is re-welcomed. */
+  function openSession(next: Session): void {
+    const old = getRuntime();
+    rehearsal.detach(); // bots belong to the old session
+    runtime = new SessionRuntime(store, defaultRegistry, next, clock, opts.timers ?? realTimers, http.log, runtimeOpts);
+    old.close();
+    if (mirror === null || mirror.status.mode !== "standby") vmix.attach(getRuntime(), vmix.current);
+    transport?.rewelcomeAll();
+    http.log.info({ sessionId: next.id, title: next.game.title }, "nouvelle partie");
+  }
   transport.attach(http.server);
+  // Hot standby: mirror the primary's journal (manual promotion from this server's control room).
+  if (config.standbyOf !== undefined && config.standbyToken === undefined) throw new Error("QUIZ_STANDBY_TOKEN requis avec QUIZ_STANDBY_OF (jeton régie du principal)");
+  if (config.standbyOf !== undefined && config.standbyToken !== undefined) {
+    mirror = new StandbyMirror({
+      primary: config.standbyOf,
+      token: config.standbyToken,
+      intervalMs: 500,
+      runtime: getRuntime,
+      openSession,
+      hasSession: (id) => store.getSession(id) !== null,
+      createSession: (s) => store.createSession(s),
+      media,
+      clock,
+      fetch,
+      build: buildId(defaultRegistry),
+    });
+    mirror.start();
+  }
+  // OSC control (off unless configured): a busy port must not prevent the show from starting.
+  const osc = config.oscPort === undefined ? null : await startOscServer({ port: config.oscPort, host: config.host, allow: config.oscAllow, runtime: getRuntime, log: http.log }).catch((err: unknown) => {
+    http.log.error({ err: err instanceof Error ? err.message : String(err), port: config.oscPort }, "OSC non démarré (port occupé ?)");
+    return null;
+  });
   const tr0 = transport;
   const rt0 = firstRuntime;
   const abort = async (): Promise<void> => {
@@ -226,6 +329,10 @@ async function boot(config: Config, opts: { timers?: Timers; broadcastIntervalMs
     dataDir,
     revoke,
     async close() {
+      osc?.close();
+      mirror?.close();
+      chat.close();
+      vmix.close();
       tr.close();
       getRuntime().close();
       await http.close();

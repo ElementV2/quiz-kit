@@ -1,3 +1,4 @@
+import { timingSafeEqual } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
 import type { Readable } from "node:stream";
 import { join } from "node:path";
@@ -10,6 +11,14 @@ import { loadGameDocument, type GameDocument } from "@quiz/schema";
 import type { MediaStore } from "../media/media-store.ts";
 import { GameLibrary, exportQuiz, importQuiz } from "../media/library.ts";
 import { verifyToken } from "../tokens.ts";
+import { decide, participantTotal, type Registry } from "@quiz/engine";
+import { AnswerSpec, QuestionId } from "@quiz/schema";
+import { buildResults, resultsCsv, resultsHtml } from "../results.ts";
+import type { Rehearsal } from "../rehearsal.ts";
+import type { ChatHub } from "../chat/chat-hub.ts";
+import { VmixConfig } from "../vmix/driver.ts";
+import { COMMANDS, isCommand, runCommand } from "../control/commands.ts";
+import { nextStep, PROTOCOL_VERSION } from "@quiz/protocol";
 import { PREVIEW_CSS, PREVIEW_HTML, PREVIEW_JS } from "./preview-page.ts";
 
 export type HttpDeps = {
@@ -29,6 +38,15 @@ export type HttpDeps = {
   readonly presence: () => Record<string, unknown>;
   readonly health: () => Record<string, unknown>;
   readonly dataDir: string;
+  readonly rehearsal: Rehearsal;
+  readonly chat: ChatHub;
+  /** `promote` returns null on success, else why it was refused. */
+  readonly standby: { status: () => object | null; promote: (force: boolean) => string | null };
+  readonly vmix: { status: () => object; config: () => VmixConfig | null; set: (c: VmixConfig | null) => void };
+  /** Team access code of the home page (`/`). */
+  readonly staffCode: () => string;
+  readonly rotateStaffCode: () => string;
+  readonly registry: Registry;
 };
 
 /** Tokens live in URLs (OBS, QR codes): never let them reach the logs (doc 10). */
@@ -55,9 +73,11 @@ export function loggerOptions(level: string, stream?: { write(s: string): void }
 }
 
 /** Front apps built by Vite (`pnpm build`), served from their `dist`. Falls back to the phase-0 preview if not built. */
-const APPS = ["output", "control", "host", "player", "studio"] as const;
+const APPS = ["output", "control", "host", "player", "studio", "hub"] as const;
 type AppName = (typeof APPS)[number];
-const appDist = (name: AppName): string => join(import.meta.dirname, "..", "..", "..", name, "dist");
+/** Built front-ends: `apps/<name>/dist` in the repo, or `QUIZ_APPS_DIR/<name>/dist` (desktop package). */
+const APPS_ROOT = process.env["QUIZ_APPS_DIR"] ?? join(import.meta.dirname, "..", "..", "..");
+const appDist = (name: AppName): string => join(APPS_ROOT, name, "dist");
 
 function appIndex(name: AppName): string {
   const file = join(appDist(name), "index.html");
@@ -82,8 +102,42 @@ const staffToken = (deps: HttpDeps, req: FastifyRequest<{ Querystring: { t?: str
   return r === "control" || r === "studio";
 };
 
+/** Scores and results: control room or scorer. */
+const scoreToken = (deps: HttpDeps, req: FastifyRequest<{ Querystring: { t?: string } }>): boolean => {
+  const r = roleOf(deps, req);
+  return r === "control" || r === "scorer";
+};
+
+const RegradeBody = z.strictObject({ questionId: QuestionId, answerSpec: AnswerSpec });
+const RehearsalBody = z.strictObject({
+  /** Also run with real players present (explicit: a rehearsal must never pollute a show by mistake). */
+  withPlayers: z.boolean().default(false),
+  bots: z.number().int().min(1).max(500),
+  accuracy: z.number().min(0).max(1).default(0.6),
+  latencyMs: z.number().int().min(0).max(60_000).default(3000),
+});
+
+/** The server PC itself (no proxy in front: the socket address is the peer). */
+const LOOPBACK = new Set(["127.0.0.1", "::1", "::ffff:127.0.0.1"]);
+const StaffBody = z.strictObject({ code: z.string().max(20).optional() });
+/** Failed team-code attempts, all IPs together, before a 5-minute lock (IPv6 / MAC rotation defeats a per-IP cap). */
+const STAFF_GLOBAL_FAILS = 30;
+
 const RevokeBody = z.strictObject({ link: z.string().regex(/^[0-9a-z-]+$/).max(64) });
 const JoinBody = z.strictObject({ code: z.string().regex(/^\d{6}$/), name: z.string().trim().min(1).max(40) });
+
+/** Constant-time comparison of two short strings (team code). */
+function timingSafeEqualStr(a: string, b: string): boolean {
+  const x = Buffer.from(a);
+  const y = Buffer.from(b);
+  return x.length === y.length && timingSafeEqual(x, y);
+}
+
+/** What must be identical on a primary and its standby: protocol version + registered mechanics. */
+export const buildId = (registry: Registry): string => `p${PROTOCOL_VERSION}:${registry.ids().join(",")}`;
+
+/** Events per `/api/journal` page. */
+const JOURNAL_PAGE = 2000;
 
 /** Join attempts per IP and minute (a wrong code must not be brute-forced). */
 const JOIN_LIMIT = 10;
@@ -111,7 +165,7 @@ export function buildHttpApp(deps: HttpDeps, options: FastifyServerOptions): Fas
   /** Every link (with tokens) + the join code, for the control room — requires the control token. */
   app.get<{ Querystring: { t?: string } }>("/api/links", async (req, reply) => {
     if (!controlToken(deps, req)) return reply.code(401).send({ error: "jeton régie requis" });
-    return { ...deps.links(), joinCode: deps.joinCode() };
+    return { ...deps.links(), joinCode: deps.joinCode(), title: deps.runtime().session.game.title };
   });
 
   /** Look of the current game (theme + scenes): public data, any valid role token. Outputs refetch it on a game switch. */
@@ -205,6 +259,173 @@ export function buildHttpApp(deps: HttpDeps, options: FastifyServerOptions): Fas
     return saved.ok ? { id, title: r.game.title, media: r.media, missing: r.missing } : reply.code(400).send({ error: "jeu invalide" });
   });
 
+  /**
+   * After the show (doc 09): `kind=ranking|detail`, `format=csv` (Excel, `;`) or `html` (printable → PDF).
+   * Answers of every player: control room / scorer only.
+   */
+  app.get<{ Querystring: { t?: string; kind?: string; format?: string } }>("/api/results", async (req, reply) => {
+    if (!scoreToken(deps, req)) return reply.code(401).send({ error: "jeton régie requis" });
+    const r = buildResults(deps.runtime().current, deps.registry);
+    const stamp = new Date(deps.clock()).toISOString().slice(0, 16).replace("T", " ");
+    if (req.query.format === "html") return reply.type("text/html; charset=utf-8").header("content-security-policy", "default-src 'none'; style-src 'unsafe-inline'").send(resultsHtml(r, stamp));
+    const kind = req.query.kind === "detail" ? "detail" : "ranking";
+    reply.header("content-disposition", `attachment; filename="resultats-${kind}.csv"`);
+    return reply.type("text/csv; charset=utf-8").send(resultsCsv(r, kind));
+  });
+
+  /** Regrade preview (doc 09 « aperçu avant validation »): totals before / after, nothing journaled. */
+  app.post<{ Querystring: { t?: string } }>("/api/regrade/preview", async (req, reply) => {
+    if (!scoreToken(deps, req)) return reply.code(401).send({ error: "jeton régie requis" });
+    const body = RegradeBody.safeParse(req.body);
+    if (!body.success) return reply.code(400).send({ error: "question et réponse attendues" });
+    const game = deps.runtime().current;
+    const r = decide(game, { action: { type: "question.regrade", ...body.data }, actor: { role: "control", id: "preview" }, idempotencyKey: null }, deps.clock(), deps.registry);
+    if (!r.ok) return reply.code(409).send({ error: r.error.message, code: r.error.code });
+    const after = r.value.game.state;
+    const changes = game.state.participants
+      .map((p) => ({ participantId: p.id, name: p.displayName, before: participantTotal(game.state, p.id), after: participantTotal(after, p.id) }))
+      .filter((c) => c.before !== c.after);
+    return { changes };
+  });
+
+  /** Rehearsal mode (doc 07): bots that answer like tablets. Control only; never during a real show. */
+  app.get<{ Querystring: { t?: string } }>("/api/rehearsal", async (req, reply) => {
+    if (!controlToken(deps, req)) return reply.code(401).send({ error: "jeton régie requis" });
+    return deps.rehearsal.status;
+  });
+  app.post<{ Querystring: { t?: string } }>("/api/rehearsal", async (req, reply) => {
+    if (!controlToken(deps, req)) return reply.code(401).send({ error: "jeton régie requis" });
+    const body = RehearsalBody.safeParse(req.body);
+    if (!body.success) return reply.code(400).send({ error: "bots (1 à 500), accuracy (0 à 1), latencyMs attendus" });
+    const { withPlayers, ...settings } = body.data;
+    const r = await deps.rehearsal.start(deps.runtime(), settings, withPlayers);
+    return r.ok ? { bots: r.bots, refused: r.refused } : reply.code(409).send({ error: r.error });
+  });
+  app.delete<{ Querystring: { t?: string } }>("/api/rehearsal", async (req, reply) => {
+    if (!controlToken(deps, req)) return reply.code(401).send({ error: "jeton régie requis" });
+    return { removed: await deps.rehearsal.stop() };
+  });
+
+  /**
+   * Session + journal, for the replay viewer of the studio (doc 09 « replay depuis le journal »), by pages
+   * (`from` = first seq, at most 2000 events): a show-long journal is never serialised in one go mid-show.
+   */
+  app.get<{ Querystring: { t?: string; from?: string } }>("/api/journal", async (req, reply) => {
+    if (!staffToken(deps, req)) return reply.code(401).send({ error: "jeton régie ou studio requis" });
+    const g = deps.runtime().current;
+    const from = Math.max(1, Number.parseInt(req.query.from ?? "1", 10) || 1);
+    const events = g.events.filter((e) => e.seq >= from).slice(0, JOURNAL_PAGE);
+    const last = events.at(-1);
+    const lastSeq = g.events.at(-1)?.seq ?? 0;
+    // `build`: a standby refuses to follow a primary whose engine judges differently (review 4 I2).
+    return { session: g.session, events, lastSeq, next: last !== undefined && last.seq < lastSeq ? last.seq + 1 : null, build: buildId(deps.registry) };
+  });
+
+  /**
+   * External control API (doc 08), for Bitfocus Companion "Generic: HTTP Requests", Stream Deck, scripts:
+   * `POST /api/v1/<command>` with the control token (`Authorization: Bearer <token>` or `?t=`), optional
+   * arguments `{ "args": [...] }` or `?arg=`. A refused intent still answers 200 `{ ok: false, reason }`
+   * (Companion flags a connection in error on any non-2xx); 401 = bad token, 404 = unknown command.
+   */
+  app.post<{ Querystring: { t?: string; arg?: string }; Params: { command: string } }>("/api/v1/:command", async (req, reply) => {
+    if (!controlToken(deps, req)) return reply.code(401).send({ ok: false, reason: "jeton régie requis" });
+    const cmd = req.params.command;
+    if (!isCommand(cmd)) return reply.code(404).send({ ok: false, reason: `commande inconnue (${COMMANDS.join(", ")})` });
+    const body = z.strictObject({ args: z.array(z.union([z.string().max(64), z.number(), z.boolean()])).max(4).optional() }).safeParse(req.body ?? {});
+    const args = body.success && body.data.args !== undefined ? body.data.args : req.query.arg === undefined ? [] : [req.query.arg];
+    const idem = req.headers["idempotency-key"];
+    const key = typeof idem === "string" && /^[0-9A-Za-z_-]{8,64}$/.test(idem) ? `api-${idem}` : null;
+    return runCommand(deps.runtime(), cmd, args, "api", deps.clock(), key);
+  });
+  /** Chat connectors (Twitch / YouTube) for crowd-vote rounds: status, Twitch device login, start / stop. */
+  app.get<{ Querystring: { t?: string } }>("/api/chat", async (req, reply) => {
+    if (!controlToken(deps, req)) return reply.code(401).send({ error: "jeton régie requis" });
+    return deps.chat.status();
+  });
+  app.post<{ Querystring: { t?: string }; Params: { platform: string; op: string } }>("/api/chat/:platform/:op", async (req, reply) => {
+    if (!controlToken(deps, req)) return reply.code(401).send({ error: "jeton régie requis" });
+    const { platform, op } = req.params;
+    const body = z.strictObject({ channel: z.string().regex(/^[0-9A-Za-z_]{3,25}$/).optional(), videoId: z.string().regex(/^[0-9A-Za-z_-]{6,20}$/).optional() }).safeParse(req.body ?? {});
+    if (!body.success) return reply.code(400).send({ error: "chaîne Twitch ou identifiant de vidéo YouTube invalide" });
+    try {
+      if (platform === "twitch") {
+        const tw = deps.chat.twitch;
+        if (tw === null) return reply.code(409).send({ error: "Twitch non configuré (QUIZ_TWITCH_CLIENT_ID)" });
+        if (op === "login") return await tw.startLogin();
+        if (op === "start" && body.data.channel !== undefined) {
+          await tw.start(body.data.channel);
+          return deps.chat.status();
+        }
+        if (op === "stop") {
+          tw.stop();
+          return deps.chat.status();
+        }
+      }
+      if (platform === "youtube") {
+        const yt = deps.chat.youtube;
+        if (yt === null) return reply.code(409).send({ error: "YouTube non configuré (QUIZ_YOUTUBE_API_KEY)" });
+        if (op === "start" && body.data.videoId !== undefined) {
+          await yt.start(body.data.videoId);
+          return deps.chat.status();
+        }
+        if (op === "stop") {
+          yt.stop();
+          return deps.chat.status();
+        }
+      }
+    } catch (err) {
+      return reply.code(502).send({ error: err instanceof Error ? err.message : "erreur du service de chat" });
+    }
+    return reply.code(404).send({ error: "opération inconnue" });
+  });
+
+  /** Hot standby (doc 05): status on both servers; promotion of the standby by its control room. */
+  app.get<{ Querystring: { t?: string } }>("/api/standby", async (req, reply) => {
+    if (!controlToken(deps, req)) return reply.code(401).send({ error: "jeton régie requis" });
+    return { standby: deps.standby.status() };
+  });
+  app.post<{ Querystring: { t?: string } }>("/api/standby/promote", async (req, reply) => {
+    if (!controlToken(deps, req)) return reply.code(401).send({ error: "jeton régie requis" });
+    const body = z.strictObject({ force: z.boolean().default(false) }).safeParse(req.body ?? {});
+    const r = deps.standby.promote(body.success && body.data.force);
+    if (r !== null) return reply.code(409).send({ error: r });
+    return { standby: deps.standby.status() };
+  });
+
+  /** vMix titles driver (phase 5): config (field → binding) and status. Control only. */
+  app.get<{ Querystring: { t?: string } }>("/api/vmix", async (req, reply) => {
+    if (!controlToken(deps, req)) return reply.code(401).send({ error: "jeton régie requis" });
+    return { config: deps.vmix.config(), status: deps.vmix.status() };
+  });
+  app.put<{ Querystring: { t?: string } }>("/api/vmix", async (req, reply) => {
+    if (!controlToken(deps, req)) return reply.code(401).send({ error: "jeton régie requis" });
+    const body = z.strictObject({ config: VmixConfig.nullable() }).safeParse(req.body);
+    if (!body.success) return reply.code(400).send({ error: `configuration vMix invalide : ${body.error.issues[0]?.message ?? ""}` });
+    deps.vmix.set(body.data.config);
+    return { config: deps.vmix.config(), status: deps.vmix.status() };
+  });
+
+  /** Small state for Companion variables / feedbacks (phase, question, timer, hand, top 3). */
+  app.get<{ Querystring: { t?: string } }>("/api/v1/state", async (req, reply) => {
+    if (!controlToken(deps, req)) return reply.code(401).send({ ok: false, reason: "jeton régie requis" });
+    const v = deps.runtime().view({ role: "control" });
+    if (v.role !== "control") return reply.code(500).send({ ok: false });
+    const m = v.mechanic;
+    const hand = m?.mechanic === "buzzer" || m?.mechanic === "board" ? m.hand : null;
+    const name = (id: string | null) => (id === null ? null : (v.participants.find((p) => p.id === id)?.displayName ?? null));
+    return {
+      ok: true,
+      phase: v.phase,
+      round: v.round?.title ?? null,
+      question: v.question === null ? null : { index: v.question.index + 1, count: v.question.count, text: v.question.prompt.text },
+      timerRemainingMs: v.timer === null ? null : Math.max(0, v.timer.endsAt - deps.clock()),
+      hand: name(hand),
+      next: nextStep(v)?.label ?? null,
+      hostDrives: v.hostDrives,
+      top: v.leaderboard.slice(0, 3).map((r) => ({ rank: r.rank, name: r.displayName, total: r.total })),
+    };
+  });
+
   /** Starts a new game from a game document (imported CSV, template). Control token only; journaled. */
   app.post<{ Querystring: { t?: string } }>("/api/session", async (req, reply) => {
     if (!controlToken(deps, req)) return reply.code(401).send({ error: "jeton régie requis" });
@@ -213,6 +434,53 @@ export function buildHttpApp(deps: HttpDeps, options: FastifyServerOptions): Fas
     if (!r.ok) return reply.code(400).send({ error: "jeu invalide", detail: r.error });
     const s = deps.newSession(r.value);
     return { sessionId: s.id, title: r.value.title, joinCode: deps.joinCode() };
+  });
+
+  const staffAttempts = new Map<string, { windowStart: number; count: number }>();
+  let staffFails = { windowStart: 0, count: 0, lockedUntil: 0 };
+  /**
+   * Home page unlock (doc 08): the team code (or being on the server PC itself) gives every link of the show,
+   * so nobody has to copy long tokens around. Same brute-force guard as `/api/join`.
+   */
+  app.post("/api/staff", async (req, reply) => {
+    // Behind a local proxy every client would look local: then the code is always required (review 3 m6).
+    const proxied = req.headers["x-forwarded-for"] !== undefined || req.headers.forwarded !== undefined;
+    const local = LOOPBACK.has(req.ip) && !proxied;
+    const body = StaffBody.safeParse(req.body ?? {});
+    if (!body.success) return reply.code(400).send({ error: "code attendu" });
+    if (!local) {
+      const now = deps.clock();
+      if (now < staffFails.lockedUntil) return reply.code(429).send({ error: "Trop d'essais : accès équipe bloqué quelques minutes" });
+      if (staffAttempts.size > 10_000) staffAttempts.clear();
+      const a = staffAttempts.get(req.ip);
+      const attempt = a === undefined || now - a.windowStart > 60_000 ? { windowStart: now, count: 0 } : a;
+      attempt.count += 1;
+      staffAttempts.set(req.ip, attempt);
+      if (attempt.count > JOIN_LIMIT) return reply.code(429).send({ error: "Trop d'essais : patienter une minute" });
+      const given = (body.data.code ?? "").toUpperCase().replaceAll(/[\s-]/g, "");
+      if (!timingSafeEqualStr(given, deps.staffCode())) {
+        if (now - staffFails.windowStart > 60_000) staffFails = { windowStart: now, count: 0, lockedUntil: 0 };
+        if (++staffFails.count >= STAFF_GLOBAL_FAILS) staffFails.lockedUntil = now + 5 * 60_000;
+        return reply.code(403).send({ error: "Code équipe incorrect" });
+      }
+      staffAttempts.delete(req.ip);
+    }
+    const links = deps.links();
+    return {
+      title: deps.runtime().session.game.title,
+      joinCode: deps.joinCode(),
+      origins: links.origins,
+      local,
+      // Shown on the server PC only, so the operator can give it to the team.
+      staffCode: local ? deps.staffCode() : null,
+      entries: links.entries.map((e) => ({ label: e.label, id: e.id, role: e.role, path: e.path })),
+    };
+  });
+
+  /** New team code (control token): to run before each show, or after it leaked. Old remembered codes stop working. */
+  app.post<{ Querystring: { t?: string } }>("/api/staff/rotate", async (req, reply) => {
+    if (!controlToken(deps, req)) return reply.code(401).send({ error: "jeton régie requis" });
+    return { staffCode: deps.rotateStaffCode() };
   });
 
   const joinAttempts = new Map<string, { windowStart: number; count: number }>();
@@ -260,6 +528,7 @@ export function buildHttpApp(deps: HttpDeps, options: FastifyServerOptions): Fas
   app.get("/studio", page("studio"));
   app.get("/assets/preview.js", async (_req, reply) => reply.type("text/javascript; charset=utf-8").send(PREVIEW_JS));
   app.get("/assets/preview.css", async (_req, reply) => reply.type("text/css; charset=utf-8").send(PREVIEW_CSS));
-  app.get("/", async (_req, reply) => reply.type("text/plain; charset=utf-8").send("Quiz — serveur de show. Liens : console du serveur et links.txt dans le dossier de données.\n"));
+  // Home page: players join with the code, the team unlocks every screen with the team code.
+  app.get("/", page("hub"));
   return app;
 }

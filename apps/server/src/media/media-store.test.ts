@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Readable } from "node:stream";
 import { afterAll, describe, expect, it } from "vitest";
-import { DEFAULT_THEME, DEMO_GAME, Scene, Theme } from "@quiz/schema";
+import { DEFAULT_THEME, DEMO_GAME, DEMO_HINTS_GAME, Scene, Theme } from "@quiz/schema";
 import { MediaStore, gameMediaHashes, lookMediaHashes } from "./media-store.ts";
 import { PreloadCache, preloadFor } from "./preload.ts";
 
@@ -85,6 +85,19 @@ describe("gameMediaHashes", () => {
   it("no false positive on 65 hex chars or upper case, no false negative before a non-hex char", () => {
     const scenes = [{ id: "s", name: "s", size: { w: 1920, h: 1080 }, layers: [{ id: "l", name: "l", z: 0, mode: "auto" as const, phases: [], zones: [zone(`/media/${h("a")}a`), zone(`/media/${"A".repeat(64)}`), zone(`/media/${h("b")}_x`)] }] }];
     expect(lookMediaHashes({ scenes })).toEqual([h("b")]);
+  });
+});
+
+describe("preload of a reveal-image picture (phase 3 review B1)", () => {
+  it("is never sent to tablets, still to outputs; option media stay", () => {
+    const pic = { hash: h("d"), mime: "image/jpeg" };
+    const q = DEMO_HINTS_GAME.questions[1]; // single-choice question with hints
+    if (q === undefined || q.answerSpec.kind !== "single") throw new Error("fixture");
+    const withOptionMedia = { ...q, prompt: { ...q.prompt, media: pic }, answerSpec: { ...q.answerSpec, options: q.answerSpec.options.map((o, i) => (i === 0 ? { ...o, media: { hash: h("e"), mime: "image/png" } } : o)) } };
+    const game = { ...DEMO_HINTS_GAME, questions: [withOptionMedia], format: { ...DEMO_HINTS_GAME.format, rounds: [{ ...DEMO_HINTS_GAME.format.rounds[0]!, mechanic: "reveal-image", questions: [q.id] }] } }; // oxlint-disable-line typescript/no-non-null-assertion -- fixture has a round
+    const all = { pathOf: (x: string) => `/x/${x}` };
+    for (const role of ["player", "seat", "scorer"]) expect(preloadFor({ role }, game, all)).toEqual([h("e")]);
+    expect(preloadFor({ role: "output" }, game, all).toSorted()).toEqual([h("d"), h("e")]);
   });
 });
 

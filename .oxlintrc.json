@@ -84,7 +84,8 @@
         "apps/control/**",
         "apps/host/**",
         "apps/player/**",
-        "apps/studio/**"
+        "apps/studio/**",
+        "apps/hub/**"
       ],
       "rules": {
         "import/no-unassigned-import": "off"

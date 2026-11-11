@@ -1,3 +1,4 @@
+import { defaultRegistry } from "@quiz/engine";
 import type { GameDocument } from "@quiz/schema";
 import { lookMediaHashes, questionMediaHashes, type MediaStore } from "./media-store.ts";
 
@@ -9,8 +10,20 @@ const LOOK_ROLES: ReadonlySet<string> = new Set(["output", "host", "control", "s
  * studio also get the look. Hashes missing on this server are dropped (review I2: no 404 storm on reconnect).
  */
 export function preloadFor(viewer: { readonly role: string }, game: GameDocument, media: Pick<MediaStore, "pathOf">): string[] {
-  const hashes = LOOK_ROLES.has(viewer.role) ? [...new Set([...questionMediaHashes(game), ...lookMediaHashes(game)])] : questionMediaHashes(game);
+  const hashes = LOOK_ROLES.has(viewer.role) ? [...new Set([...questionMediaHashes(game), ...lookMediaHashes(game)])] : tabletMediaHashes(game);
   return hashes.filter((h) => media.pathOf(h) !== null);
+}
+
+/**
+ * Question media a tablet may hold: the picture of a question whose mechanic hides it from players
+ * (reveal-image: the picture IS the answer) is never preloaded there — `/media` needs no token, a preloaded
+ * file would sit in the tablet's cache (review B1). Its options' media stay (shown on the tablet).
+ */
+export function tabletMediaHashes(game: GameDocument): string[] {
+  const hidden = new Set(game.format.rounds.filter((r) => defaultRegistry.get(r.mechanic)?.hidesPromptMedia === true).flatMap((r) => [...r.questions, ...r.reserve]));
+  const shown = new Set(game.format.rounds.filter((r) => defaultRegistry.get(r.mechanic)?.hidesPromptMedia !== true).flatMap((r) => [...r.questions, ...r.reserve]));
+  // A question used both in a hiding round and elsewhere is hidden everywhere (safe side).
+  return questionMediaHashes({ questions: game.questions.map((q) => (hidden.has(q.id) || !shown.has(q.id) ? { ...q, prompt: { text: q.prompt.text } } : q)) });
 }
 
 /**

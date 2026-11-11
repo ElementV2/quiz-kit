@@ -25,3 +25,20 @@ process.on("uncaughtException", (err) => {
 });
 process.on("SIGINT", () => stop("SIGINT"));
 process.on("SIGTERM", () => stop("SIGTERM"));
+
+// Desktop launcher (ADR-0014): if the launcher dies without stopping us (crash, killed), stop cleanly too —
+// never an orphan server holding the port and the journal.
+const parent = Number(process.env["QUIZ_PARENT_PID"]);
+if (Number.isInteger(parent) && parent > 0) {
+  const alive = (): boolean => {
+    try {
+      process.kill(parent, 0);
+      return true;
+    } catch (err) {
+      return typeof err === "object" && err !== null && "code" in err && err.code === "EPERM"; // exists, not ours
+    }
+  };
+  setInterval(() => {
+    if (!alive()) stop("parent-exit");
+  }, 2000).unref();
+}

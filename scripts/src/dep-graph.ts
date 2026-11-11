@@ -8,6 +8,10 @@ export const ALLOWED_DEPS: Readonly<Record<string, readonly string[]>> = {
   "@quiz/ui": ["@quiz/schema", "@quiz/protocol", "@quiz/renderer"],
   "@quiz/control": ["@quiz/schema", "@quiz/protocol", "@quiz/renderer", "@quiz/ui"],
   "@quiz/host": ["@quiz/schema", "@quiz/protocol", "@quiz/renderer", "@quiz/ui"],
+  /** Home page: design system only (talks to the server over plain HTTP). */
+  "@quiz/hub": ["@quiz/ui"],
+  /** Desktop launcher: no workspace dependency (bundles the server at packaging time). */
+  "@quiz/desktop": [],
   "@quiz/player": ["@quiz/schema", "@quiz/protocol", "@quiz/renderer", "@quiz/ui"],
   "@quiz/output": ["@quiz/schema", "@quiz/protocol", "@quiz/renderer", "@quiz/ui"],
   "@quiz/studio": ["@quiz/schema", "@quiz/protocol", "@quiz/renderer", "@quiz/ui", "@quiz/engine"],

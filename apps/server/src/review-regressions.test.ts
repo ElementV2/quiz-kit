@@ -3,11 +3,13 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { WebSocket } from "ws";
-import { createRegistry, defineMechanic, choice, type Mechanic, type ChoiceConfig, type ChoiceState } from "@quiz/engine";
+import { createRegistry, defaultRegistry, defineMechanic, choice, type Mechanic, type ChoiceConfig, type ChoiceState } from "@quiz/engine";
 import { DEMO_GAME, type Action, type Session } from "@quiz/schema";
 import { Config } from "./config.ts";
 import { buildHttpApp, loggerOptions } from "./http/app.ts";
 import { SessionRuntime } from "./runtime/session-runtime.ts";
+import { Rehearsal } from "./rehearsal.ts";
+import { ChatHub } from "./chat/chat-hub.ts";
 import { MediaStore } from "./media/media-store.ts";
 import { GameLibrary } from "./media/library.ts";
 import { startServer, type RunningServer } from "./server.ts";
@@ -106,6 +108,13 @@ describe("review #2 — tokens never reach the logs", () => {
       presence: () => ({}),
       health: () => ({}),
       dataDir: "",
+      rehearsal: new Rehearsal({ set: () => () => undefined }),
+      registry: defaultRegistry,
+      staffCode: () => "ABCD2345",
+      rotateStaffCode: () => "ABCD2345",
+      vmix: { status: () => ({}), config: () => null, set: () => undefined },
+      standby: { status: () => null, promote: () => "pas un secours" as string | null },
+      chat: new ChatHub({ runtime: () => { throw new Error("unused"); }, timers: { set: () => () => undefined }, clock: () => 0, dataDir: "", log: { info: () => undefined, warn: () => undefined } }),
     };
     const app = buildHttpApp(deps, { logger: loggerOptions("info", { write: (s: string) => (out += s) }) });
     await app.inject({ method: "GET", url: "/control/?t=SECRETTOKEN1" });
@@ -139,6 +148,13 @@ describe("media are served with their own type and cache header (SVG logo, studi
       presence: () => ({}),
       health: () => ({}),
       dataDir: "",
+      rehearsal: new Rehearsal({ set: () => () => undefined }),
+      registry: defaultRegistry,
+      staffCode: () => "ABCD2345",
+      rotateStaffCode: () => "ABCD2345",
+      vmix: { status: () => ({}), config: () => null, set: () => undefined },
+      standby: { status: () => null, promote: () => "pas un secours" },
+      chat: new ChatHub({ runtime: () => { throw new Error("unused"); }, timers: { set: () => () => undefined }, clock: () => 0, dataDir: "", log: { info: () => undefined, warn: () => undefined } }),
     };
     const app = buildHttpApp(deps, { logger: false });
     const res = await app.inject({ method: "GET", url: `/media/${m.hash}` });

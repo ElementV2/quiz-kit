@@ -88,6 +88,8 @@ export class SessionRuntime {
   private armedTimerId: number | null = null;
   private closed = false;
   private journal: JournalHealth = { ok: true, lastError: null, lastErrorAt: null };
+  /** Hot standby (doc 05): mirrors the primary's journal, refuses every intent, arms no timer, until promoted. */
+  private standbyMode = false;
 
   private readonly store: EventStore;
   private readonly registry: Registry;
@@ -121,6 +123,44 @@ export class SessionRuntime {
     for (const e of events) if (e.idempotencyKey !== null) this.accepted.set(e.idempotencyKey, { seq: e.seq, fp: journalFingerprint(e.actor, e.action) });
     log.info({ sessionId: session.id, events: events.length, lastSeq: this.game.state.lastSeq }, "session rechargée depuis le journal");
     this.armTimer();
+  }
+
+  get standby(): boolean {
+    return this.standbyMode;
+  }
+
+  /** Standby on: intents refused, timers off. Off (promotion): this server takes the show from its journal. */
+  setStandby(on: boolean): void {
+    this.standbyMode = on;
+    this.guard("timer", () => this.armTimer());
+  }
+
+  /**
+   * Hot standby: appends events decided by the primary (journal first, like any batch), then folds them from the
+   * current state and broadcasts. Events must follow the last one (seq contiguity), else nothing is applied.
+   */
+  replicate(events: readonly Event[]): { applied: number; skipped: number } {
+    // Never once promoted: this server decides on its own from then on (review 4 I1).
+    if (!this.standbyMode) throw new Error("réplication refusée : ce serveur n'est plus en secours");
+    const last = this.game.events.at(-1)?.seq ?? 0;
+    const fresh = events.filter((e) => e.seq > last);
+    if (fresh.length === 0) return { applied: 0, skipped: 0 };
+    const skippedBefore = this.game.skipped.length;
+    if (fresh[0]?.seq !== last + 1 || fresh.some((e, i) => e.seq !== last + 1 + i)) throw new Error(`journal du principal non contigu après ${last}`);
+    this.store.appendMany(this.session.id, fresh);
+    this.game = replay(this.session, [...this.game.events, ...fresh], this.registry, last === 0 ? undefined : { seq: last, state: this.game.state });
+    for (const e of fresh) if (e.idempotencyKey !== null) this.accepted.set(e.idempotencyKey, { seq: e.seq, fp: journalFingerprint(e.actor, e.action) });
+    if (fresh.some((e) => e.action.type === "question.present")) this.guard("snapshot", () => this.snapshot());
+    this.guard("timer", () => this.armTimer());
+    this.guard("broadcast", () => this.scheduleBroadcast());
+    // An event of the primary refused here = this build judges differently: the mirror diverges (review 4 I2).
+    return { applied: fresh.length, skipped: this.game.skipped.length - skippedBefore };
+  }
+
+  /** Same event (seq, time, actor, action) as one of ours? Used by the standby to detect a forked journal. */
+  sameEventAt(e: Event): boolean {
+    const mine = this.game.events.find((x) => x.seq === e.seq);
+    return mine !== undefined && mine.at === e.at && journalFingerprint(mine.actor, mine.action) === journalFingerprint(e.actor, e.action);
   }
 
   get current(): Game {
@@ -161,6 +201,10 @@ export class SessionRuntime {
     this.flushScheduled = false;
     const batch = this.queue.splice(0);
     if (batch.length === 0) return;
+    if (this.standbyMode) {
+      for (const it of batch) it.done(reply(it.key, { ok: false, code: "not-ready", reason: "serveur de secours : la régie pilote le serveur principal" }));
+      return;
+    }
     if (this.closed) {
       for (const it of batch) it.done(reply(it.key, { ok: false, code: "not-ready", reason: "session fermée" }));
       return;
@@ -364,7 +408,8 @@ export class SessionRuntime {
     this.cancelTimer?.();
     this.cancelTimer = null;
     this.armedTimerId = null;
-    if (t === null || this.closed) return;
+    // The standby never fires timers: the primary does, and its `timer.expired` arrives through the journal.
+    if (t === null || this.closed || this.standbyMode) return;
     this.armedTimerId = t.id;
     this.cancelTimer = this.timers.set(() => this.fireTimer(t.id), Math.max(0, t.endsAt - this.clock()));
   }
