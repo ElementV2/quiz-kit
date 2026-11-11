@@ -58,14 +58,15 @@ function PollBoard(p: { readonly view: HostView; readonly act: Act }): JSX.Eleme
             </span>
             <span class="q-mono">Banque {formatNumber(m().bank)}{m().multiplier !== 1 ? ` ×${m().multiplier}` : ""}</span>
           </div>
-          <Show when={p.view.drive && (m().controllingTeamId === null || (m().stage === "steal" && m().stealingTeamId === null))}>
+          <Show when={p.view.drive && m().stage !== "done" && p.view.phase !== "revealed"}>
             <div class="h-row">
               <select class="h-select" value={team()} onChange={(e) => setTeam(e.currentTarget.value)} aria-label="Équipe">
                 <option value="">Équipe…</option>
                 <For each={p.view.teamBoard}>{(t) => <option value={t.teamId}>{t.name}</option>}</For>
               </select>
-              <Show when={m().controllingTeamId === null} fallback={<button type="button" class="q-btn" disabled={team() === ""} onClick={() => void p.act({ type: "poll.steal", teamId: team() })}>Tentative de vol</button>}>
-                <button type="button" class="q-btn" disabled={team() === ""} onClick={() => void p.act({ type: "poll.control", teamId: team() })}>Donner la main</button>
+              <button type="button" class="q-btn" disabled={team() === "" || team() === m().controllingTeamId} onClick={() => void p.act({ type: "poll.control", teamId: team() })}>{m().controllingTeamId === null ? "Donner la main" : "Passer la main"}</button>
+              <Show when={m().stage === "steal" && m().stealingTeamId === null}>
+                <button type="button" class="q-btn" disabled={team() === ""} onClick={() => void p.act({ type: "poll.steal", teamId: team() })}>Tentative de vol</button>
               </Show>
             </div>
           </Show>

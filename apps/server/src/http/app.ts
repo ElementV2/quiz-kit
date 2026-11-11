@@ -26,7 +26,8 @@ export type HttpDeps = {
   readonly links: () => Links;
   readonly revoke: (linkId: string) => Links;
   readonly joinCode: () => string;
-  readonly newSession: (game: GameDocument) => { id: string };
+  /** `keepPlayers` (default true): the current players come along to the new game (scores reset). */
+  readonly newSession: (game: GameDocument, keepPlayers?: boolean) => { id: string; kept?: number; dropped?: number };
   /** Which library game the live session came from (« Envoyer au direct » only for that one). */
   readonly liveGameId: () => string | null;
   readonly setLiveGameId: (sessionId: string, gameId: string) => void;
@@ -240,7 +241,7 @@ export function buildHttpApp(deps: HttpDeps, options: FastifyServerOptions): Fas
   });
   /** Launches a library game live (control room only). */
   // Control room or studio (« Lancer en direct » on the game being edited): every screen switches, journaled.
-  app.post<{ Querystring: { t?: string }; Params: { id: string } }>("/api/games/:id/launch", async (req, reply) => {
+  app.post<{ Querystring: { t?: string; players?: string }; Params: { id: string } }>("/api/games/:id/launch", async (req, reply) => {
     if (!staffToken(deps, req)) return reply.code(401).send({ error: "jeton régie ou studio requis" });
     // From the studio only while nothing is played (lobby, no player): a show in progress is switched by the control room.
     const live = deps.runtime().current.state;
@@ -249,9 +250,9 @@ export function buildHttpApp(deps: HttpDeps, options: FastifyServerOptions): Fas
     }
     const g = deps.library.get(req.params.id);
     if (g === null) return reply.code(404).send({ error: "partie inconnue" });
-    const s = deps.newSession(g);
+    const s = deps.newSession(g, req.query.players !== "new");
     deps.setLiveGameId(s.id, req.params.id);
-    return { sessionId: s.id, title: g.title, joinCode: deps.joinCode() };
+    return { sessionId: s.id, title: g.title, joinCode: deps.joinCode(), kept: s.kept ?? 0, dropped: s.dropped ?? 0 };
   });
   /** `.quiz` export: game + its media in one zip, to move a game to the show machine. */
   app.get<{ Querystring: { t?: string }; Params: { id: string } }>("/api/games/:id/export", async (req, reply) => {
@@ -482,11 +483,11 @@ export function buildHttpApp(deps: HttpDeps, options: FastifyServerOptions): Fas
   /** Starts a new game from a game document (imported CSV, template). Control token only; journaled. */
   app.post<{ Querystring: { t?: string } }>("/api/session", async (req, reply) => {
     if (!controlToken(deps, req)) return reply.code(401).send({ error: "jeton régie requis" });
-    const body = z.strictObject({ game: z.unknown() }).safeParse(req.body);
+    const body = z.strictObject({ game: z.unknown(), keepPlayers: z.boolean().optional() }).safeParse(req.body);
     const r = loadGameDocument(body.success ? body.data.game : null);
     if (!r.ok) return reply.code(400).send({ error: "jeu invalide", detail: r.error });
-    const s = deps.newSession(r.value);
-    return { sessionId: s.id, title: r.value.title, joinCode: deps.joinCode() };
+    const s = deps.newSession(r.value, body.success ? body.data.keepPlayers : undefined);
+    return { sessionId: s.id, title: r.value.title, joinCode: deps.joinCode(), kept: s.kept ?? 0, dropped: s.dropped ?? 0 };
   });
 
   const staffAttempts = new Map<string, { windowStart: number; count: number }>();

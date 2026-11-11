@@ -189,12 +189,13 @@ describe("poll-board projections", () => {
     expect(viewOf(g, { role: "host" }).slots.map((s) => s.label)).toEqual(["Banane", "Pomme", "Orange", "Kiwi", "Pamplemousse"]);
   });
 
-  it("question.reveal does not flip the remaining slots: control flips them one by one", () => {
+  it("question.reveal shows the whole board to everyone (found ones stay marked); the bank counts found ones only", () => {
     const g = play([...OPEN, good("a"), ...END]);
-    expect(viewOf(g, { role: "output", scene: "program" }).slots.filter((s) => s.revealed)).toHaveLength(1);
-    const flipped = run(reg, [ctl({ type: "element.reveal", index: 1 })], g);
-    expect(viewOf(flipped, { role: "output", scene: "program" }).slots[1]).toMatchObject({ revealed: true, label: "Pomme" });
-    expect(teamTotal(flipped.state, "t_a")).toBe(38);
+    const out = viewOf(g, { role: "output", scene: "program" });
+    expect(out.slots.every((x) => x.revealed && x.label !== null && x.value !== null)).toBe(true);
+    expect(out.slots.filter((x) => x.found)).toHaveLength(1);
+    expect(viewOf(g, { role: "player", participantId: "p_1" }).slots.every((x) => x.label !== null)).toBe(true);
+    expect(teamTotal(g.state, "t_a")).toBe(38);
   });
 
   it("shows strikes, hand and steal to everyone", () => {
@@ -260,9 +261,19 @@ describe("review of phase 1 mechanics — poll-board", () => {
     }
   });
 
-  it("#8 the hand cannot change once play has started", () => {
-    expect(rejection(play([...OPEN, good("a")]), { type: "poll.control", teamId: "t_b" })).toBe("conflict");
-    expect(rejection(play([...OPEN, bad]), { type: "poll.control", teamId: "t_b" })).toBe("conflict");
-    expect(rejection(play(OPEN), { type: "poll.control", teamId: "t_b" })).toBeNull();
+  it("the hand passes to the other team at any time: found answers stay, strikes restart, a steal is dropped", () => {
+    const g = play([...OPEN, good("a"), bad, bad]);
+    const passed = run(reg, [ctl({ type: "poll.control", teamId: "t_b" })], g);
+    expect(viewOf(passed, { role: "output", scene: "program" })).toMatchObject({ controllingTeamId: "t_b", strikes: 0, stage: "play" });
+    expect(viewOf(passed, { role: "output", scene: "program" }).slots.filter((x) => x.found)).toHaveLength(1);
+    const steal = play([...OPEN, bad, bad, bad, ctl({ type: "poll.steal", teamId: "t_b" }), ctl({ type: "poll.control", teamId: "t_b" })]);
+    expect(viewOf(steal, { role: "output", scene: "program" })).toMatchObject({ controllingTeamId: "t_b", stealingTeamId: null, stage: "play", strikes: 0 });
+    expect(rejection(play([...OPEN]), { type: "poll.control", teamId: "t_a" })).toBe("conflict"); // already has it
+    expect(rejection(play([...OPEN, bad, bad, bad]), { type: "poll.control", teamId: "t_a" })).toBe("conflict"); // no 3 fresh tries during a steal
+    expect(rejection(play([...OPEN, good("a"), ...END]), { type: "element.reveal", index: 1 })).toBe("wrong-phase"); // all shown already
+    // undo of the hand change gives back the strikes and the steal stage; the winner takes the whole bank
+    const back = run(reg, [ctl({ type: "undo" })], steal);
+    expect(viewOf(back, { role: "output", scene: "program" })).toMatchObject({ controllingTeamId: "t_a", stealingTeamId: "t_b", stage: "steal", strikes: 3 });
+    expect(rejection(play([...OPEN, good("a"), ...END]), { type: "poll.control", teamId: "t_b" })).toBe("wrong-phase"); // revealed
   });
 });

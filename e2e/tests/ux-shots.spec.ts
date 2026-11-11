@@ -25,7 +25,7 @@ async function open(browser: Browser, url: string, viewport: { width: number; he
 }
 
 async function setup(browser: Browser, request: APIRequestContext, template: string, players: string, errors: string[], control = { width: 1366, height: 768 }) {
-  expect((await request.post(`/api/games/${template}/launch?t=${token("control")}`)).status()).toBe(200);
+  expect((await request.post(`/api/games/${template}/launch?t=${token("control")}&players=new`)).status()).toBe(200);
   const c = await open(browser, path("control"), control, errors);
   await expect(c.getByText("connecté").first()).toBeVisible();
   await c.getByText("Importer des joueurs").click();

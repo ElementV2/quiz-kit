@@ -9,7 +9,7 @@ const path = (id: string): string => links().entries.find((e) => e.id === id)?.p
 const controlToken = (): string => path("control").split("t=")[1] ?? "";
 
 test("studio « Envoyer au direct »: a question added to the live game reaches the control room without relaunching", async ({ browser, request }) => {
-  expect((await request.post(`/api/games/g_e2e_live/launch?t=${controlToken()}`)).status()).toBe(200);
+  expect((await request.post(`/api/games/g_e2e_live/launch?t=${controlToken()}&players=new`)).status()).toBe(200);
   const ctx = await browser.newContext({ viewport: { width: 1600, height: 1000 } });
   const control = await ctx.newPage();
   await control.goto(path("control"));

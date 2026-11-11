@@ -252,7 +252,12 @@ describe("review 6: names and studio launch", () => {
     const studio = tokenOf(s, "Studio");
     const refused = await s.http.inject({ method: "POST", url: `/api/games/g_modele_mixte/launch?t=${studio}` });
     expect(refused.statusCode).toBe(409); // a player is in: the control room decides
-    expect((await s.http.inject({ method: "POST", url: `/api/games/g_modele_mixte/launch?t=${tokenOf(s, "Régie")}` })).statusCode).toBe(200);
+    // The control room relaunches: the player comes along (same id, same seat), so the studio still may not.
+    expect((await s.http.inject({ method: "POST", url: `/api/games/g_modele_mixte/launch?t=${tokenOf(s, "Régie")}` })).json()).toMatchObject({ kept: 1, dropped: 0 });
+    expect(s.runtime.current.state.participants.map((p) => [p.displayName, p.seat])).toEqual([["Léa 👩‍🚀niamor", 1]]);
+    expect((await s.http.inject({ method: "POST", url: `/api/games/g_modele_mixte/launch?t=${studio}` })).statusCode).toBe(409);
+    // Without the players: a fresh lobby, the studio may launch.
+    expect((await s.http.inject({ method: "POST", url: `/api/games/g_modele_mixte/launch?t=${tokenOf(s, "Régie")}&players=new` })).statusCode).toBe(200);
     expect((await s.http.inject({ method: "POST", url: `/api/games/g_modele_buzzer/launch?t=${studio}` })).statusCode).toBe(200); // fresh lobby
   });
 });

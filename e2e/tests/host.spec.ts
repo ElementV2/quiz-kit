@@ -13,7 +13,7 @@ test.afterEach(async () => {
   for (const c of contexts.splice(0)) await c.close();
 });
 test.beforeEach(async ({ request }) => {
-  expect((await request.post(`/api/games/g_e2e_qcm/launch?t=${token("control")}`)).status()).toBe(200);
+  expect((await request.post(`/api/games/g_e2e_qcm/launch?t=${token("control")}&players=new`)).status()).toBe(200);
 });
 
 async function open(browser: Browser, url: string, viewport: { width: number; height: number }, errors: string[]): Promise<Page> {

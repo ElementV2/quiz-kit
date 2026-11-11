@@ -187,6 +187,14 @@ export class SessionRuntime {
     return result;
   }
 
+  /** Several intents decided one after the other and journaled in ONE commit (one fsync), synchronously. */
+  submitMany(items: readonly { readonly action: Action; readonly actor: Actor }[]): Ack[] {
+    const acks: Ack[] = items.map(() => reply(null, { ok: false, code: "server-error", reason: "non traité" }));
+    items.forEach((it, i) => this.queue.push({ action: it.action, actor: it.actor, key: null, done: (a) => (acks[i] = a) }));
+    this.flush();
+    return acks;
+  }
+
   /**
    * Queues an intent for the next group commit (ADR-0008): every intent received in the same event-loop turn is
    * decided one after the other (single writer), journaled in ONE transaction (one fsync), then acked and broadcast

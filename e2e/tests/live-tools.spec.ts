@@ -9,7 +9,7 @@ const path = (id: string): string => links().entries.find((e) => e.id === id)?.p
 const controlToken = (): string => path("control").split("t=")[1] ?? "";
 
 test.beforeEach(async ({ request }) => {
-  expect((await request.post(`/api/games/g_e2e_qcm/launch?t=${controlToken()}`)).status()).toBe(200);
+  expect((await request.post(`/api/games/g_e2e_qcm/launch?t=${controlToken()}&players=new`)).status()).toBe(200);
 });
 
 const guard = (page: Page, errors: string[]): void => {

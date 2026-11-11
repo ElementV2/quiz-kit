@@ -21,7 +21,7 @@ const GAME = GameDocument.parse({
 test("mixed round: QCM, free text then survey in the same round — the tablet follows each kind", async ({ browser, request }) => {
   const t = token("control");
   expect((await request.put(`/api/games/g_mixed_e2e?t=${t}`, { data: { game: GAME } })).status()).toBe(200);
-  expect((await request.post(`/api/games/g_mixed_e2e/launch?t=${t}`)).status()).toBe(200);
+  expect((await request.post(`/api/games/g_mixed_e2e/launch?t=${t}&players=new`)).status()).toBe(200);
   const ctx = await browser.newContext({ viewport: { width: 1366, height: 768 } });
   const control = await ctx.newPage();
   await control.goto(path("control"));

@@ -13,7 +13,7 @@ import { MediaStore } from "./media/media-store.ts";
 import { PreloadCache } from "./media/preload.ts";
 import { GameLibrary } from "./media/library.ts";
 import { realTimers, SessionRuntime, type Clock, type Timers } from "./runtime/session-runtime.ts";
-import { Rehearsal } from "./rehearsal.ts";
+import { Rehearsal, BOT_PREFIX } from "./rehearsal.ts";
 import { startOscServer } from "./control/osc-server.ts";
 import { ChatHub } from "./chat/chat-hub.ts";
 import { VmixConfig, VmixDriver } from "./vmix/driver.ts";
@@ -229,7 +229,7 @@ async function boot(config: Config, opts: { timers?: Timers; broadcastIntervalMs
     runtime: getRuntime,
     links: () => links,
     joinCode: () => joinCodeOf(getRuntime().session.id),
-    newSession: (game: GameDocument) => switchSession(game),
+    newSession: (game: GameDocument, keepPlayers?: boolean) => switchSession(game, keepPlayers),
     liveGameId: () => store.getMeta(`live-game:${getRuntime().session.id}`),
     setLiveGameId: (sid: string, gameId: string) => store.setMeta(`live-game:${sid}`, gameId),
     media,
@@ -283,21 +283,57 @@ async function boot(config: Config, opts: { timers?: Timers; broadcastIntervalMs
   const runtimeOpts = { broadcastIntervalMs: opts.broadcastIntervalMs ?? 25 };
 
   /**
-   * Starts a new game (imported questions, template…) without restarting anything: the old session stays in the
-   * journal; every connected screen is re-welcomed on the new one — no link to paste again.
+   * Launches a new game without restarting anything: the old session stays in the journal; every connected screen is
+   * re-welcomed on the new one — no link to paste again. `keepPlayers` (default): the players of the current game come along — same ids (their
+   * `/play` tokens carry the participant id, so phones stay in), same seats, same teams when the new game is played
+   * in teams, scores back to zero; the join code stays the same. Journaled as ordinary player / team actions of the
+   * new session, before any screen is re-welcomed (nobody sees an empty game).
    */
-  function switchSession(game: GameDocument): Session {
+  function switchSession(game: GameDocument, keepPlayers = true): Session & { kept: number; dropped: number } {
     if (mirror !== null && mirror.status.mode === "standby") throw new StandbyError();
+    const previous = getRuntime();
+    const before = previous.current.state;
     const next: Session = { schemaVersion: 1, id: newId("ses"), game, seed: randomInt(0, 0xffff_ffff), createdAt: clock() };
     store.createSession(next);
-    openSession(next);
-    return next;
+    let kept = 0;
+    let dropped = 0;
+    openSession(next, (rt) => {
+      if (!keepPlayers) return;
+      store.setMeta(`join-code:${next.id}`, joinCodeOf(previous.session.id));
+      const who = { role: "control", id: "relaunch" } as const;
+      // Teams first (team game only), in one commit; players only get a team that really exists.
+      const teamGame = game.format.participants.mode === "teams";
+      const teamActs = teamGame ? before.teams.map((t) => ({ action: { type: "team.add", teamId: t.id, name: t.name, color: t.color } as const, actor: who })) : [];
+      const created = new Set(rt.submitMany(teamActs).flatMap((a, i) => { const id = teamActs[i]?.action.teamId; return a.ok && id !== undefined ? [id] : []; }));
+      // Players in one commit too (one fsync, whatever their number): never a long freeze of the show loop.
+      const people = before.participants.filter((p) => !p.id.startsWith(BOT_PREFIX)); // rehearsal bots belong to the old game
+      const taken = people.slice(0, game.format.participants.max);
+      dropped = people.length - taken.length;
+      const acts = taken.flatMap((p) => [
+        { action: { type: "player.add", participantId: p.id, displayName: p.displayName, channel: p.channel, ...(p.seat === null ? {} : { seat: p.seat }), ...(p.teamId !== null && created.has(p.teamId) ? { teamId: p.teamId } : {}) } as const, actor: who },
+        // Substitutes / waiting players keep that status (eliminated or disconnected ones start again, as active).
+        ...(p.status === "substitute" || p.status === "waiting" ? [{ action: { type: "player.setStatus", participantId: p.id, status: p.status } as const, actor: who }] : []),
+      ]);
+      const acks = rt.submitMany(acts);
+      for (const [i, a] of acks.entries()) {
+        if (acts[i]?.action.type !== "player.add") continue;
+        if (a.ok) kept++;
+        else dropped++;
+      }
+    });
+    return { ...next, kept, dropped };
   }
   /** Swaps the live session (new game, or the standby following its primary): every screen is re-welcomed. */
-  function openSession(next: Session): void {
+  function openSession(next: Session, prepare?: (rt: SessionRuntime) => void): void {
     const old = getRuntime();
     rehearsal.detach(); // bots belong to the old session
     runtime = new SessionRuntime(store, defaultRegistry, next, clock, opts.timers ?? realTimers, http.log, runtimeOpts);
+    try {
+      prepare?.(runtime);
+    } catch (e) {
+      // Never half switched: the new game goes live anyway (without the players carried over).
+      http.log.error({ err: e, sessionId: next.id }, "reprise des joueurs impossible : nouvelle partie sans eux");
+    }
     old.close();
     if (mirror === null || mirror.status.mode !== "standby") vmix.attach(getRuntime(), vmix.current);
     transport?.rewelcomeAll();

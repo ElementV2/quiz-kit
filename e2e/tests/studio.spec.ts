@@ -44,7 +44,7 @@ test("studio: content, scene simulation, generated theme, save, then the output 
 
   const output = await ctx.newPage();
   await output.goto(path("out-program"));
-  const launched = await request.post(`/api/games/${g?.id ?? ""}/launch?t=${token("control")}`);
+  const launched = await request.post(`/api/games/${g?.id ?? ""}/launch?t=${token("control")}&players=new`);
   expect(launched.status()).toBe(200);
   // The output re-fetches the look of the new game: the "Clair" theme has a light surface colour.
   await expect.poll(async () => output.locator(".q-scene").evaluate((el) => getComputedStyle(el).getPropertyValue("--q-color-surface").trim())).toMatch(/^#e|^#f|^#d/);
@@ -178,7 +178,7 @@ test("studio theme: material, logo palette, sound pack — exported with the gam
   const entries = (await archive.body()).toString("latin1").match(/media\/[0-9a-f]{64}(?=\.json)/g) ?? [];
   expect(new Set(entries).size).toBe(2);
 
-  expect((await request.post(`/api/games/${id}/launch?t=${token("control")}`)).status()).toBe(200);
+  expect((await request.post(`/api/games/${id}/launch?t=${token("control")}&players=new`)).status()).toBe(200);
   const output = await ctx.newPage();
   output.on("pageerror", (e) => errors.push(e.message));
   await output.goto(`${path("out-program")}&sound=on`);

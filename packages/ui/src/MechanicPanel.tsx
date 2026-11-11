@@ -34,15 +34,13 @@ export function MechanicPanel(p: {
               <span class="q-mech-strikes">{"✗".repeat(m().strikes)}<span class="muted">{"✗".repeat(Math.max(0, m().maxStrikes - m().strikes))}</span></span>
               <span>Banque <b>{m().bank}</b>{m().multiplier !== 1 ? ` ×${m().multiplier}` : ""}</span>
             </div>
-            <Show when={control() && (m().controllingTeamId === null || m().stage === "steal")}>
+            <Show when={control() && m().stage !== "done" && p.view.phase !== "revealed"}>
               <div class="q-mech-row">
                 <select value={team()} onChange={(e) => setTeam(e.currentTarget.value)}>
                   <option value="">— équipe —</option>
                   <For each={teams()}>{(t) => <option value={t.id}>{t.name}</option>}</For>
                 </select>
-                <Show when={m().controllingTeamId === null}>
-                  <Button disabled={team() === ""} onClick={() => void p.act({ type: "poll.control", teamId: team() })}>Donner la main</Button>
-                </Show>
+                <Button kind={m().controllingTeamId === null ? "primary" : "secondary"} disabled={team() === "" || team() === m().controllingTeamId} onClick={() => void p.act({ type: "poll.control", teamId: team() })}>{m().controllingTeamId === null ? "Donner la main" : "Passer la main"}</Button>
                 <Show when={m().stage === "steal" && m().stealingTeamId === null}>
                   <Button disabled={team() === ""} onClick={() => void p.act({ type: "poll.steal", teamId: team() })}>Tentative de vol</Button>
                 </Show>

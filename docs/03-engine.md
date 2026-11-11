@@ -89,6 +89,11 @@ sinon à l'équipe qui a la main (verrouiller plus tôt = banque à l'équipe qu
 `question.reveal` ne retourne **pas** les cases restantes. Vue publique : une case masquée a `label` et
 `value` à `null` (testé) ; animateur et régie voient tout.
 
+Révéler (`question.reveal`) montre tout le tableau à tous les écrans (les réponses trouvées restent marquées) ;
+la banque ne compte que les réponses trouvées. La main peut passer à l'autre équipe à tout moment avant la
+révélation (erreurs remises à zéro, vol en cours abandonné). Attention : annuler une révélation de sondage remet
+le jeu en cours, mais les réponses ont déjà été vues par le public.
+
 ### `buzzer` (culture G)
 
 Questions `oral` (réponse attendue pour l'animateur) ou `single` (options lues, montrées à tous ; bonne

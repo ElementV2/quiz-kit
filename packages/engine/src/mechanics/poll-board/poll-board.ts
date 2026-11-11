@@ -10,8 +10,9 @@ import { roundHalfAway } from "../../scoring.ts";
  * (`answer.judge { correct: false }`). At `maxStrikes`, control hands the steal to another team
  * (`poll.steal`), whose single answer is judged the same way. The bank (sum of found values × multiplier)
  * goes to the stealing team if its steal is right, to the team with the hand otherwise. It is written to
- * the ledger on `question.reveal`. The remaining slots stay masked until control flips them
- * (`element.reveal`), before or after `question.reveal`: flipped slots score for nobody.
+ * the ledger on `question.reveal`, which also shows the whole board to everyone (found slots stay marked).
+ * Before it, control may flip a slot (`element.reveal`): flipped slots score for nobody. The hand may pass to
+ * another team at any time before the reveal (`poll.control`: strikes restart, a steal in progress is dropped).
  */
 
 export const PollBoardConfig = z.strictObject({
@@ -52,13 +53,16 @@ const bankOf = (s: S): number => s.slots.reduce((sum, x) => (x.found ? sum + x.v
 const PLAYING: ReadonlySet<Phase> = new Set(["open", "locked", "judging"]);
 const SHOWN: ReadonlySet<Phase> = new Set(["presenting", "open", "locked", "judging", "revealed"]);
 
+/**
+ * Gives the hand — first, or to the other team at any time while the question is played (the host decides). The
+ * answers found stay on the board (the bank goes to whoever wins it), the strikes restart for the team taking over,
+ * a steal attempt in progress is dropped.
+ */
 function giveHand(s: S, a: ActionOf<"poll.control">, env: MechanicEnv): R {
-  if (env.phase !== "presenting" && env.phase !== "open") return err("wrong-phase", "la main se donne avant ou pendant le jeu");
-  if (s.stage !== "play") return err("conflict", "le jeu de cette équipe est terminé");
+  if (!SHOWN.has(env.phase) || env.phase === "revealed") return err("wrong-phase", "la main se donne pendant la question (avant la révélation)");
+  if (s.stage === "done") return err("conflict", "le jeu est terminé pour cette question");
   if (s.controllingTeamId === a.teamId) return err("conflict", "cette équipe a déjà la main");
-  // Changing hands mid-play would hand the other team's bank and strikes over: undo instead.
-  if (s.strikes > 0 || s.slots.some((x) => x.found)) return err("conflict", "le jeu a commencé : annuler (undo) pour changer de main");
-  return ok({ ...s, controllingTeamId: a.teamId });
+  return ok({ ...s, controllingTeamId: a.teamId, strikes: 0, stage: "play", stealingTeamId: null });
 }
 
 function handSteal(s: S, a: ActionOf<"poll.steal">, env: MechanicEnv): R {
@@ -110,6 +114,7 @@ function judgeAnswer(s: S, a: ActionOf<"answer.judge">, env: MechanicEnv): R {
 
 function flip(s: S, a: ActionOf<"element.reveal">, env: MechanicEnv): R {
   if (!SHOWN.has(env.phase)) return err("wrong-phase", "aucune question affichée");
+  if (env.phase === "revealed") return err("wrong-phase", "toutes les réponses sont déjà affichées");
   const slot = s.slots[a.index];
   if (slot === undefined) return err("not-found", `case ${a.index} inexistante`);
   if (slot.revealed) return err("conflict", "case déjà révélée");
@@ -187,11 +192,15 @@ export const pollBoard = defineMechanic<PollBoardConfig, PollBoardState>({
 
   project(s, env): PollBoardMechanicView {
     const privileged = env.audience === "host" || env.audience === "control";
+    // « Révéler » shows the whole board, as on TV: answers found stay marked (found), the others appear at the end.
+    // Projection only: the bank still counts found answers.
+    const end = env.phase === "revealed";
     return {
       mechanic: "poll-board",
       slots: s.slots.map((x, index) => {
-        const shown = x.revealed || privileged;
-        return { index, revealed: x.revealed, found: x.found, optionId: shown ? x.optionId : null, label: shown ? x.label : null, value: shown ? x.value : null };
+        const revealed = x.revealed || end;
+        const shown = revealed || privileged;
+        return { index, revealed, found: x.found, optionId: shown ? x.optionId : null, label: shown ? x.label : null, value: shown ? x.value : null };
       }),
       strikes: s.strikes,
       maxStrikes: s.maxStrikes,

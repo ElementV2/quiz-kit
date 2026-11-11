@@ -444,3 +444,54 @@ describe("cleanup of older templates (ADR-0015)", () => {
   });
 });
 
+describe("relaunching a game keeps the players (no one is kicked)", () => {
+  it("a phone player keeps playing with the same token, same join code; teams follow a team game; scores reset", async () => {
+    const s = await boot();
+    const t = tokenOf(s, "control");
+    const base = `http://127.0.0.1:${s.port}`;
+    const code = (await (await fetch(`${base}/api/links?t=${t}`)).json()) as { joinCode: string }; // oxlint-disable-line typescript/no-unsafe-type-assertion -- own endpoint
+    const joined = (await (await fetch(`${base}/api/join`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ code: code.joinCode, name: "Zoé" }) })).json()) as { token: string; participantId: string }; // oxlint-disable-line typescript/no-unsafe-type-assertion -- own endpoint
+    s.runtime.submit({ type: "score.adjust", target: { participantId: joined.participantId }, delta: 50, reason: "manual" }, CTL, null);
+    const r = await fetch(`${base}/api/games/g_modele_mixte/launch?t=${t}`, { method: "POST" });
+    expect(await r.json()).toMatchObject({ kept: 1, dropped: 0, joinCode: code.joinCode });
+    expect(s.runtime.current.state.participants.map((p) => p.id)).toEqual([joined.participantId]);
+    expect(s.runtime.current.state.ledger).toEqual([]); // fresh scores
+    const phone = await rawSocket(s);
+    hello(phone.ws, joined.token);
+    await wait(150);
+    expect(JSON.stringify(phone.messages)).toContain(`"participantId":"${joined.participantId}"`);
+    expect(phone.messages.some((m) => m["t"] === "error")).toBe(false);
+    phone.ws.close();
+  });
+
+  it("a phone connected during the switch is re-welcomed into the new game; teams follow a team game, not a solo one; bots and players beyond the max are not kept", async () => {
+    const s = await boot();
+    const t = tokenOf(s, "control");
+    const base = `http://127.0.0.1:${s.port}`;
+    s.runtime.submitMany([
+      { action: { type: "team.add", teamId: "t_r", name: "Rouges", color: "#ff0000" }, actor: CTL },
+      { action: { type: "player.add", participantId: "p_a", displayName: "Ana", seat: 1, channel: "seat", teamId: "t_r" }, actor: CTL },
+      { action: { type: "player.add", participantId: "p_bot_1", displayName: "Bot 1", channel: "play" }, actor: CTL },
+    ]);
+    const joined = (await (await fetch(`${base}/api/join`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ code: ((await (await fetch(`${base}/api/links?t=${t}`)).json()) as { joinCode: string }).joinCode, name: "Zoé" }) })).json()) as { token: string; participantId: string }; // oxlint-disable-line typescript/no-unsafe-type-assertion -- own endpoints
+    const phone = await rawSocket(s);
+    hello(phone.ws, joined.token);
+    await wait(120);
+    phone.messages.length = 0;
+    // Team game (survey template): the team and Ana's team follow; the bot does not.
+    expect(await (await fetch(`${base}/api/games/g_modele_sondage/launch?t=${t}`, { method: "POST" })).json()).toMatchObject({ kept: 2, dropped: 0 });
+    await wait(150);
+    expect(s.runtime.current.state.teams.map((x) => x.id)).toEqual(["t_r"]);
+    expect(s.runtime.current.state.participants.map((p) => [p.id, p.teamId, p.seat])).toEqual([["p_a", "t_r", 1], [joined.participantId, null, null]]);
+    expect(phone.messages.some((m) => m["t"] === "welcome" || m["t"] === "snapshot")).toBe(true); // re-welcomed, not kicked
+    expect(JSON.stringify(phone.messages)).toContain(`"participantId":"${joined.participantId}"`);
+    // Solo game: no teams; and a max of 1 player keeps only the first.
+    const solo = { ...DEMO_GAME, format: { ...DEMO_GAME.format, participants: { ...DEMO_GAME.format.participants, mode: "solo" as const, min: 1, max: 1 } } };
+    await fetch(`${base}/api/games/g_solo1?t=${t}`, { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ game: solo }) });
+    expect(await (await fetch(`${base}/api/games/g_solo1/launch?t=${t}`, { method: "POST" })).json()).toMatchObject({ kept: 1, dropped: 1 });
+    expect(s.runtime.current.state.teams).toEqual([]);
+    expect(s.runtime.current.state.participants.map((p) => [p.id, p.teamId])).toEqual([["p_a", null]]);
+    phone.ws.close();
+  });
+});
+

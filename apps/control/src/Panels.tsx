@@ -68,11 +68,13 @@ export function LayersPanel(p: { readonly view: ControlView; readonly layers: re
 export function LibraryPanel(p: { readonly current?: string }): JSX.Element {
   const [games, { refetch }] = createResource(() => api<{ games: { id: string; title: string; questions: number; rounds: number; updatedAt: number }[] }>("/api/games").then((r) => r.games.toSorted((a, b) => b.updatedAt - a.updatedAt)).catch(() => []));
   const [msg, setMsg] = createSignal<string | null>(null);
+  const [keep, setKeep] = createSignal(true);
   const launch = async (id: string, title: string) => {
-    if (!(await confirmDialog({ title: `Lancer « ${title} » maintenant ?`, message: "Tous les écrans passent sur cette partie. La partie en cours reste dans le journal.", confirm: "Lancer", danger: true }))) return;
+    const players = keep() ? "Les joueurs restent connectés (mêmes sièges, mêmes équipes), scores remis à zéro." : "Tous les joueurs repartent de zéro : ils devront rejoindre à nouveau.";
+    if (!(await confirmDialog({ title: `Lancer « ${title} » maintenant ?`, message: `Tous les écrans passent sur cette partie. ${players} La partie en cours reste dans le journal.`, confirm: "Lancer", danger: true }))) return;
     try {
-      const r = await api<{ joinCode: string }>(`/api/games/${id}/launch`, { method: "POST" });
-      setMsg(`« ${title} » lancée · code joueurs ${r.joinCode}`);
+      const r = await api<{ joinCode: string; kept: number; dropped: number }>(`/api/games/${id}/launch${keep() ? "" : "?players=new"}`, { method: "POST" });
+      setMsg(`« ${title} » lancée · code joueurs ${r.joinCode}${keep() ? ` · ${r.kept} joueur(s) gardé(s)${r.dropped > 0 ? `, ${r.dropped} au-delà du maximum de la partie` : ""}` : ""}`);
       void refetch();
     } catch (e) {
       setMsg(`Échec : ${e instanceof Error ? e.message : String(e)}`);
@@ -91,6 +93,7 @@ export function LibraryPanel(p: { readonly current?: string }): JSX.Element {
           )}
         </For>
       </ul>
+      <label class="c-keep"><input type="checkbox" checked={keep()} onChange={(e) => setKeep(e.currentTarget.checked)} /> Garder les joueurs actuels (scores remis à zéro)</label>
       <div class="c-row c-row-tight"><Button kind="ghost" onClick={() => void refetch()}>Actualiser</Button></div>
       <Show when={msg()}>{(m) => <p class="muted">{m()}</p>}</Show>
     </div>

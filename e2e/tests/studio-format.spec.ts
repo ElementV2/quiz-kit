@@ -158,7 +158,7 @@ for (const vp of [{ width: 1366, height: 768 }, { width: 1920, height: 1080 }]) 
 test("studio Replay: the journal of the current session replays step by step without error", async ({ browser, request }) => {
   const ctx = await browser.newContext({ viewport: { width: 1600, height: 1000 } });
   // A fresh session with a few journaled events: launch a template, then drive it from the control room.
-  expect((await request.post(`/api/games/g_e2e_qcm/launch?t=${token("control")}`)).status()).toBe(200);
+  expect((await request.post(`/api/games/g_e2e_qcm/launch?t=${token("control")}&players=new`)).status()).toBe(200);
   const control = await ctx.newPage();
   await control.goto(path("control"));
   await expect(control.getByText("connecté").first()).toBeVisible();
