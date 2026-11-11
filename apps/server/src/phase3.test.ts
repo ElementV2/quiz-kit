@@ -192,6 +192,9 @@ describe("home page team access (/api/staff)", () => {
     let last = 0;
     for (let i = 0; i < 12; i++) last = (await s.http.inject({ method: "POST", url: "/api/staff", payload: { code: "000000" }, remoteAddress: "192.168.1.51" })).statusCode;
     expect(last).toBe(429);
+    // Wrong codes from many devices (players on the Wi-Fi) never lock the team out: the block is per device.
+    for (let i = 0; i < 40; i++) await s.http.inject({ method: "POST", url: "/api/staff", payload: { code: "000000" }, remoteAddress: `192.168.2.${i + 1}` });
+    expect((await s.http.inject({ method: "POST", url: "/api/staff", payload: { code: body.staffCode }, remoteAddress: "192.168.1.60" })).statusCode).toBe(200);
     // Lower case and spaces are accepted ("abcd 2345"); behind a proxy nobody is "local".
     const spaced = `${body.staffCode.slice(0, 4).toLowerCase()} ${body.staffCode.slice(4)}`;
     expect((await s.http.inject({ method: "POST", url: "/api/staff", payload: { code: spaced }, remoteAddress: "192.168.1.52" })).statusCode).toBe(200);

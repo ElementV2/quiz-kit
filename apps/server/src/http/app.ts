@@ -126,8 +126,6 @@ const RehearsalBody = z.strictObject({
 /** The server PC itself (no proxy in front: the socket address is the peer). */
 const LOOPBACK = new Set(["127.0.0.1", "::1", "::ffff:127.0.0.1"]);
 const StaffBody = z.strictObject({ code: z.string().max(20).optional() });
-/** Failed team-code attempts, all IPs together, before a 5-minute lock (IPv6 / MAC rotation defeats a per-IP cap). */
-const STAFF_GLOBAL_FAILS = 30;
 
 const RevokeBody = z.strictObject({ link: z.string().regex(/^[0-9a-z-]+$/).max(64) });
 const JoinBody = z.strictObject({ code: z.string().regex(/^\d{6}$/), name: z.string().trim().min(1).max(40) });
@@ -518,10 +516,11 @@ export function buildHttpApp(deps: HttpDeps, options: FastifyServerOptions): Fas
   });
 
   const staffAttempts = new Map<string, { windowStart: number; count: number }>();
-  let staffFails = { windowStart: 0, count: 0, lockedUntil: 0 };
   /**
    * Home page unlock (doc 08): the team code (or being on the server PC itself) gives every link of the show,
-   * so nobody has to copy long tokens around. Same brute-force guard as `/api/join`.
+   * so nobody has to copy long tokens around. Same brute-force guard as `/api/join`: per device (IP) only, never all
+   * together, so a player trying codes on the Wi-Fi never locks the team out. 8+ letters/digits at 10 tries / min /
+   * IP: guessing it is out of reach even from hundreds of addresses.
    */
   app.post("/api/staff", async (req, reply) => {
     // Behind a local proxy every client would look local: then the code is always required (review 3 m6).
@@ -531,7 +530,6 @@ export function buildHttpApp(deps: HttpDeps, options: FastifyServerOptions): Fas
     if (!body.success) return reply.code(400).send({ error: "code attendu" });
     if (!local) {
       const now = deps.clock();
-      if (now < staffFails.lockedUntil) return reply.code(429).send({ error: "Trop d'essais : accès équipe bloqué quelques minutes" });
       if (staffAttempts.size > 10_000) staffAttempts.clear();
       const a = staffAttempts.get(req.ip);
       const attempt = a === undefined || now - a.windowStart > 60_000 ? { windowStart: now, count: 0 } : a;
@@ -540,8 +538,6 @@ export function buildHttpApp(deps: HttpDeps, options: FastifyServerOptions): Fas
       if (attempt.count > JOIN_LIMIT) return reply.code(429).send({ error: "Trop d'essais : patienter une minute" });
       const given = (body.data.code ?? "").toUpperCase().replaceAll(/[\s-]/g, "");
       if (!timingSafeEqualStr(given, deps.staffCode())) {
-        if (now - staffFails.windowStart > 60_000) staffFails = { windowStart: now, count: 0, lockedUntil: 0 };
-        if (++staffFails.count >= STAFF_GLOBAL_FAILS) staffFails.lockedUntil = now + 5 * 60_000;
         return reply.code(403).send({ error: "Code équipe incorrect" });
       }
       staffAttempts.delete(req.ip);
