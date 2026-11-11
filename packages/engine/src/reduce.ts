@@ -1,5 +1,6 @@
 import { HOST_DRIVE_ACTIONS, isAllowed, type Action, type ActionOf, type Actor, type Participant, type Round, type ScoreEntry, type ScoreTarget, ROLE_LABEL_FR, STATUS_LABEL_FR, actionLabel, answerKindLabel, mechanicLabel } from "@quiz/schema";
 import { playedBy } from "./route.ts";
+import { applyVerdicts, type ForcedVerdict } from "./verdicts.ts";
 import type { AnyMechanic, FixedJudgement, Judgement, MechanicEnv, Registry } from "./mechanic.ts";
 import { assertNever, err, ok, type Rejection, type Result } from "./result.ts";
 import type { Rng } from "./rng.ts";
@@ -142,6 +143,9 @@ function reduceAllowed(s: GameState, a: Action, ctx: Ctx, registry: Registry): R
     case "question.reveal":
       return reveal(s, ctx, registry);
 
+    case "answer.verdict":
+      return forceVerdict(s, a, ctx, registry);
+
     case "question.skip":
       return skipUpcoming(s, a, ctx, registry);
 
@@ -166,7 +170,7 @@ function reduceAllowed(s: GameState, a: Action, ctx: Ctx, registry: Registry): R
       const phase = !isLastQuestion ? "idle" : isLastRound ? "game.end" : "round.end";
       // Stakes belong to one question: gone once it is left (unless set ahead for the next one).
       const stakes = s.stakes !== null && s.stakes.roundIndex === s.roundIndex && s.stakes.questionIndex === qi ? null : s.stakes;
-      return ok({ ...s, phase, ledger, mechanic: null, carry, timer: null, openedAt: null, lockedAt: null, windowMs: null, stakes });
+      return ok({ ...s, phase, ledger, mechanic: null, carry, timer: null, openedAt: null, lockedAt: null, windowMs: null, stakes, verdicts: [] });
     }
 
     case "answer.submit": {
@@ -399,7 +403,7 @@ function present(s: GameState, a: ActionOf<"question.present">, ctx: Ctx, regist
   }
   if (!picked.ok) return picked;
   const { index, id, state } = picked.value;
-  return ok({ ...s, phase: "presenting", questionIndex: index, mechanic: { id, state }, timer: null, openedAt: null, lockedAt: null, windowMs: null });
+  return ok({ ...s, phase: "presenting", questionIndex: index, mechanic: { id, state }, verdicts: [], timer: null, openedAt: null, lockedAt: null, windowMs: null });
 }
 
 function reveal(s: GameState, ctx: Ctx, registry: Registry): R {
@@ -415,7 +419,7 @@ function reveal(s: GameState, ctx: Ctx, registry: Registry): R {
   const rule = stakedRule(round.scoring, stakes);
   const entries: ScoreEntry[] = [];
   const fixed: FixedJudgement[] = [];
-  for (const j of m.judge(s.mechanic.state)) {
+  for (const j of applyVerdicts(m.judge(s.mechanic.state), s.verdicts, s.openedAt)) {
     switch (j.kind) {
       case "rule": {
         const p = s.participants.find((x) => x.id === j.participantId);
@@ -441,7 +445,7 @@ function reveal(s: GameState, ctx: Ctx, registry: Registry): R {
   const played = s.played.includes(question.id) ? s.played : [...s.played, question.id];
   const roundIndex = s.roundIndex ?? 0;
   const questionIndex = s.questionIndex ?? 0;
-  const record = { roundIndex, questionIndex, questionId: question.id, mechanicId: m.id, state: m.compact === undefined ? s.mechanic.state : m.compact(s.mechanic.state), openedAt: s.openedAt, windowMs: s.windowMs, entryIds: entries.map((e) => e.id), correctMs: correctTimes(m, s.mechanic.state, s.openedAt), stakes };
+  const record = { roundIndex, questionIndex, questionId: question.id, mechanicId: m.id, state: m.compact === undefined ? s.mechanic.state : m.compact(s.mechanic.state), openedAt: s.openedAt, windowMs: s.windowMs, entryIds: entries.map((e) => e.id), correctMs: correctTimes(m, s.mechanic.state, s.openedAt), stakes, verdicts: s.verdicts };
   const history = [...s.history.filter((h) => h.roundIndex !== roundIndex || h.questionIndex !== questionIndex), record];
   return ok({ ...s, phase: "revealed", timer: null, ledger: [...ledger, ...entries], played, history });
 }
@@ -525,6 +529,44 @@ function replaceFromReserve(s: GameState, a: ActionOf<"question.replaceFromReser
  * `question.regrade`: new answer (same kind) written into the game, then every reveal of that question is
  * judged again: its automatic entries are voided, new ones written with `reason: regrade` (manual ones stay).
  */
+/** Upserts (or removes, `correct: null`) one forced verdict. */
+function withVerdict(list: readonly ForcedVerdict[], participantId: string, correct: boolean | null): ForcedVerdict[] {
+  const rest = list.filter((v) => v.participantId !== participantId);
+  return correct === null ? rest : [...rest, { participantId, correct }];
+}
+
+/**
+ * `answer.verdict`: one participant judged right / wrong by hand, on the question on air (applied at its reveal) or
+ * on a revealed one (that record is rescored at once: its entries voided and rewritten, team at the time kept).
+ */
+function forceVerdict(s: GameState, a: ActionOf<"answer.verdict">, ctx: Ctx, registry: Registry): R {
+  if (!s.participants.some((p) => p.id === a.participantId) && !s.ledger.some((e) => "participantId" in e.target && e.target.participantId === a.participantId)) {
+    return err("not-found", "joueur inconnu");
+  }
+  const onAir = s.mechanic !== null && s.roundIndex === a.roundIndex && s.questionIndex === a.questionIndex && QUESTION_PHASES.has(s.phase);
+  const record = s.history.find((h) => h.roundIndex === a.roundIndex && h.questionIndex === a.questionIndex);
+  const mechanicId = onAir && s.mechanic !== null ? s.mechanic.id : record?.mechanicId;
+  const m = mechanicId === undefined ? null : registry.get(mechanicId);
+  if (m === null) return err("conflict", "question pas encore jouée");
+  if (a.correct === true && m.ownPoints === true) return err("unsupported", "ici la manche décide de ses points : compter faux, ou ajuster le score à la main");
+  if (onAir && s.phase !== "revealed") return ok({ ...s, verdicts: withVerdict(s.verdicts, a.participantId, a.correct) });
+  if (record === undefined) return err("conflict", "question pas encore révélée");
+  const round = s.game.format.rounds[record.roundIndex];
+  if (round === undefined) return err("not-found", "manche inconnue");
+  const verdicts = withVerdict(record.verdicts, a.participantId, a.correct);
+  const voided = new Set(record.entryIds);
+  const teamAtScoring = new Map<string, string | null>();
+  for (const e of s.ledger) if (voided.has(e.id) && "participantId" in e.target) teamAtScoring.set(e.target.participantId, e.teamId);
+  const ledger = s.ledger.map((e) => (voided.has(e.id) && !e.voided ? { ...e, voided: true } : e));
+  const fresh = judgementEntries({ ...s, ledger }, ctx, applyVerdicts(m.judge(record.state), verdicts, record.openedAt ?? 0), round, record.questionId, { openedAt: record.openedAt ?? 0, durationMs: record.windowMs }, "regrade", record.stakes).map((e, i) => ({
+    ...e,
+    id: `se_${ctx.seq}_${ledger.length + i}`,
+    teamId: "participantId" in e.target && teamAtScoring.has(e.target.participantId) ? (teamAtScoring.get(e.target.participantId) ?? null) : e.teamId,
+  }));
+  const history = s.history.map((h) => (h === record ? { ...h, verdicts, entryIds: fresh.map((e) => e.id) } : h));
+  return ok({ ...s, ledger: [...ledger, ...fresh], history, verdicts: onAir ? verdicts : s.verdicts });
+}
+
 function regrade(s: GameState, a: ActionOf<"question.regrade">, ctx: Ctx, registry: Registry): R {
   const old = s.game.questions.find((q) => q.id === a.questionId);
   if (old === undefined) return err("not-found", "question inconnue");
@@ -550,7 +592,7 @@ function regrade(s: GameState, a: ActionOf<"question.regrade">, ctx: Ctx, regist
     const teamAtScoring = new Map<string, string | null>();
     for (const e of ledger) if (voided.has(e.id) && "participantId" in e.target) teamAtScoring.set(e.target.participantId, e.teamId);
     ledger = ledger.map((e) => (voided.has(e.id) && !e.voided ? { ...e, voided: true } : e));
-    const fresh = judgementEntries({ ...s, ledger }, ctx, m.judge(r.value), round, question.id, { openedAt: h.openedAt ?? 0, durationMs: h.windowMs }, "regrade", h.stakes)
+    const fresh = judgementEntries({ ...s, ledger }, ctx, applyVerdicts(m.judge(r.value), h.verdicts, h.openedAt ?? 0), round, question.id, { openedAt: h.openedAt ?? 0, durationMs: h.windowMs }, "regrade", h.stakes)
       .map((e, i) => ({
         ...e,
         // Unique ids across several records rewritten by the same event.

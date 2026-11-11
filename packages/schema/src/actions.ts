@@ -35,6 +35,17 @@ export const Action = z.discriminatedUnion("type", [
   action("question.reveal", {}),
   action("question.next", {}),
   /**
+   * Forces the verdict of one participant on one question (cheating, manual correction), whatever the mechanic:
+   * `correct` true / false, or null = back to the automatic verdict. On air before the reveal it applies at the reveal;
+   * once revealed (on air or played) that participant's points of the question are rewritten at once.
+   */
+  action("answer.verdict", {
+    roundIndex: z.number().int().min(0),
+    questionIndex: z.number().int().min(0),
+    participantId: ParticipantId,
+    correct: z.boolean().nullable(),
+  }),
+  /**
    * Between two questions: passes the upcoming one without playing it (e.g. a question this round cannot play).
    * Explicit target (from `BaseView.stakesTarget` / the next question): a duplicate press never passes a second one.
    */
@@ -164,7 +175,7 @@ export const HOST_DRIVE_ACTIONS: ReadonlySet<ActionType> = new Set<ActionType>([
   "game.start", "round.start", "question.present", "question.open", "question.lock", "question.reveal", "question.next",
   "element.reveal", "timer.set", "timer.stop", "joker.use", "ladder.stop", "poll.control", "poll.steal", "question.setStakes", "question.skip",
 ]);
-const SCORING: readonly ActionType[] = ["score.adjust", "score.setTotal", "score.void", "question.regrade"];
+const SCORING: readonly ActionType[] = ["score.adjust", "score.setTotal", "score.void", "question.regrade", "answer.verdict"];
 
 /** Role → allowed actions (doc 01). Checked by the server AND the engine. */
 export const actionPermissions: Readonly<Record<Role, ReadonlySet<ActionType>>> = {

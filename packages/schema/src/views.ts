@@ -413,6 +413,11 @@ export const ControlView = BaseView.extend({
   ledger: z.array(ScoreEntry),
   /** Same text form as `PlayerView.myAnswer`. */
   answers: z.array(z.strictObject({ participantId: ParticipantId, optionIds: z.array(z.string().max(200)), at: z.number().int() })),
+  /**
+   * Question on air: each participant's automatic verdict (null: not judged yet / judged by a human) and the verdict
+   * forced by the control room (`answer.verdict`, null: none). Participants who answered or were forced.
+   */
+  verdicts: z.array(z.strictObject({ participantId: ParticipantId, auto: z.boolean().nullable(), forced: z.boolean().nullable() })).default([]),
   /** Events ignored during the last replay because they became invalid after an undo (ADR-0010). */
   skipped: z.array(z.strictObject({ seq: z.number().int(), type: z.string(), reason: z.string() })),
   lastSeq: z.number().int(),

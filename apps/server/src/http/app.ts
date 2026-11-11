@@ -568,7 +568,7 @@ export function buildHttpApp(deps: HttpDeps, options: FastifyServerOptions): Fas
     if (attempt.count > JOIN_LIMIT) return reply.code(429).send({ error: "Trop d'essais : patienter une minute" });
     const body = JoinBody.safeParse(req.body);
     if (!body.success) return reply.code(400).send({ error: "Code à 6 chiffres et pseudo requis" });
-    if (body.data.code !== deps.joinCode()) return reply.code(403).send({ error: "Code incorrect" });
+    if (body.data.code !== deps.joinCode()) return reply.code(403).send({ error: "Code incorrect : recopier le code partie affiché à l'écran" });
     const name = cleanDisplayName(body.data.name);
     if (name === "") return reply.code(400).send({ error: "Pseudo requis" });
     const r = deps.join(name);

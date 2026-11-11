@@ -2,7 +2,7 @@ import { For, Show, createEffect, createMemo, createResource, createSignal, on, 
 import { render } from "solid-js/web";
 import type { Action, ControlView } from "@quiz/schema";
 import { asChoice, optionLetter, secondsLeft } from "@quiz/renderer";
-import { Button, HomeLink, MECHANIC_LABEL, MechanicPanel, ON_AIR_PHASES, PHASE_LABEL, StatusPill, createQuizConnection, formatAnswer, nextTarget, onAirTarget, questionAt, sameTarget, confirmDialog, isDialogOpen, StakesBar } from "@quiz/ui";
+import { Button, HomeLink, MECHANIC_LABEL, MechanicPanel, VerdictsPanel, ON_AIR_PHASES, PHASE_LABEL, StatusPill, createQuizConnection, formatAnswer, nextTarget, onAirTarget, questionAt, sameTarget, confirmDialog, isDialogOpen, StakesBar } from "@quiz/ui";
 import "@quiz/ui/ui.css";
 import "./control.css";
 import { api, lanOrigin, token, withToken, type LinksResponse, type StatusResponse } from "./api.ts";
@@ -356,6 +356,7 @@ function OnAir(p: { readonly view: ControlView; readonly readonly: boolean; read
             )}
           </Show>
           <MechanicPanel view={p.view} mode={mode()} act={p.act} mediaUrl={p.mediaUrl} />
+          <VerdictsPanel view={p.view} readonly={p.readonly} act={p.act} />
           <Show when={p.view.notes}>{(n) => <p class="c-notes">{n()}</p>}</Show>
         </section>
       )}

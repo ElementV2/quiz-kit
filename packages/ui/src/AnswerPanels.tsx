@@ -1,4 +1,5 @@
 import { For, Show, type JSX } from "solid-js";
+import { onAirTarget } from "./rundown.ts";
 import { answerText, asAllocation, asBoard, asHints, asNumberAnswer, asPin, asRevealImage, asTextAnswer, boardRows, correctText, formatNumber, nameOf } from "@quiz/renderer";
 import type { Action, ControlView, HostView, MechanicView } from "@quiz/schema";
 import { Button } from "./components.tsx";
@@ -18,8 +19,6 @@ type Props = {
 const JUDGEABLE = new Set(["open", "locked", "judging"]);
 const judgeable = (v: ControlView | HostView): boolean => JUDGEABLE.has(v.phase);
 
-/** Mechanics whose automatic verdict the operator may overrule (`answer.judge { participantId, correct }`). */
-const OVERRULABLE = new Set(["text-answer", "number-answer", "order", "pairs", "pin", "hints", "reveal-image"]);
 
 const answeredOf = (m: MechanicView): number | null => ("answeredCount" in m ? m.answeredCount : null);
 
@@ -68,32 +67,6 @@ function TextReview(p: Props): JSX.Element {
 }
 
 /** Other overrulable mechanics: every answer received (control only) with ✓ / ✗ to force the verdict. */
-function AnswersReview(p: Props & { readonly m: MechanicView }): JSX.Element {
-  const answers = () => (p.view.role === "control" ? p.view.answers : []);
-  const verdictOf = (pid: string): boolean | null => {
-    const n = asNumberAnswer(p.m);
-    return n?.ranking?.find((r) => r.participantId === pid)?.win ?? null;
-  };
-  return (
-    <Show when={p.view.role === "control" && answers().length > 0}>
-      <details class="q-mech-answers">
-        <summary>Réponses reçues ({answers().length}) — corriger un verdict</summary>
-        <ul class="q-mech-review">
-          <For each={answers()}>
-            {(a) => (
-              <li data-accepted={String(verdictOf(a.participantId))}>
-                <span class="q-mech-who">{nameOf(p.view, a.participantId)}</span>
-                <span class="q-mech-said">{answerText(p.m, a.optionIds)}</span>
-                <Verdict {...p} participantId={a.participantId} accepted={verdictOf(a.participantId)} />
-              </li>
-            )}
-          </For>
-        </ul>
-      </details>
-    </Show>
-  );
-}
-
 function NumberRanking(p: Props): JSX.Element {
   return (
     <Show when={asNumberAnswer(p.view.mechanic)?.ranking}>
@@ -261,11 +234,57 @@ export function Phase3Panel(p: Props): JSX.Element {
           <NumberRanking {...p} />
           <AllocationTotals {...p} />
           <PinSummary {...p} />
-          <TextReview {...p} />
-          <Show when={OVERRULABLE.has(m().mechanic) && m().mechanic !== "text-answer"}><AnswersReview {...p} m={m()} /></Show>
+          <Show when={p.mode === "host"}><TextReview {...p} /></Show> {/* control: VerdictsPanel (every mechanic) */}
           <Show when={m().mechanic === "board"}><Show when={correctText(m())}>{(c) => <p class="q-mech-ok">Réponse attendue : {c()}</p>}</Show></Show>
         </div>
       )}
     </Show>
   );
 }
+
+const VERDICT_PHASES = new Set(["open", "locked", "judging", "revealed"]);
+
+/**
+ * Control room, every mechanic: each answer of the question on air with its verdict. ✓ / ✗ force it (cheating, a
+ * fair answer the machine refused…), the same key again goes back to the automatic verdict. Before the reveal it
+ * applies at the reveal; after it the points are rewritten at once (`answer.verdict`, journaled, undoable).
+ */
+export function VerdictsPanel(p: { readonly view: ControlView; readonly readonly: boolean; readonly act: (a: Action, okText?: string) => Promise<boolean> }): JSX.Element {
+  const said = (pid: string): string => {
+    const a = p.view.answers.find((x) => x.participantId === pid);
+    return a === undefined || p.view.mechanic === null ? "—" : answerText(p.view.mechanic, a.optionIds);
+  };
+  const set = (pid: string, correct: boolean | null) => {
+    const t = onAirTarget(p.view);
+    if (t === null) return;
+    const name = nameOf(p.view, pid);
+    void p.act({ type: "answer.verdict", roundIndex: t.roundIndex, questionIndex: t.questionIndex, participantId: pid, correct }, correct === null ? `${name} : verdict automatique` : `${name} compté ${correct ? "juste" : "faux"}${p.view.phase === "revealed" ? " — points recalculés" : ""}`);
+  };
+  const usable = () => !p.readonly && VERDICT_PHASES.has(p.view.phase);
+  return (
+    <Show when={p.view.verdicts.length > 0}>
+      <details class="q-mech-answers" open={p.view.verdicts.length <= 12}>
+        <summary>Réponses reçues ({p.view.verdicts.length}) — corriger un verdict (triche, réponse acceptable…)</summary>
+        <ul class="q-mech-review">
+          <For each={p.view.verdicts}>
+            {(v) => {
+              const now = () => v.forced ?? v.auto;
+              return (
+                <li data-accepted={String(now())}>
+                  <span class="q-mech-who">{nameOf(p.view, v.participantId)}</span>
+                  <span class="q-mech-said">{said(v.participantId)}</span>
+                  <Show when={v.forced !== null}><span class="q-mech-tag" title={`Automatique : ${v.auto === null ? "non jugé" : v.auto ? "juste" : "faux"}`}>corrigé</span></Show>
+                  <span class="q-mech-verdict">
+                    <button type="button" class="q-toggle" data-on={String(now() === true)} disabled={!usable()} title={v.forced === true ? "Revenir au verdict automatique" : "Compter juste"} onClick={() => set(v.participantId, v.forced === true ? null : true)}>✓</button>
+                    <button type="button" class="q-toggle q-toggle-no" data-on={String(now() === false)} disabled={!usable()} title={v.forced === false ? "Revenir au verdict automatique" : "Compter faux"} onClick={() => set(v.participantId, v.forced === false ? null : false)}>✗</button>
+                  </span>
+                </li>
+              );
+            }}
+          </For>
+        </ul>
+      </details>
+    </Show>
+  );
+}
+

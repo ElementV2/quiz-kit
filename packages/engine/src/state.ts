@@ -27,6 +27,8 @@ export const QuestionRecord = z.strictObject({
   entryIds: z.array(z.string()),
   /** Live stakes applied at this reveal (kept so a regrade scores identically). */
   stakes: z.strictObject({ points: z.number().int().nullable(), multiplier: z.number().nullable() }).nullable().default(null),
+  /** Verdicts forced by the control room for this question (`answer.verdict`): applied to every (re)scoring. */
+  verdicts: z.array(z.strictObject({ participantId: z.string(), correct: z.boolean() })).default([]),
   /** Response time (ms after opening) of every right answer: the `speed` tie-break sums them. */
   correctMs: z.array(z.strictObject({ participantId: z.string(), ms: z.number().int().min(0) })).default([]),
 });
@@ -74,6 +76,8 @@ export const GameState = z.strictObject({
    * `replaceFromReserve`); 0 = as launched. Never reused (seqs are unique), so a stale studio copy is always seen.
    */
   gameVersion: z.number().int().min(0).default(0),
+  /** Verdicts forced for the question on air (`answer.verdict`), moved into its record at the reveal. */
+  verdicts: z.array(z.strictObject({ participantId: z.string(), correct: z.boolean() })).default([]),
   /** When the studio last sent the game to the live (`game.patch`): shown in the control room. */
   studioPatchedAt: z.number().nullable().default(null),
   /** The host may drive the question flow from their tablet (`host.setDrive`, HOST_DRIVE_ACTIONS). */
@@ -107,6 +111,7 @@ export function initialState(session: Session): GameState {
     stakes: null,
     gameVersion: 0,
     studioPatchedAt: null,
+    verdicts: [],
   };
 }
 

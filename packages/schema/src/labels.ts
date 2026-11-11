@@ -92,6 +92,7 @@ export const ACTION_LABEL_FR: Readonly<Partial<Record<ActionType, string>>> = {
   "score.adjust": "corriger un score",
   "score.setTotal": "fixer un total",
   "score.void": "annuler une ligne de score",
+  "answer.verdict": "corriger le verdict d'un joueur",
   "timer.set": "régler le chrono",
   "timer.stop": "arrêter le chrono",
   "timer.expired": "terminer le chrono",

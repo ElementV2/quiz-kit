@@ -1,5 +1,6 @@
 import { PLAYER_LEADERBOARD_ROWS, type BaseView, type ControlView, type HostView, type LeaderboardRow, type OutputView, type Rundown, type PlayerView, type TeamLeaderboardRow, type View, type Viewer } from "@quiz/schema";
 import { playedBy } from "./route.ts";
+import { autoVerdicts } from "./verdicts.ts";
 import type { Game } from "./game.ts";
 import type { AnyMechanic, Audience, Registry } from "./mechanic.ts";
 import { assertNever } from "./result.ts";
@@ -170,6 +171,8 @@ function playerView(s: GameState, participantId: string | null, registry: Regist
   let myResult: PlayerView["myResult"] = null;
   if (s.phase === "revealed" && me !== undefined && m !== null && s.mechanic !== null) {
     myResult = resultsOf(m, s.mechanic.state).of(me.id, me.teamId);
+    const forced = s.verdicts.find((v) => v.participantId === me.id); // corrected by the control room
+    if (forced !== undefined) myResult = forced.correct ? "correct" : "wrong";
   }
   return {
     role: "player",
@@ -228,6 +231,7 @@ function controlView(game: Game, readonly: boolean, registry: Registry): Control
     teams: s.teams,
     ledger: s.ledger,
     answers: m === null || s.mechanic === null ? [] : m.answers(s.mechanic.state).map((x) => ({ ...x, optionIds: [...x.optionIds] })),
+    verdicts: m === null || s.mechanic === null ? [] : verdictRows(m.answers(s.mechanic.state).map((x) => x.participantId), autoVerdicts(m.judge(s.mechanic.state)), s.verdicts),
     skipped: [...game.skipped],
     rundown: rundownOf(s),
     lastSeq: s.lastSeq,
@@ -332,3 +336,10 @@ function computeLeaderboard(s: GameState): LeaderboardRow[] {
     return { participantId: r.p.id, displayName: r.p.displayName, teamId: r.p.teamId, total: r.total, rank };
   });
 }
+
+/** One row per participant who answered or was forced: automatic verdict and forced one (control room). */
+function verdictRows(answered: readonly string[], auto: ReadonlyMap<string, boolean>, forced: readonly { readonly participantId: string; readonly correct: boolean }[]): ControlView["verdicts"] {
+  const ids = [...new Set([...answered, ...auto.keys(), ...forced.map((f) => f.participantId)])];
+  return ids.map((participantId) => ({ participantId, auto: auto.get(participantId) ?? null, forced: forced.find((f) => f.participantId === participantId)?.correct ?? null }));
+}
+
