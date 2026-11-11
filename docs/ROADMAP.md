@@ -30,7 +30,7 @@ Règle : une phase n'est terminée que quand ses critères de sortie passent. Co
 - [ ] `control` : run-down, actions contextuelles, couches, scores éditables, undo, raccourcis
 - [ ] `host` : bonne réponse, notes, valider / refuser
 - [ ] `player` : PWA `/seat/<n>` et `/play/<code>`, Wake Lock, cache médias, « Réponse enregistrée » après ack
-- [ ] HTTPS LAN tranché (ADR-0012) — prérequis de `player` (Wake Lock, Service Worker)
+- [x] HTTPS LAN tranché (ADR-0012) : HTTP simple, aucune install sur les tablettes louées — prérequis de `player` (Wake Lock, Service Worker)
 - [ ] Médias minimum : stockage par hash + `preload` (prérequis du cache médias de `player`)
 - [ ] Mécaniques `poll-board` (sondage à slots, 3 erreurs, vol) et `buzzer` (priorité, blocage)
 - [ ] Mécanique `ladder` + jokers 50:50 / sondage public (prérequis du template QCM à paliers)

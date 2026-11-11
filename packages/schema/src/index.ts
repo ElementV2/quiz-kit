@@ -8,3 +8,5 @@ export * from "./events.ts";
 export * from "./views.ts";
 export * from "./versioning.ts";
 export * from "./fixtures.ts";
+export * from "./scenes.ts";
+export * from "./scene-presets.ts";

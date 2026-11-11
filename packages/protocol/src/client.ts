@@ -55,12 +55,35 @@ const defaultTimer = (fn: () => void, ms: number): (() => void) => {
   return () => clearTimeout(h);
 };
 
-let keyCounter = 0;
+/**
+ * Idempotency key from 128 random bits. `crypto.getRandomValues` is the only Crypto member available in insecure
+ * contexts (MDN) — tablets load the app over plain http://<LAN-IP>, where `crypto.randomUUID` does not exist.
+ */
 function defaultKey(): string {
-  const c = (globalThis as { crypto?: { randomUUID?: () => string } }).crypto;
-  if (c?.randomUUID !== undefined) return `k_${c.randomUUID().replaceAll("-", "")}`;
-  keyCounter += 1;
-  return `k_${Date.now().toString(36)}${keyCounter.toString(36)}${Math.random().toString(36).slice(2, 10)}`;
+  const bytes = new Uint8Array(16);
+  crypto.getRandomValues(bytes);
+  return `k_${Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("")}`;
+}
+
+/** localStorage-backed queue (available over plain HTTP, survives a reload; IndexedDB is not needed for a few intents). */
+export function localStorageIntentStore(key: string, storage: Pick<Storage, "getItem" | "setItem">): IntentStore {
+  return {
+    load: () => {
+      try {
+        const raw: unknown = JSON.parse(storage.getItem(key) ?? "[]");
+        return Array.isArray(raw) ? raw.filter((p): p is PendingIntent => typeof p === "object" && p !== null && "key" in p && "action" in p) : [];
+      } catch {
+        return [];
+      }
+    },
+    save: (pending) => {
+      try {
+        storage.setItem(key, JSON.stringify(pending));
+      } catch {
+        /* storage blocked or full: the in-memory queue still works until reload */
+      }
+    },
+  };
 }
 
 export class QuizClient {
