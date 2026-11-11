@@ -151,7 +151,8 @@ function QuestionList(p: { title: string; list: RoundList; doc: GameDocument; ro
                   <span class="q-mono muted">{i() + 1}</span>
                   <span class="s-kind">{q() === undefined ? "?" : kindLabel(q()?.answerSpec.kind ?? "single")}</span>
                   <span class="s-qtext" title={q()?.prompt.text}>{q()?.prompt.text ?? qid}</span>
-                  <Show when={q()}>{(qq) => { const w = () => pointsInfo(p.round, qq(), defaultRegistry); return <span class="s-worth" title={`D'où viennent ses points : ${w().why}`} data-source={w().source}>{w().summary}</span>; }}</Show>
+                  {/* Same for every question when the round's own mechanic decides (chain, ladder…): said once under the list. */}
+                  <Show when={q()}>{(qq) => { const w = () => pointsInfo(p.round, qq(), defaultRegistry); return <Show when={!(p.round.mechanic !== "mixed" && w().source === "own")}><span class="s-worth" title={`D'où viennent ses points : ${w().why}`} data-source={w().source}>{w().summary}</span></Show>; }}</Show>
                   <Button kind="ghost" title="Monter" disabled={i() === 0} onClick={() => p.update((d) => { const r = d.format.rounds[p.ri]; if (r !== undefined) moveItem(r[p.list], i(), i() - 1); })}>↑</Button>
                   <Button kind="ghost" title="Descendre" disabled={i() === ids().length - 1} onClick={() => p.update((d) => { const r = d.format.rounds[p.ri]; if (r !== undefined) moveItem(r[p.list], i(), i() + 1); })}>↓</Button>
                   <Button kind="ghost" title={p.list === "questions" ? "Mettre en réserve" : "Jouer cette question"} onClick={() => p.update((d) => swapList(d, p.ri, qid, p.list === "questions" ? "reserve" : "questions"))}>{p.list === "questions" ? "→ réserve" : "→ jouer"}</Button>
@@ -163,6 +164,9 @@ function QuestionList(p: { title: string; list: RoundList; doc: GameDocument; ro
           }}
         </For>
       </ol>
+      <Show when={p.round.mechanic !== "mixed" ? byId().get(ids()[0] ?? "") : undefined}>
+        {(q0) => { const w = () => pointsInfo(p.round, q0(), defaultRegistry); return <Show when={w().source === "own"}><p class="muted s-worth-line">Points de toutes ces questions : {w().summary} ({w().why}).</p></Show>; }}
+      </Show>
       <select class="s-add-q" value="" aria-label={`Ajouter à : ${p.title}`} onChange={(e) => { const v = e.currentTarget.value; e.currentTarget.value = ""; if (v !== "") p.update((d) => addToRound(d, p.ri, v, p.list)); }}>
         <option value="">+ ajouter une question de la banque…</option>
         <For each={candidates()}>

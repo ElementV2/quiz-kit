@@ -78,7 +78,7 @@ export const MECHANICS: Readonly<Record<string, MechanicInfo>> = {
     explain: "Chacun son tour, à l'oral : une bonne réponse fait monter la chaîne, une erreur la remet à zéro ; on met en banque avant sa question. Vote d'élimination après chaque manche, duel final à deux : le gagnant remporte toutes les banques.",
     usesScoring: false,
     fields: [
-      { key: "stage", kind: "enum", label: "Type de manche", options: [{ value: "chain", label: "Manche de chaîne" }, { value: "duel", label: "Duel final (deux derniers joueurs)" }] },
+      { key: "stage", kind: "enum", label: "Cette manche est", options: [{ value: "chain", label: "une manche de chaîne (tours, banque, vote)" }, { value: "duel", label: "le duel final (les deux derniers joueurs)" }] },
       { key: "steps", kind: "numbers", label: "Montants de la chaîne (croissants, manche de chaîne)", hint: "à renseigner, ex. 20, 50, 100, 200" },
       { key: "bankTarget", kind: "number", label: "Banque maximale de la manche (vide = le dernier montant)", min: 1, max: 100_000_000 },
       { key: "questionsEach", kind: "number", label: "Duel final : questions par joueur avant la mort subite", min: 1, max: 20 },

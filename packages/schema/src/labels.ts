@@ -167,6 +167,6 @@ export const OWN_POINTS_FR: Readonly<Record<string, string>> = {
   hints: "selon le nombre d'indices",
   "reveal-image": "selon les cases dévoilées",
   "crowd-vote": "points du vote du chat",
-  chain: "toutes les banques, au vainqueur du duel final",
+  chain: "banque, versée au vainqueur du duel",
 };
 

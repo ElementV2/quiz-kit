@@ -51,7 +51,7 @@
 .s-field-row { display: flex; gap: 8px; align-items: center; justify-content: space-between; margin: 4px 0; font-size: 13px; }
 .s-check { margin: 3px 0; }
 .s-stack { display: grid; gap: 6px; }
-.s-section { display: grid; gap: 6px; padding: 10px 0; border-bottom: 1px solid var(--ui-border); }
+.s-section { display: grid; grid-template-columns: minmax(0, 1fr); gap: 6px; padding: 10px 0; border-bottom: 1px solid var(--ui-border); } /* a long row never widens its column */
 .s-section:last-child { border-bottom: 0; }
 .s-grid2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
 .s-grid3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 4px; }
@@ -366,7 +366,7 @@
 .s-cat > summary { cursor: pointer; display: flex; gap: 8px; align-items: baseline; padding: 2px 0; }
 .s-cat-name { font-weight: 650; }
 .s-cat[open] > summary { margin-bottom: 6px; border-bottom: 1px solid var(--ui-border); padding-bottom: 6px; }
-.s-worth { font-size: 11px; font-family: var(--ui-mono); color: var(--ui-muted); white-space: nowrap; padding: 1px 6px; border: 1px solid var(--ui-border); border-radius: var(--ui-radius); }
+.s-worth { font-size: 11px; font-family: var(--ui-mono); color: var(--ui-muted); white-space: nowrap; padding: 1px 6px; border: 1px solid var(--ui-border); border-radius: var(--ui-radius); flex: 0 1 auto; min-width: 0; max-width: 30%; overflow: hidden; text-overflow: ellipsis; } /* long rules shortened, full text on hover */
 .s-worth[data-source="question"] { color: var(--ui-accent); border-color: var(--ui-accent); }
 .s-worth[data-source="category"] { color: var(--ui-text); }
 .s-worth-line { margin: 2px 0 0; font-size: 12px; }
