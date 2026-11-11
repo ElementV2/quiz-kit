@@ -191,7 +191,12 @@ const REASON_LABEL: Readonly<Record<ControlView["ledger"][number]["reason"], str
 export type LedgerRow = { readonly id: string; readonly at: number; readonly who: string; readonly delta: number; readonly why: string; readonly question: string | null; readonly voided: boolean };
 
 /** Points history (newest first) in words: who, how many, why, on which question. */
-export function ledgerRows(v: Pick<ControlView, "ledger" | "participants" | "teams" | "rundown">): LedgerRow[] {
+export function ledgerRows(v: {
+  readonly ledger: ControlView["ledger"];
+  readonly participants: readonly { readonly id: string; readonly displayName: string }[];
+  readonly teams: readonly { readonly id: string; readonly name: string }[];
+  readonly rundown: readonly { readonly title: string; readonly questions: readonly { readonly index: number; readonly id: string }[] }[];
+}): LedgerRow[] {
   const names = new Map<string, string>([...v.participants.map((p) => [p.id, p.displayName] as const), ...v.teams.map((t) => [t.id, `équipe ${t.name}`] as const)]);
   const questions = new Map<string, string>();
   for (const r of v.rundown) for (const q of r.questions) questions.set(q.id, `${r.title} · Q${q.index + 1}`);
