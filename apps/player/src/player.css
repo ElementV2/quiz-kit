@@ -152,3 +152,4 @@ body { overscroll-behavior: none; user-select: none; -webkit-user-select: none; 
 .p-hand-other { background: var(--ui-surface); border-color: var(--ui-border-strong); color: var(--ui-text); }
 /* Zoom stays possible (pinch, WCAG 1.4.4); a quick double tap on an answer never zooms the page. */
 html, body { touch-action: manipulation; }
+.p-multi-hint { margin: 0 0 8px; color: var(--ui-warn); font-weight: 650; }

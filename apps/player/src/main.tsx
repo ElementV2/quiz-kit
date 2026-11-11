@@ -201,6 +201,11 @@ function Game(props: { token: string }) {
                 {(mm) => {
                   const m = () => mm();
                   return (
+                    <>
+                    {/* Several answers: each touch ticks or unticks one (saved at once); said before the options. */}
+                    <Show when={m().maxPick > 1 && v().phase !== "revealed"}>
+                      <p class="p-hint p-multi-hint">Plusieurs réponses possibles : touchez toutes celles qui sont justes{m().maxPick < m().options.length ? ` (${m().maxPick} au plus)` : ""}.</p>
+                    </Show>
                     <div class="p-options" data-count={m().options.length}>
                       <For each={m().options}>
                         {(o, i) => {
@@ -216,6 +221,7 @@ function Game(props: { token: string }) {
                         }}
                       </For>
                     </div>
+                    </>
                   );
                 }}
               </Show>
