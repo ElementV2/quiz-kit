@@ -1,4 +1,4 @@
-# Kit de démarrage — Quiz Builder
+# Quizzkit
 
 À dézipper à la racine d'un dossier vide (le futur dépôt), puis `git init`.
 

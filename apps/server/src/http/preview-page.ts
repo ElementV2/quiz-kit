@@ -8,7 +8,7 @@ export const PREVIEW_HTML = `<!doctype html>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Quiz — aperçu</title>
+<title>Quizzkit — aperçu</title>
 <link rel="stylesheet" href="/assets/preview.css">
 </head>
 <body>

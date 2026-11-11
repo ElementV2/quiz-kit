@@ -70,9 +70,9 @@ async fn restart_with_backoff(handle: AppHandle, server: Arc<Server>, mut crashe
         match start_server(&handle, server.clone()) {
             Ok(()) => return,
             Err(err) => {
-                eprintln!("Quiz : redémarrage du serveur impossible ({err}), nouvel essai");
+                eprintln!("Quizzkit : redémarrage du serveur impossible ({err}), nouvel essai");
                 if let Some(window) = handle.get_webview_window("main") {
-                    let _ = window.set_title(&format!("Quiz — serveur arrêté, nouvel essai… ({err})"));
+                    let _ = window.set_title(&format!("Quizzkit — serveur arrêté, nouvel essai… ({err})"));
                 }
                 crashes += 1;
             }
@@ -115,7 +115,7 @@ fn main() {
             Ok(())
         })
         .build(tauri::generate_context!())
-        .expect("lancement de Quiz");
+        .expect("lancement de Quizzkit");
     app.run(move |_handle, event| {
         if let RunEvent::Exit = event {
             server.quitting.store(true, Ordering::SeqCst);

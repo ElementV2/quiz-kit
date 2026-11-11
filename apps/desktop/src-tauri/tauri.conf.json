@@ -1,11 +1,11 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "Quiz",
+  "productName": "Quizzkit",
   "version": "0.1.0",
   "identifier": "fr.quizkit.desktop",
   "build": { "frontendDist": "../src" },
   "app": {
-    "windows": [{ "label": "main", "title": "Quiz — serveur de show", "width": 1400, "height": 880, "minWidth": 900, "minHeight": 600 }],
+    "windows": [{ "label": "main", "title": "Quizzkit — serveur de show", "width": 1400, "height": 880, "minWidth": 900, "minHeight": 600 }],
     "security": { "csp": null }
   },
   "bundle": {

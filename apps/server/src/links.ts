@@ -79,7 +79,7 @@ export function formatLinks(links: Links, linksPath: string, interactive: boolea
   const first = links.origins[0] ?? "http://localhost";
   const lines = [
     "",
-    "════════ Quiz — serveur de show ════════",
+    "════════ Quizzkit — serveur de show ════════",
     `Accueil (toute l'équipe) : ${links.origins.map((o) => `${o}/`).join("  ·  ")}`,
     `Sur ce PC : http://localhost:${new URL(first).port || "80"}/ (accès direct, le code équipe y est affiché)`,
     ...(links.secureOrigins.length > 0 ? [`HTTPS (tablettes) : ${links.secureOrigins.join("  ·  ")}`] : []),

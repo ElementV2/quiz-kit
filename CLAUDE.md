@@ -1,4 +1,4 @@
-# CLAUDE.md — Quiz Builder (nom de code : `quiz`)
+# CLAUDE.md — Quizzkit (nom de code : `quiz`)
 
 Outil **interne** pour créer, habiller et faire tourner en live n'importe quel jeu de quiz
 (façon QVGDM, Famille en or, buzzer culture G, Jeopardy, blind test, quiz chat Twitch, Kahoot-like),
