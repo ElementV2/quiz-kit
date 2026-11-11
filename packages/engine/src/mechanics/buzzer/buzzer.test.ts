@@ -60,7 +60,7 @@ mechanicContractSuite({ mechanic: buzzer, registry: reg, game: CONTRACT_GAME, an
 
 const buzz = (pid: string): Step => [actor("player", pid), { type: "buzz", participantId: pid }];
 const judge = (participantId: string, correct: boolean): Step => ctl({ type: "answer.judge", participantId, correct });
-const OPEN: Step[] = [ctl({ type: "game.start" }), ...addPlayers(3), ctl({ type: "round.start" }), ctl({ type: "question.present" }), ctl({ type: "question.open" })];
+const OPEN: Step[] = [ctl({ type: "game.start" }), ...addPlayers(3), ctl({ type: "round.start" }), ctl({ type: "question.present" })];
 const END: Step[] = [ctl({ type: "question.lock" }), ctl({ type: "question.reveal" })];
 
 const play = (steps: readonly Step[], game: GameDocument = DEMO_BUZZER_GAME): Game => run(reg, steps, createGame(makeSession(game)));
@@ -120,7 +120,7 @@ describe("buzzer flow", () => {
 
   it("default undo never cancels a buzz; an explicit one does, and replay agrees", () => {
     const g = play([...OPEN, buzz("p_1"), ctl({ type: "undo" })]);
-    expect(g.state.phase).toBe("presenting"); // the undo cancelled question.open, the buzz is skipped
+    expect(g.state.phase).toBe("idle"); // the undo cancelled the presentation (it opened the buzzers), the buzz is skipped
     const h = play([...OPEN, buzz("p_1"), buzz("p_2")]);
     const seq = h.events.find((e) => e.action.type === "buzz")?.seq ?? 0;
     const u = run(reg, [ctl({ type: "undo", targetSeq: seq })], h);
@@ -151,7 +151,7 @@ describe("buzzer projections", () => {
   });
 
   it("shows spoken options of a single question to all, the right one to host / control only", () => {
-    const g = play([...OPEN, ctl({ type: "question.lock" }), ctl({ type: "question.reveal" }), ctl({ type: "question.next" }), ctl({ type: "question.present" }), ctl({ type: "question.open" })]);
+    const g = play([...OPEN, ctl({ type: "question.lock" }), ctl({ type: "question.reveal" }), ctl({ type: "question.next" }), ctl({ type: "question.present" })]);
     expect(viewOf(g, { role: "player", participantId: "p_1" })).toMatchObject({ kind: "single", correct: null, expected: null, options: [{ id: "a" }, { id: "b" }, { id: "c" }, { id: "d" }] });
     expect(viewOf(g, { role: "control" })).toMatchObject({ correct: "c" });
   });

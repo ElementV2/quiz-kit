@@ -160,7 +160,7 @@ function undoTarget(g: Game, explicit: number | undefined): Result<number, Rejec
     const e = g.events[i];
     if (e === undefined) continue;
     if (e.seq < barrier) return err("forbidden", barrierMsg);
-    if (isUndoableByDefault(e.action.type) && hasEffect(e.seq)) return ok(e.seq);
+    if (isUndoableByDefault(e.action.type, e.actor.role) && hasEffect(e.seq)) return ok(e.seq);
   }
   return err("not-found", "rien à annuler");
 }

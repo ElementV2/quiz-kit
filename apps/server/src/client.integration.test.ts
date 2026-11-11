@@ -50,7 +50,7 @@ describe("QuizClient ⇄ server", () => {
     const ctl = client(s, "Régie");
     const out = client(s, "Sortie program");
     await until(() => ctl.state === "open" && out.state === "open");
-    for (const a of [{ type: "game.start" }, { type: "player.add", participantId: "p_1", displayName: "Ana", seat: 1, channel: "seat" }, { type: "round.start" }, { type: "question.present" }, { type: "question.open" }] as const) {
+    for (const a of [{ type: "game.start" }, { type: "player.add", participantId: "p_1", displayName: "Ana", seat: 1, channel: "seat" }, { type: "round.start" }, { type: "question.present" }] as const) {
       expect(await ctl.submit(a)).toMatchObject({ ok: true });
     }
     await until(() => phase(out) === "open");
@@ -63,7 +63,7 @@ describe("QuizClient ⇄ server", () => {
     const s = await boot();
     const ctl = client(s, "Régie");
     await until(() => ctl.state === "open");
-    for (const a of [{ type: "game.start" }, { type: "player.add", participantId: "p_1", displayName: "Ana", seat: 1, channel: "seat" }, { type: "round.start" }, { type: "question.present" }, { type: "question.open" }] as const) await ctl.submit(a);
+    for (const a of [{ type: "game.start" }, { type: "player.add", participantId: "p_1", displayName: "Ana", seat: 1, channel: "seat" }, { type: "round.start" }, { type: "question.present" }] as const) await ctl.submit(a);
     const seat = client(s, "Siège 1");
     await until(() => seat.state === "open");
     seat.dropConnection(); // Wi-Fi gone
@@ -93,7 +93,7 @@ describe("QuizClient ⇄ server", () => {
     const pendingWhileDown = ctl.submit({ type: "question.present" });
     const s2 = await boot(dataDir, port);
     await expect(pendingWhileDown).resolves.toMatchObject({ ok: true });
-    await until(() => phase(out) === "presenting");
+    await until(() => phase(out) === "open");
     expect(out.view).toEqual(JSON.parse(JSON.stringify(s2.runtime.view({ role: "output", scene: "program" }))));
     ctl.stop();
     out.stop();

@@ -55,8 +55,17 @@ export const Round = z.strictObject({
   reserve: z.array(QuestionId).default([]),
   timer: TimerConfig.optional(),
   scoring: ScoringRule,
+  /**
+   * Answers open as soon as the question is presented (absent = true): `question.present` goes straight to `open`, timer
+   * armed like `question.open`. False: a reading step first (`presenting`, then « Ouvrir les réponses »), e.g. a
+   * TV-style buzzer where the host reads the whole question before anyone may buzz.
+   */
+  openOnPresent: z.boolean().optional(),
 });
 export type Round = z.infer<typeof Round>;
+
+/** The round opens the answers at the presentation (default). */
+export const opensOnPresent = (round: Pick<Round, "openOnPresent">): boolean => round.openOnPresent !== false;
 
 /**
  * Show flow (doc 07 « machine d'états en nodes »): what follows a round. Without a transition from a round, the

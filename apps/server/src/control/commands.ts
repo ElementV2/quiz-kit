@@ -38,7 +38,9 @@ export function planCommand(cmd: Command, args: readonly Arg[], v: ControlView, 
   switch (cmd) {
     case "next": {
       const n = nextStep(v);
-      return n === null ? { error: "partie terminée" } : { action: n.action, label: n.label };
+      // A greyed step (chain: judge first, vote not closable yet): its label says what to do first.
+      if (n === null) return { error: "partie terminée" };
+      return n.action === null ? { error: n.label } : { action: n.action, label: n.label };
     }
     case "open":
       return { action: { type: "question.open" }, label: "Ouvrir les réponses" };

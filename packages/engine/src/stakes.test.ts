@@ -12,18 +12,18 @@ const GAME: GameDocument = { ...DEMO_TEXT_GAME, format: { ...DEMO_TEXT_GAME.form
 const say = (pid: string, text: string) => [actor("player", pid), { type: "answer.submit", participantId: pid, answer: { kind: "text", text } }] as const;
 const buzz = (pid: string) => [actor("player", pid), { type: "buzz", participantId: pid }] as const;
 const START = [ctl({ type: "game.start" }), ctl({ type: "round.start" }), ...addPlayers(2)];
-const Q1 = [ctl({ type: "question.present" }), ctl({ type: "question.open" }), say("p_1", "Van Gogh"), ctl({ type: "question.lock" }), ctl({ type: "question.reveal" })];
+const Q1 = [ctl({ type: "question.present" }), say("p_1", "Van Gogh"), ctl({ type: "question.lock" }), ctl({ type: "question.reveal" })];
 
 describe("live stakes (question.setStakes)", () => {
   it("« cette question vaut 500 points » / « ×3 », shown on air, only for that question", () => {
     let g = run(reg, [...START, ctl({ type: "question.present" }), ctl({ type: "question.setStakes", roundIndex: 0, questionIndex: 0, points: 500, multiplier: 3 })], createGame(makeSession(GAME)));
     expect(project(g, { role: "output", scene: "program" }, reg)).toMatchObject({ stakes: { points: 500, multiplier: 3 } });
     expect(project(g, { role: "player", participantId: "p_1" }, reg)).toMatchObject({ stakes: { points: 500, multiplier: 3 } });
-    g = run(reg, [ctl({ type: "question.open" }), say("p_1", "Van Gogh"), ctl({ type: "question.lock" }), ctl({ type: "question.reveal" })], g);
+    g = run(reg, [say("p_1", "Van Gogh"), ctl({ type: "question.lock" }), ctl({ type: "question.reveal" })], g);
     expect(participantTotal(g.state, "p_1")).toBe(1500);
     g = run(reg, [ctl({ type: "question.next" })], g);
     expect(project(g, { role: "output", scene: "program" }, reg)).toMatchObject({ stakes: null });
-    g = run(reg, [ctl({ type: "question.present" }), ctl({ type: "question.open" }), say("p_1", "Canberra"), ctl({ type: "question.lock" }), ctl({ type: "question.reveal" })], g);
+    g = run(reg, [ctl({ type: "question.present" }), say("p_1", "Canberra"), ctl({ type: "question.lock" }), ctl({ type: "question.reveal" })], g);
     expect(participantTotal(g.state, "p_1")).toBe(1600); // back to the round's 100
   });
 
@@ -39,11 +39,11 @@ describe("live stakes (question.setStakes)", () => {
   });
 
   it("a regrade keeps the stakes of the reveal; the multiplier applies to mechanic points (board)", () => {
-    let g = run(reg, [...START, ctl({ type: "question.present" }), ctl({ type: "question.setStakes", roundIndex: 0, questionIndex: 0, points: null, multiplier: 2 }), ctl({ type: "question.open" }), say("p_2", "Monet"), ctl({ type: "question.lock" }), ctl({ type: "question.reveal" })], createGame(makeSession(GAME)));
+    let g = run(reg, [...START, ctl({ type: "question.present" }), ctl({ type: "question.setStakes", roundIndex: 0, questionIndex: 0, points: null, multiplier: 2 }), say("p_2", "Monet"), ctl({ type: "question.lock" }), ctl({ type: "question.reveal" })], createGame(makeSession(GAME)));
     expect(participantTotal(g.state, "p_2")).toBe(0);
     g = run(reg, [ctl({ type: "question.regrade", questionId: "q_txt_1", answerSpec: { kind: "text", accepted: ["Monet"] } })], g);
     expect(participantTotal(g.state, "p_2")).toBe(200);
-    const b = run(reg, [...START, ctl({ type: "question.present", questionIndex: 0 }), ctl({ type: "question.setStakes", roundIndex: 0, questionIndex: 0, points: null, multiplier: 5 }), ctl({ type: "question.open" }), buzz("p_1"), ctl({ type: "answer.judge", participantId: "p_1", correct: true }), ctl({ type: "question.lock" }), ctl({ type: "question.reveal" })], createGame(makeSession(DEMO_BOARD_GAME)));
+    const b = run(reg, [...START, ctl({ type: "question.present", questionIndex: 0 }), ctl({ type: "question.setStakes", roundIndex: 0, questionIndex: 0, points: null, multiplier: 5 }), buzz("p_1"), ctl({ type: "answer.judge", participantId: "p_1", correct: true }), ctl({ type: "question.lock" }), ctl({ type: "question.reveal" })], createGame(makeSession(DEMO_BOARD_GAME)));
     expect(participantTotal(b.state, "p_1")).toBe(1000); // 200 cell × 5
   });
 
@@ -59,7 +59,7 @@ describe("live stakes — review 5", () => {
     g = run(reg, [ctl({ type: "question.present", questionIndex: 3 })], g);
     expect(project(g, { role: "control" }, reg)).toMatchObject({ stakesTarget: { roundIndex: 0, questionIndex: 3, points: false } });
     expect(() => run(reg, [ctl({ type: "question.setStakes", roundIndex: 0, questionIndex: 3, points: 1000, multiplier: null })], g)).toThrow(/multiplicateur/);
-    g = run(reg, [ctl({ type: "question.setStakes", roundIndex: 0, questionIndex: 3, points: null, multiplier: 2 }), ctl({ type: "question.open" }), buzz("p_1"), ctl({ type: "answer.judge", participantId: "p_1", correct: true }), ctl({ type: "question.next" })], g);
+    g = run(reg, [ctl({ type: "question.setStakes", roundIndex: 0, questionIndex: 3, points: null, multiplier: 2 }), buzz("p_1"), ctl({ type: "answer.judge", participantId: "p_1", correct: true }), ctl({ type: "question.next" })], g);
     expect(participantTotal(g.state, "p_1")).toBe(800); // 400 cell × 2, written at question.next
   });
 

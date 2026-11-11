@@ -1,5 +1,5 @@
 import type { ActionType } from "./actions.ts";
-import type { AnswerKind } from "./content.ts";
+import { multiShare, type AnswerKind, type MultiScoring } from "./content.ts";
 import type { Role } from "./roles.ts";
 import type { ParticipantStatus } from "./session.ts";
 
@@ -78,6 +78,7 @@ export const ACTION_LABEL_FR: Readonly<Partial<Record<ActionType, string>>> = {
   "question.replaceFromReserve": "remplacer par une question de réserve",
   "question.edit": "modifier la question",
   "question.regrade": "corriger la réponse",
+  "question.setMultiScoring": "changer le comptage des réponses multiples",
   "question.setStakes": "régler la mise",
   "answer.submit": "répondre",
   "answer.judge": "juger une réponse",
@@ -170,3 +171,45 @@ export const OWN_POINTS_FR: Readonly<Record<string, string>> = {
   chain: "banque, versée au vainqueur du duel",
 };
 
+
+/** How a several-answers QCM is counted, in words. */
+export const MULTI_SCORING_LABEL_FR: Readonly<Record<MultiScoring, string>> = {
+  all: "tout ou rien",
+  "partial-penalty": "points partiels, erreurs déduites",
+  partial: "points partiels, erreurs sans pénalité",
+  "any-no-wrong": "juste dès une bonne réponse sans erreur",
+};
+
+/** Where the way of counting comes from. */
+export const MULTI_SCORING_FROM_FR: Readonly<Record<"category" | "question" | "control", string>> = {
+  category: "réglage de la catégorie",
+  question: "réglage de la question",
+  control: "choisi par la régie",
+};
+
+const plural = (n: number, word: string): string => `${n} ${word}${n > 1 ? "s" : ""}`;
+
+/**
+ * One line explaining a way of counting, with an example on the actual question (`correctCount` right answers among
+ * `optionCount` options): « bonnes cochées − mauvaises, sur 4 : 4 bonnes et 1 erreur → 75 % ».
+ */
+export function multiScoringExplain(mode: MultiScoring, correctCount: number, optionCount: number): string {
+  const n = Math.max(1, correctCount);
+  const wrongOptions = Math.max(0, optionCount - n);
+  const sample = (good: number, wrong: number): string => `${plural(good, "bonne")} sur ${n}, ${plural(wrong, "erreur")} → ${Math.round(multiShare(mode, good, wrong, n) * 100)} %`;
+  const some = Math.max(1, n - 1);
+  switch (mode) {
+    case "all":
+      return `il faut cocher exactement les bonnes réponses, sinon rien. Ex. : ${sample(some, 0)}`;
+    case "partial-penalty":
+      return `(bonnes cochées − mauvaises cochées) / ${n}, jamais en dessous de 0. Ex. : ${wrongOptions > 0 ? sample(n, 1) : sample(some, 0)}`;
+    case "partial":
+      return `bonnes cochées / ${n}, les erreurs ne retirent rien ; cocher plus de ${plural(n, "case")} ne rapporte rien. Ex. : ${sample(some, 0)}${wrongOptions > 0 && some + 1 <= n ? ` ; ${sample(some, 1)}` : ""}`;
+    case "any-no-wrong":
+      return `100 % dès qu'au moins une bonne est cochée sans aucune erreur. Ex. : ${sample(1, 0)}${wrongOptions > 0 ? ` ; ${sample(1, 1)}` : ""}`;
+    default: {
+      const unknown: never = mode;
+      return unknown;
+    }
+  }
+}

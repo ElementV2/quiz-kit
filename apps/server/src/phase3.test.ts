@@ -45,7 +45,7 @@ describe("results export", () => {
     ctl({ type: "game.start" }), ctl({ type: "round.start" }),
     ctl({ type: "player.add", participantId: "p_1", displayName: "=HYPERLINK(\"x\")", channel: "play" }),
     ctl({ type: "player.add", participantId: "p_2", displayName: "Zoé; la \"rapide\"", channel: "play" }),
-    ctl({ type: "question.present" }), ctl({ type: "question.open" }),
+    ctl({ type: "question.present" }), 
     [{ role: "player", id: "p_1" }, { type: "answer.submit", participantId: "p_1", answer: { kind: "text", text: "Monet" } }],
     [{ role: "player", id: "p_2" }, { type: "answer.submit", participantId: "p_2", answer: { kind: "text", text: "van gogh" } }],
     ctl({ type: "question.lock" }), ctl({ type: "question.reveal" }),
@@ -84,7 +84,7 @@ describe("rehearsal bots", () => {
     ["pin", PIN_GAME], ["reveal-image", IMAGE_GAME],
   ];
   it.each(games)("%s: a bot's answer is accepted by the engine, accuracy 1 scores", (_name, game) => {
-    const open = play(game, [ctl({ type: "game.start" }), ctl({ type: "round.start" }), ctl({ type: "player.add", participantId: "p_bot_1", displayName: "Bot 1", channel: "play" }), ctl({ type: "question.present" }), ctl({ type: "question.open" })]);
+    const open = play(game, [ctl({ type: "game.start" }), ctl({ type: "round.start" }), ctl({ type: "player.add", participantId: "p_bot_1", displayName: "Bot 1", channel: "play" }), ctl({ type: "question.present" })]);
     const m = control(open).mechanic;
     if (m === null) throw new Error("mechanic view");
     for (const accuracy of [0, 1]) {
@@ -134,7 +134,7 @@ describe("phase 3 HTTP routes", () => {
     expect((await s.http.inject({ method: "POST", url: `/api/rehearsal?t=${t}`, payload: { bots: 0 } })).statusCode).toBe(400);
     const started = await s.http.inject({ method: "POST", url: `/api/rehearsal?t=${t}`, payload: { bots: 5, accuracy: 1, latencyMs: 0 } });
     expect(started.json()).toMatchObject({ bots: 5 });
-    for (const a of [{ type: "game.start" }, { type: "round.start" }, { type: "question.present" }, { type: "question.open" }] as const) s.runtime.submit(a, CONTROL, null);
+    for (const a of [{ type: "game.start" }, { type: "round.start" }, { type: "question.present" }] as const) s.runtime.submit(a, CONTROL, null);
     await new Promise((r) => setTimeout(r, 300));
     expect(control(s.runtime.current).answers.filter((a) => a.participantId.startsWith("p_bot_"))).toHaveLength(5);
     const stopped = await s.http.inject({ method: "DELETE", url: `/api/rehearsal?t=${t}` });
@@ -150,7 +150,7 @@ describe("phase 3 HTTP routes", () => {
     const s = await boot();
     const t = tokenOf(s, "Régie");
     await s.http.inject({ method: "POST", url: `/api/rehearsal?t=${t}`, payload: { bots: 3, accuracy: 1, latencyMs: 400 } });
-    for (const a of [{ type: "game.start" }, { type: "round.start" }, { type: "question.present" }, { type: "question.open" }] as const) s.runtime.submit(a, CONTROL, null);
+    for (const a of [{ type: "game.start" }, { type: "round.start" }, { type: "question.present" }] as const) s.runtime.submit(a, CONTROL, null);
     s.newSession(DEMO_GAME);
     await new Promise((r) => setTimeout(r, 900));
     expect(s.runtime.current.state.participants).toHaveLength(0); // new session untouched
@@ -162,7 +162,7 @@ describe("phase 3 HTTP routes", () => {
     const t = tokenOf(s, "Régie");
     for (const a of [
       { type: "game.start" }, { type: "round.start" }, { type: "player.add", participantId: "p_1", displayName: "A", channel: "play" },
-      { type: "question.present" }, { type: "question.open" },
+      { type: "question.present" }, 
     ] as const) s.runtime.submit(a, CONTROL, null);
     s.runtime.submit({ type: "answer.submit", participantId: "p_1", answer: { kind: "choice", optionIds: ["a"] } }, CONTROL, null);
     s.runtime.submit({ type: "question.lock" }, CONTROL, null);

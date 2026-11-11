@@ -205,7 +205,13 @@ describe("permissions", () => {
     }
     expect(isAllowed("host", "chain.bank")).toBe(true);
     expect(isAllowed("host", "chain.vote")).toBe(false);
-    expect(isUndoableByDefault("chain.vote")).toBe(false); // a player's ballot, like an answer
+    for (const t of ["chain.vote", "chain.bank", "chain.pick"] as const) expect(isUndoableByDefault(t)).toBe(false); // a player's decision, like an answer
+    expect(isUndoableByDefault("chain.closeVote")).toBe(true);
+    // A bank sent by the control room / the host for the player on turn: Ctrl+Z takes it back.
+    expect(isUndoableByDefault("chain.bank", "control")).toBe(true);
+    expect(isUndoableByDefault("chain.bank", "host")).toBe(true);
+    expect(isUndoableByDefault("chain.bank", "seat")).toBe(false);
+    expect(isUndoableByDefault("chain.vote", "control")).toBe(false);
     expect(Action.safeParse({ type: "chain.vote", participantId: "p_1", against: "p_2" }).success).toBe(true);
     expect(Action.safeParse({ type: "chain.bank" }).success).toBe(false);
   });

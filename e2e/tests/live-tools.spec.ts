@@ -41,7 +41,7 @@ test("a free seat tablet seats its player by name; the control room raises the s
   await expect(seat.getByText("Siège libre")).toBeHidden();
   await expect(control.getByText("Zoé").first()).toBeVisible();
 
-  // Start, round, present → stakes ×3 from the control room.
+  // Start, round, present (answers open) → stakes ×3 from the control room.
   for (let i = 0; i < 3; i++) {
     await control.locator("body").press("Space");
     await control.waitForTimeout(150);
@@ -49,7 +49,7 @@ test("a free seat tablet seats its player by name; the control room raises the s
   await control.getByRole("group", { name: /Mise de cette question/ }).getByRole("button", { name: "×3" }).click();
   await expect(output.locator(".q-stakes-onair")).toHaveText("×3");
   await expect(seat.locator(".q-stakes-badge")).toHaveText("×3");
-  await control.locator("body").press("Space"); // open
+  // The answers opened with the presentation (round default).
   await seat.getByRole("button", { name: /Paris/ }).click();
   await expect(seat.getByText("Réponse enregistrée")).toBeVisible();
   await control.locator("body").press("Space"); // lock

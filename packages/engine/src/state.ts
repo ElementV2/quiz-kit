@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { GameDocument, Participant, Phase, ScoreEntry, SessionId, Team, type Question, type Round, type Session } from "@quiz/schema";
+import { GameDocument, MultiScoring, Participant, Phase, ScoreEntry, SessionId, Team, type Question, type Round, type Session } from "@quiz/schema";
 
 export const TimerState = z.strictObject({
   /** seq of the event that armed the timer; `timer.expired` must quote it (stale expirations are rejected). */
@@ -29,6 +29,15 @@ export const QuestionRecord = z.strictObject({
   stakes: z.strictObject({ points: z.number().int().nullable(), multiplier: z.number().nullable() }).nullable().default(null),
   /** Verdicts forced by the control room for this question (`answer.verdict`): applied to every (re)scoring. */
   verdicts: z.array(z.strictObject({ participantId: z.string(), correct: z.boolean() })).default([]),
+  /**
+   * Team of each player concerned (answered, judged or forced) at the reveal: every rewrite of this question's points
+   * (regrade, verdict, way of counting) credits it, never the current team. Absent in older records.
+   */
+  teamAt: z.record(z.string(), z.string().nullable()).optional(),
+  /** Targets (player or team id) whose line of this question was voided by hand: no rewrite ever gives it back. */
+  voidedTargets: z.array(z.string()).default([]),
+  /** Players removed since the reveal: their lines are kept as written (their team keeps the points), never rewritten. */
+  departed: z.array(z.string()).default([]),
   /** Response time (ms after opening) of every right answer: the `speed` tie-break sums them. */
   correctMs: z.array(z.strictObject({ participantId: z.string(), ms: z.number().int().min(0) })).default([]),
 });
@@ -86,6 +95,8 @@ export const GameState = z.strictObject({
   verdicts: z.array(z.strictObject({ participantId: z.string(), correct: z.boolean() })).default([]),
   /** When the studio last sent the game to the live (`game.patch`): shown in the control room. */
   studioPatchedAt: z.number().nullable().default(null),
+  /** How several-answers QCM are counted, chosen live by the control room (`question.setMultiScoring`), by question id. */
+  multiScoring: z.record(z.string(), MultiScoring).default({}),
   /** The host may drive the question flow from their tablet (`host.setDrive`, HOST_DRIVE_ACTIONS). */
   hostDrives: z.boolean().default(false),
 });
@@ -115,6 +126,7 @@ export function initialState(session: Session): GameState {
     layers: {},
     history: [],
     hostDrives: false,
+    multiScoring: {},
     stakes: null,
     gameVersion: 0,
     studioPatchedAt: null,

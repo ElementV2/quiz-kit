@@ -6,7 +6,7 @@ import { participantTotal } from "./state.ts";
 import { actor, addPlayers, answer, CONTROL, ctl, makeSession, run } from "./testing/harness.ts";
 
 const START = [ctl({ type: "game.start" }), ctl({ type: "round.start" }), ...addPlayers(3)];
-const OPEN_Q1 = [...START, ctl({ type: "question.present" }), ctl({ type: "question.open" })];
+const OPEN_Q1 = [...START, ctl({ type: "question.present" })];
 
 describe("question cycle (choice)", () => {
   it("plays a full game: present → open → answers → lock → reveal → next, scores in the ledger", () => {
@@ -18,10 +18,10 @@ describe("question cycle (choice)", () => {
     expect(g.state.ledger).toHaveLength(1);
     expect(g.state.ledger[0]).toMatchObject({ reason: "auto", questionId: "q_capital_fr", id: expect.stringMatching(/^se_\d+_0$/) });
 
-    g = run(reg, [ctl({ type: "question.next" }), ctl({ type: "question.present" }), ctl({ type: "question.open" }), answer("p_3", "false"), ctl({ type: "question.lock" }), ctl({ type: "question.reveal" }), ctl({ type: "question.next" })], g);
+    g = run(reg, [ctl({ type: "question.next" }), ctl({ type: "question.present" }), answer("p_3", "false"), ctl({ type: "question.lock" }), ctl({ type: "question.reveal" }), ctl({ type: "question.next" })], g);
     expect(participantTotal(g.state, "p_3")).toBeGreaterThan(0);
 
-    g = run(reg, [ctl({ type: "question.present" }), ctl({ type: "question.open" }), answer("p_1", "a", "c"), answer("p_2", "a"), ctl({ type: "question.lock" }), ctl({ type: "question.reveal" }), ctl({ type: "question.next" })], g);
+    g = run(reg, [ctl({ type: "question.present" }), answer("p_1", "a", "c"), answer("p_2", "a"), ctl({ type: "question.lock" }), ctl({ type: "question.reveal" }), ctl({ type: "question.next" })], g);
     expect(g.state.phase).toBe("game.end");
     expect(participantTotal(g.state, "p_2")).toBe(0); // partial multi answer = wrong
   });
@@ -115,8 +115,8 @@ describe("scores = ledger, overrides always accepted", () => {
 describe("undo (ADR-0010)", () => {
   it("undo without target cancels the last control decision, never a player answer", () => {
     const g = run(reg, [...OPEN_Q1, answer("p_1", "b"), ctl({ type: "undo" })]);
-    // Last control decision was question.open → back to presenting; p_1's answer is now invalid → skipped.
-    expect(g.state.phase).toBe("presenting");
+    // Last control decision was question.present (it opened the answers) → back between questions; p_1's answer is now invalid → skipped.
+    expect(g.state.phase).toBe("idle");
     expect(g.skipped.map((s) => s.type)).toEqual(["answer.submit"]);
     expect(g.events.at(-1)?.action.type).toBe("undo"); // journal is append-only
   });

@@ -27,7 +27,7 @@ mechanicContractSuite({
 });
 
 const submitOrder = (pid: string, ids: string[]) => [actor("player", pid), { type: "answer.submit", participantId: pid, answer: { kind: "order", optionIds: ids } }] as const;
-const OPEN = [ctl({ type: "game.start" }), ctl({ type: "round.start" }), ...addPlayers(2), ctl({ type: "question.present" }), ctl({ type: "question.open" })];
+const OPEN = [ctl({ type: "game.start" }), ctl({ type: "round.start" }), ...addPlayers(2), ctl({ type: "question.present" })];
 
 describe("order", () => {
   it("shows a shuffled order, never the answer, and scores the exact order", () => {

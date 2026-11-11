@@ -14,6 +14,13 @@
 - [x] Accès équipe distant : blocage **par IP** (sur le LAN chaque appareil a sa propre IP) (2026-11-11).
 - [x] `participants.mode` / `min` / `teamSize` : **supprimés** des documents par migration (2026-11-11).
 - [x] Format « Maillon faible » : **à ajouter** (2026-11-11).
+- [x] Rejeu des journaux écrits **avant** les règles du 2026-11-11 (sondage : erreurs propres à chaque camp et main
+      refusée au maximum d'erreurs ; chaîne : clore un vote sans bulletin refusé, duel sans vainqueur jamais clos en
+      silence ; réécriture des points qui ne rend plus une ligne annulée à la main et crédite l'équipe au moment de la
+      révélation ; réponses ouvertes dès la présentation par défaut — un ancien `question.open` est alors refusé et le
+      chrono est armé par la présentation) : un tel journal **peut diverger** s'il est rejoué par la nouvelle version (une action acceptée alors
+      peut être refusée et listée dans `skipped`, des points peuvent différer). Accepté : un journal se rejoue avec la
+      version qui l'a écrit (décision du 2026-11-11, plus haut) ; en show, le serveur redémarre toujours avec la même.
 - [ ] « La chaîne » : faut-il un **chrono de manche** (chaîne jouée contre la montre, comme à la télé) ? Aujourd'hui la
       régie termine la manche (`chain.end`) ; un chrono de manche demande un échéancier côté serveur (`timer.expired`
       n'existe que par question). Autres points à trancher : qui commence une manche de chaîne (aujourd'hui l'ordre

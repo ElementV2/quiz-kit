@@ -13,7 +13,9 @@ const CTL: Actor = { role: "control", id: "studio" };
 
 /** Drives a local game to `phase` on question `questionIndex` with 3 fake players, returns the output view. */
 export function simulateView(game: GameDocument, phase: SimulatedPhase, questionIndex = 0): View | null {
-  let g: Game = createGame({ schemaVersion: 1, id: "ses_studio", game, seed: 1, createdAt: 0 });
+  // The reading step (« presenting ») only exists in rounds that do not open the answers at once: simulate it as such.
+  const played = phase === "presenting" ? { ...game, format: { ...game.format, rounds: game.format.rounds.map((r) => ({ ...r, openOnPresent: false })) } } : game;
+  let g: Game = createGame({ schemaVersion: 1, id: "ses_studio", game: played, seed: 1, createdAt: 0 });
   let at = 1_000_000;
   const step = (action: Action, actor: Actor = CTL): boolean => {
     at += 1000;
@@ -36,9 +38,17 @@ export function simulateView(game: GameDocument, phase: SimulatedPhase, question
     return project(g, { role: "output", scene: "studio" }, defaultRegistry);
   }
   if (phase === "idle") return project(g, { role: "output", scene: "studio" }, defaultRegistry);
+  // « La chaîne »: the questions before are answered right, so the chain shows a climbed step and its next one.
+  if (game.format.rounds[0]?.mechanic === "chain") {
+    for (let i = 0; i < questionIndex; i++) {
+      step({ type: "question.present", questionIndex: i });
+      step({ type: "answer.judge", correct: true });
+      step({ type: "question.next" });
+    }
+  }
   if (!step({ type: "question.present", questionIndex })) return project(g, { role: "output", scene: "studio" }, defaultRegistry);
   if (phase !== "presenting") {
-    step({ type: "question.open" });
+    step({ type: "question.open" }); // refused (already open) in a round that opens at the presentation
     // Fake answers: first option for two players, second for one.
     const view = project(g, { role: "control" }, defaultRegistry);
     const opts = view.mechanic?.mechanic === "choice" ? view.mechanic.options : [];

@@ -31,7 +31,7 @@ test("verdict corrections: what is lit always matches the points, live and on a 
       await control.waitForTimeout(200);
     }
   };
-  await space(4); // start, round, present, open: « Quelle est la capitale de la France ? »
+  await space(3); // start, round, present (answers open): « Quelle est la capitale de la France ? »
   await ana.locator(".p-option").filter({ hasText: "Paris" }).click();
   const row = control.locator(".q-mech-review li").filter({ hasText: "Ana" });
   await expect(row).toHaveAttribute("data-accepted", "true");

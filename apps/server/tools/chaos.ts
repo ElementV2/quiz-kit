@@ -46,7 +46,6 @@ const step = (a: Action): Promise<void> => drive(ctl, a);
 
 for (let q = 1; q <= QUESTIONS; q++) {
   await step({ type: "question.present" });
-  await step({ type: "question.open" });
   if (q === 3) {
     await sleep(500);
     log("CHAOS: serveur tué (kill -9) en pleine question");

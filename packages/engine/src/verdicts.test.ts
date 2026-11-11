@@ -9,7 +9,7 @@ import { addPlayers, answer, ctl, makeSession, run, type Step } from "./testing/
 const q = DEMO_GAME.questions[0];
 const right = q?.answerSpec.kind === "single" ? q.answerSpec.correct : "";
 const wrong = q?.answerSpec.kind === "single" ? (q.answerSpec.options.find((o) => o.id !== right)?.id ?? "") : "";
-const OPEN: Step[] = [ctl({ type: "game.start" }), ctl({ type: "round.start" }), ...addPlayers(3), ctl({ type: "question.present" }), ctl({ type: "question.open" }), answer("p_1", right), answer("p_2", wrong)];
+const OPEN: Step[] = [ctl({ type: "game.start" }), ctl({ type: "round.start" }), ...addPlayers(3), ctl({ type: "question.present" }), answer("p_1", right), answer("p_2", wrong)];
 const LOCK: Step[] = [ctl({ type: "question.lock" }), ctl({ type: "question.reveal" })];
 const force = (participantId: string, correct: boolean | null): Step => ctl({ type: "answer.verdict", roundIndex: 0, questionIndex: 0, participantId, correct });
 const total = (g: ReturnType<typeof run>, pid: string) => participantTotal(g.state, pid);

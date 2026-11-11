@@ -4,10 +4,11 @@ import { createGame, decide, replay, type Game } from "../../game.ts";
 import { defaultRegistry as reg } from "../../index.ts";
 import { project } from "../../project.ts";
 import { createRng } from "../../rng.ts";
-import { teamTotal } from "../../state.ts";
+import { GameState, teamTotal } from "../../state.ts";
+import { MixedKinds } from "../mixed/mixed.ts";
 import { mechanicContractSuite } from "../../testing/contract-suite.ts";
 import { addPlayers, CONTROL, ctl, makeSession, run, type Step } from "../../testing/harness.ts";
-import { pollBoard } from "./poll-board.ts";
+import { PollBoardConfig, PollBoardState, pollBoard } from "./poll-board.ts";
 
 // ---------------------------------------------------------------------------------------------
 // Contract suite: the generator plays like an operator (gives the hand, judges, steals, reveals).
@@ -103,7 +104,7 @@ const roster: Step[] = [
   ctl({ type: "player.setTeam", participantId: "p_4", teamId: "t_b" }),
 ];
 const PRESENTED: Step[] = [ctl({ type: "game.start" }), ...roster, ctl({ type: "round.start" }), ctl({ type: "question.present" })];
-const OPEN: Step[] = [...PRESENTED, ctl({ type: "poll.control", teamId: "t_a" }), ctl({ type: "question.open" })];
+const OPEN: Step[] = [...PRESENTED, ctl({ type: "poll.control", teamId: "t_a" })];
 
 const good = (optionId: string): Step => ctl({ type: "answer.judge", correct: true, optionId });
 const WRONG: Action = { type: "answer.judge", correct: false };
@@ -228,8 +229,10 @@ describe("poll-board rejections", () => {
   });
 
   it("rejects judging before the hand is given, or outside open answers", () => {
-    expect(rejection(play([...PRESENTED, ctl({ type: "question.open" })]), WRONG)).toBe("conflict");
-    expect(rejection(play(PRESENTED), WRONG)).toBe("wrong-phase");
+    expect(rejection(play([...PRESENTED]), WRONG)).toBe("conflict");
+    // A round with a reading step (answers not opened by the presentation): nothing is judged before they open.
+    const reading: GameDocument = { ...CONTRACT_GAME, format: { ...CONTRACT_GAME.format, rounds: CONTRACT_GAME.format.rounds.map((r) => ({ ...r, openOnPresent: false })) } };
+    expect(rejection(play([...PRESENTED, ctl({ type: "poll.control", teamId: "t_a" })], reading), WRONG)).toBe("wrong-phase");
   });
 
   it("rejects finding a slot twice and stealing with the team that has the hand", () => {
@@ -320,16 +323,47 @@ describe("poll-board — passing the hand after the answers were closed", () => 
   });
 });
 
-describe("poll-board — hand after the last strike, strikes kept or reset", () => {
-  it("steal off: after the last strike the hand can still go to a side that has not played; strikes reset by default", () => {
+describe("poll-board — hand after the last strike, each side its own strikes", () => {
+  it("steal off: after the last strike the hand can still go to a side that has not played (its strikes start at 0)", () => {
     const g = play([...OPEN, good("a"), bad, bad, bad], withCfg({ steal: false }));
     expect(viewOf(g, { role: "control" })).toMatchObject({ stage: "done" });
     const passed = run(reg, [ctl({ type: "poll.control", teamId: "t_b" })], g);
     expect(viewOf(passed, { role: "control" })).toMatchObject({ stage: "play", controllingTeamId: "t_b", strikes: 0, winnerTeamId: null });
   });
-  it("strikes kept: the new side starts with the strikes already given (one try left at least)", () => {
-    const g = play([...OPEN, bad, ctl({ type: "poll.control", teamId: "t_b" })], withCfg({ strikesReset: false }));
-    expect(viewOf(g, { role: "control" })).toMatchObject({ controllingTeamId: "t_b", strikes: 1 });
+  it("each side has its own strikes — never those of another side; they come back with the hand", () => {
+    // A: one strike, hand to B (B starts at 0), B: two strikes, hand back to A (A finds its 1).
+    const g = play([...OPEN, bad, ctl({ type: "poll.control", teamId: "t_b" })], withCfg({}));
+    expect(viewOf(g, { role: "control" })).toMatchObject({ controllingTeamId: "t_b", strikes: 0 });
+    const back = run(reg, [bad, bad, ctl({ type: "poll.control", teamId: "t_a" })], g);
+    expect(viewOf(back, { role: "control" })).toMatchObject({ controllingTeamId: "t_a", strikes: 1 });
+    expect(viewOf(run(reg, [ctl({ type: "poll.control", teamId: "t_b" })], back), { role: "control" })).toMatchObject({ controllingTeamId: "t_b", strikes: 2 });
+  });
+  it("a side that made all its strikes cannot be given the hand again", () => {
+    const g = play([...OPEN, bad, bad, bad], withCfg({ steal: false }));
+    const toB = run(reg, [ctl({ type: "poll.control", teamId: "t_b" })], g);
+    expect(() => run(reg, [ctl({ type: "poll.control", teamId: "t_a" })], toB)).toThrow(/déjà fait ses 3 erreur/);
   });
 });
 
+
+describe("poll-board — older documents and snapshots with strikesReset (deprecated, never read)", () => {
+  it("a document carrying strikesReset (survey round or « Mixte » category) still loads and plays the same", () => {
+    expect(PollBoardConfig.safeParse({ strikesReset: false }).success).toBe(true);
+    expect(PollBoardConfig.safeParse({ strikeReset: false }).success).toBe(false); // still strict: a typo is refused
+    expect(MixedKinds.safeParse({ poll: { strikesReset: true } }).success).toBe(true);
+    const off = play([...OPEN, bad, ctl({ type: "poll.control", teamId: "t_b" }), ctl({ type: "poll.control", teamId: "t_a" })], withCfg({ strikesReset: false }));
+    const plain = play([...OPEN, bad, ctl({ type: "poll.control", teamId: "t_b" }), ctl({ type: "poll.control", teamId: "t_a" })], withCfg({}));
+    expect(viewOf(off, { role: "control" })).toEqual(viewOf(plain, { role: "control" }));
+  });
+
+  it("a snapshot whose survey state carries strikesReset resumes", () => {
+    const g = play([...OPEN, bad], withCfg({}));
+    const mech = g.state.mechanic;
+    if (mech === null) throw new Error("on air");
+    const raw: unknown = JSON.parse(JSON.stringify({ ...g.state, mechanic: { ...mech, state: { ...(mech.state as object), strikesReset: true } } })); // oxlint-disable-line typescript/no-unsafe-type-assertion -- test: the poll state is an object
+    const snap = GameState.parse(raw);
+    expect(PollBoardState.safeParse(snap.mechanic?.state).success).toBe(true);
+    const more = run(reg, [bad], g);
+    expect(replay(more.session, more.events, reg, { seq: g.events.length, state: snap }).state.mechanic?.state).toMatchObject({ strikes: 2 });
+  });
+});

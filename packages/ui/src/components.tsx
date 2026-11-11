@@ -114,4 +114,5 @@ export const MECHANIC_LABEL: Readonly<Record<string, string>> = {
   board: "Plateau",
   hints: "Indices",
   "reveal-image": "Image dévoilée",
+  chain: "La chaîne",
 };

@@ -131,7 +131,7 @@ function App() {
                     <div class="h-keys">
                       <div class="h-keys-tools">
                         <DriveTools view={v()} act={act} />
-                        <StakesBar class="h-stakes" view={v()} act={(a) => act(a)} />
+                        <Show when={v().mechanic?.mechanic !== "chain"}><StakesBar class="h-stakes" view={v()} act={(a) => act(a)} /></Show>
                       </div>
                       <div class="h-keys-grid">
                         <button type="button" class="h-key" disabled={v().phase !== "open"} onClick={() => void run([{ type: "question.lock" }, { type: "question.reveal" }])}>Révéler</button>
@@ -144,7 +144,7 @@ function App() {
                         </Show>
                       </div>
                       <Show when={step()} fallback={<button type="button" class="h-key h-key-primary" disabled>Partie terminée</button>}>
-                        {(s) => <button type="button" class="h-key h-key-primary" onClick={() => void act(s().action)}>{s().label}</button>}
+                        {(s) => <button type="button" class="h-key h-key-primary" disabled={s().action === null} onClick={() => { const a = s().action; if (a !== null) void act(a); }}>{s().label}</button>}
                       </Show>
                     </div>
                   </Show>

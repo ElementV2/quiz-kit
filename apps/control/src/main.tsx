@@ -2,7 +2,7 @@ import { For, Show, createEffect, createMemo, createResource, createSignal, on, 
 import { render } from "solid-js/web";
 import { Action as ActionSchema, actionLabel, type Action, type ControlView } from "@quiz/schema";
 import { asChoice, optionLetter, secondsLeft } from "@quiz/renderer";
-import { Button, HomeLink, MECHANIC_LABEL, MechanicPanel, VerdictsPanel, ON_AIR_PHASES, PHASE_LABEL, StatusPill, createQuizConnection, formatAnswer, nextTarget, onAirTarget, questionAt, sameTarget, confirmDialog, isDialogOpen, StakesBar } from "@quiz/ui";
+import { Button, HomeLink, MECHANIC_LABEL, MechanicPanel, MultiScoringPicker, VerdictsPanel, ON_AIR_PHASES, PHASE_LABEL, StatusPill, createQuizConnection, formatAnswer, nextTarget, onAirTarget, questionAt, sameTarget, confirmDialog, isDialogOpen, StakesBar } from "@quiz/ui";
 import "@quiz/ui/ui.css";
 import "./control.css";
 import { api, lanOrigin, token, withToken, type LinksResponse, type StatusResponse } from "./api.ts";
@@ -87,8 +87,8 @@ function App() {
     if (e.code === "Space") {
       e.preventDefault();
       if (e.repeat) return;
-      const n = nextStep(v);
-      if (n !== null) void act(n.action);
+      const n = stepOf(v);
+      if (n !== null && n.action !== null) void act(n.action);
     } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "z") {
       e.preventDefault();
       void act({ type: "undo" }, "Dernière action annulée");
@@ -288,9 +288,12 @@ function Tool(p: { readonly title: string; readonly children: JSX.Element }): JS
   );
 }
 
+/** The next step (shared with the host and Companion / OSC: `@quiz/protocol`); `action: null` = greyed, label says why. */
+const stepOf = (v: ControlView) => nextStep(v);
+
 /** The ONE next-step key (space bar), the clock and the few keys of the moment. */
 function Transport(p: { readonly view: ControlView; readonly readonly: boolean; readonly now: number; readonly act: Act }): JSX.Element {
-  const step = () => nextStep(p.view);
+  const step = () => stepOf(p.view);
   const remaining = () => (p.view.timer === null ? null : secondsLeft(p.view.timer.endsAt, p.now));
   const answered = () => {
     const m = p.view.mechanic;
@@ -302,7 +305,7 @@ function Transport(p: { readonly view: ControlView; readonly readonly: boolean; 
       <Show when={!p.readonly} fallback={<p class="muted c-grow">Poste en lecture seule : la régie maître pilote.</p>}>
         <Show when={step()} fallback={<button type="button" class="c-next" disabled>Partie terminée</button>}>
           {(n) => (
-            <button type="button" class="c-next" title="Espace" onClick={() => void p.act(n().action)}>
+            <button type="button" class="c-next" title="Espace" disabled={n().action === null} onClick={() => { const a = n().action; if (a !== null) void p.act(a); }}>
               <span>{n().label}</span>
               <kbd>Espace</kbd>
             </button>
@@ -325,7 +328,8 @@ function Transport(p: { readonly view: ControlView; readonly readonly: boolean; 
           </Show>
           <Button kind="ghost" title="Ctrl+Z" onClick={() => void p.act({ type: "undo" }, "Dernière action annulée")}>↶ Annuler</Button>
         </div>
-        <StakesBar class="c-stakes" view={p.view} act={(a, label) => p.act(a, label)} />
+        {/* « La chaîne » decides its own amounts (no stakes): the bar would only offer refused keys. */}
+        <Show when={p.view.mechanic?.mechanic !== "chain"}><StakesBar class="c-stakes" view={p.view} act={(a, label) => p.act(a, label)} /></Show>
       </Show>
     </section>
   );
@@ -392,7 +396,9 @@ function OnAir(p: { readonly view: ControlView; readonly readonly: boolean; read
             )}
           </Show>
           <MechanicPanel view={p.view} mode={mode()} act={p.act} mediaUrl={p.mediaUrl} />
-          <VerdictsPanel view={p.view} readonly={p.readonly} act={p.act} />
+          {/* Chain: the verdict IS the live judgement (corrected by undo), no forced verdict. */}
+          <Show when={p.view.mechanic?.mechanic !== "chain"}><VerdictsPanel view={p.view} readonly={p.readonly} act={p.act} /></Show>
+          <Show when={p.view.question}>{(onAir) => <MultiScoringPicker questionId={onAir().id} mechanic={p.view.mechanic} revealed={p.view.phase === "revealed"} readonly={p.readonly} act={p.act} />}</Show>
           <Show when={p.view.notes}>{(n) => <p class="c-notes">{n()}</p>}</Show>
         </section>
       )}

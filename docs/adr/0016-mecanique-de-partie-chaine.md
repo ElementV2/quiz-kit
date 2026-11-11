@@ -28,7 +28,16 @@ déclarent pas :
    relecture d'un snapshot, et purgé par `player.remove` comme `carry` et `history`.
 2. **`eliminates(before, after)`** : la mécanique dit quels joueurs une action acceptée élimine ; **le cœur** passe
    leur statut à `eliminated` (seulement s'ils étaient actifs). La mécanique ne modifie jamais les joueurs elle-même.
-3. **`MechanicEnv.activePlayers`** (joueurs actifs, ordre d'inscription) et **`MechanicEnv.roundIndex`** ;
+3. **`pending(state)`** : état de partie non réglé (vote ouvert ou à départager) → `round.start` et
+   `question.present` refusés avec sa raison (« terminer le vote d'élimination d'abord »), **quelle que soit la manche
+   suivante** (même une manche qui n'est pas une chaîne : sinon le vote resterait bloqué, invisible et injouable).
+4. **`holdsRound(state)`** : l'état ne peut pas clore sa manche en silence (duel sans vainqueur) → le `question.next`, le
+   `question.skip` ou le `round.start` (saut depuis la manche) qui la clorait est refusé avec sa raison.
+5. **`noForcedVerdict`** : `answer.verdict` refusé (le verdict est le jugement en direct ; le corriger = annuler le
+   jugement), sinon banque / vainqueur et verdict forcé divergeraient.
+6. Une action hors antenne qui **termine la manche entre deux tours** (`chain.end`) la termine pour de bon : phase
+   `round.end` (ou `game.end`), comme un « Suivante » — la touche « Suivant » mène alors au vote puis à la manche suivante.
+7. **`MechanicEnv.activePlayers`** (joueurs actifs, ordre d'inscription) et **`MechanicEnv.roundIndex`** ;
    `RoundContext.roundIndex`. Absents lors d'un contrôle statique (problèmes de manche du studio) : la mécanique ne
    vérifie alors que la question et ses réglages.
 
@@ -45,6 +54,21 @@ Où vit quoi, pour `chain` :
 Tout est dans `GameState` (journalisé avant diffusion, rejoué, annulable par `undo`) : reconnexion et reprise après
 crash rendent la même partie.
 
+Règles explicites ajoutées après relecture :
+- **Duel sans vainqueur** quand ses questions sont épuisées (égalité en mort subite) : jamais de fin silencieuse. Le
+  dernier « Suivante » est refusé (« duel sans vainqueur : ajouter des questions… ») ; la régie ajoute des questions
+  (studio, « Envoyer au direct ») ou termine le duel **sans vainqueur** (`chain.end`, permis dans le duel tant qu'il n'a
+  pas de vainqueur) : la cagnotte n'est pas versée, à corriger à la main si besoin. Un duel cassé (joueur retiré) peut se
+  quitter.
+- **Clore un vote sans aucun bulletin** est refusé (« aucun vote reçu ») : tous seraient à égalité. La régie peut voter
+  pour les joueurs (`chain.vote`), ou annuler l'ouverture.
+- **Égalité devenue impossible à départager** (les ex aequo retirés, ou seul le maillon fort reste) : le vote se
+  rouvre (bulletins des retirés supprimés), à clore de nouveau.
+- Les décisions d'un joueur (`chain.bank`, `chain.vote`, `chain.pick`) ne sont jamais la cible d'un `undo` sans cible
+  (comme une réponse) ; un `undo` ciblé reste possible.
+- Vue : `canOpenVote` dit si un vote peut s'ouvrir maintenant (manche finie, pas de vote, 3 joueurs actifs ou plus) ;
+  `nextStep` (`packages/protocol`) propose ouvrir / clore le vote avant la manche suivante, et rien pendant un départage.
+
 ## Alternatives écartées
 - Champ dédié `GameState.chain` dans le cœur — refusé : règle d'une mécanique dans le réducteur (principe O). La
   capacité `spansRounds` resservira (tournoi, cagnotte cumulée).
@@ -58,14 +82,13 @@ crash rendent la même partie.
 - Statut posé par la régie à la main après le vote — refusé : deux gestes pour une décision, source d'erreur en live.
   Elle garde la main (`player.setStatus` reste possible, un statut changé à la main n'est pas écrasé).
 - Chrono de manche (le vrai Maillon faible joue la chaîne contre la montre) — non fait : le moteur n'a pas de chrono de
-  manche (`timer` est par question, armé à `question.open`), et le serveur n'injecte `timer.expired` que pour lui. La
+  manche (`timer` est par question, armé à l'ouverture des réponses), et le serveur n'injecte `timer.expired` que pour lui. La
   manche s'arrête quand la banque est pleine, quand ses questions sont épuisées, ou par la régie (`chain.end`). Voir
   `docs/OPEN-QUESTIONS.md`.
 
 ## Conséquences
 - Une action `chain.*` hors antenne refusée l'est avec un message clair (« le vote se fait entre deux manches »…).
-- Un vote ouvert (ou à départager) bloque la présentation de la manche suivante : le clore, ou l'annuler (`undo`).
-- Changer les réglages (`game.patch`) en cours de manche de chaîne ne s'applique qu'à la manche suivante (montants et
-  banque maximale lus à la première question).
+- Un vote ouvert (ou à départager) bloque la manche suivante, quelle qu'elle soit : le clore, ou l'annuler (`undo`).
+- Les réglages d'une manche en cours ne changent pas (`livePatchProblem`) ; ceux d'une manche de chaîne suivante, si.
 - À surveiller : `envOf` calcule la liste des joueurs actifs à chaque action (O(n), négligeable à 500 joueurs) ; la vue
   `chain` est projetée par spectateur hors antenne (petite : quelques joueurs).

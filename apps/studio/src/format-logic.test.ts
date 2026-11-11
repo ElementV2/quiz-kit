@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { MixedKinds, defaultRegistry } from "@quiz/engine";
 import { DEMO_EVENING_GAME, DEMO_GAME, DEMO_POLL_GAME, GameDocument, PER_KIND_MECHANICS, TEMPLATES, type Question } from "@quiz/schema";
-import { MECHANICS, MIXED_CATEGORIES, normalizeRule, pointsRule, questionPoints, mixedCategoryCounts, mixedCategoryValues, mixedScoring, setMixedField, setMixedScoring, addToRound, configValues, defaultConfig, deleteQuestion, deleteRound, duplicateRound, mechanicOptions, moveItem, newRound, newScoring, parseNumberList, removeFromRound, roundIssues, roundsOf, setConfigField, setMechanic, swapList } from "./format-logic.ts";
+import { LEGACY_CATEGORY_KEYS, MULTI_SCORING_OPTIONS, setOpenOnPresent, setQuestionMultiScoring, MECHANICS, MIXED_CATEGORIES, normalizeRule, pointsRule, questionPoints, mixedCategoryCounts, mixedCategoryValues, mixedScoring, setMixedField, setMixedScoring, addToRound, configValues, defaultConfig, deleteQuestion, deleteRound, duplicateRound, mechanicOptions, moveItem, newRound, newScoring, parseNumberList, removeFromRound, roundIssues, roundsOf, setConfigField, setMechanic, swapList } from "./format-logic.ts";
 import { QUESTION_TYPES, newQuestion } from "./question-factories.ts";
 
 /** Keys of a mechanic config schema (zod object shape). */
@@ -25,7 +25,7 @@ describe("mechanic catalogue", () => {
     // Each category block offers every setting of its schema (its points rule apart).
     const shape = MixedKinds.shape;
     expect(MIXED_CATEGORIES.map((c) => [c.id, c.fields.map((f) => f.key).toSorted()])).toEqual(
-      MIXED_CATEGORIES.map((c) => [c.id, Object.keys(shape[c.id].unwrap().shape).filter((k) => k !== "scoring").toSorted()]),
+      MIXED_CATEGORIES.map((c) => [c.id, Object.keys(shape[c.id].unwrap().shape).filter((k) => k !== "scoring" && !(LEGACY_CATEGORY_KEYS[c.id] ?? []).includes(k)).toSorted()]),
     );
   });
   it("default configs are valid for every mechanic (ladder included)", () => {
@@ -220,5 +220,52 @@ describe("question factories", () => {
       return !GameDocument.safeParse(g).success;
     });
     expect(invalid).toEqual([]);
+  });
+});
+
+const mixedRound = (choice: Record<string, unknown>) => ({ mechanic: "mixed", mechanicConfig: { kinds: { choice } } });
+
+describe("several-answers QCM: how it is counted", () => {
+  it("the category offers the four ways, all or nothing by default", () => {
+    expect(MULTI_SCORING_OPTIONS.map((o) => o.value)).toEqual(["all", "partial-penalty", "partial", "any-no-wrong"]);
+    expect(mixedCategoryValues(defaultRegistry, mixedRound({}), "choice")["multiScoring"]).toBe("all");
+    expect(mixedCategoryValues(defaultRegistry, mixedRound({ multiScoring: "partial" }), "choice")["multiScoring"]).toBe("partial");
+  });
+
+  it("an older game's partialMulti shows as « erreurs déduites », and choosing a way drops the old key", () => {
+    expect(mixedCategoryValues(defaultRegistry, mixedRound({ partialMulti: true }), "choice")["multiScoring"]).toBe("partial-penalty");
+    const g = copy(DEMO_GAME);
+    const r = g.format.rounds[0];
+    if (r === undefined) throw new Error("round");
+    r.mechanic = "mixed";
+    r.mechanicConfig = { kinds: { choice: { partialMulti: true, race: 2 } } };
+    setMixedField(g, 0, "choice", "multiScoring", "any-no-wrong");
+    expect(r.mechanicConfig).toEqual({ kinds: { choice: { race: 2, multiScoring: "any-no-wrong" } } });
+    expect(GameDocument.safeParse(g).success).toBe(true);
+  });
+
+  it("a several-answers question may have its own way (back to its category's with null)", () => {
+    const q = copy(DEMO_GAME).questions.find((x) => x.id === "q_primes");
+    if (q === undefined) throw new Error("q_primes");
+    setQuestionMultiScoring(q, "partial");
+    expect(q.answerSpec).toMatchObject({ kind: "multi", multiScoring: "partial" });
+    setQuestionMultiScoring(q, null);
+    expect("multiScoring" in q.answerSpec).toBe(false);
+    const single = copy(DEMO_GAME).questions.find((x) => x.id === "q_capital_fr");
+    if (single === undefined) throw new Error("q_capital_fr");
+    setQuestionMultiScoring(single, "partial");
+    expect("multiScoring" in single.answerSpec).toBe(false);
+  });
+});
+
+describe("round: answers open at the presentation", () => {
+  it("on by default (key left out); off writes false; on again removes it", () => {
+    const r = copy(DEMO_GAME).format.rounds[0];
+    if (r === undefined) throw new Error("round");
+    expect("openOnPresent" in r).toBe(false);
+    setOpenOnPresent(r, false);
+    expect(r.openOnPresent).toBe(false);
+    setOpenOnPresent(r, true);
+    expect("openOnPresent" in r).toBe(false);
   });
 });

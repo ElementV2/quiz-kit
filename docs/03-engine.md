@@ -29,6 +29,16 @@ Pas de `history` : l'undo passe par le journal (ADR-0010).
 
 Chaque mécanique peut ajouter des sous-phases (indices, slots, duel) mais garde ce squelette.
 
+`Round.openOnPresent` (absent = vrai, réglage « Déroulé » de la manche dans le studio) : `question.present` ouvre aussi
+les réponses — même événement, chrono armé par lui (`timer.id` = son seq), exactement comme `question.open`. La phase
+`presenting` n'existe alors pas : « Suivant » (`nextStep`), la régie, l'animateur et Companion passent directement de
+« Présenter la question » à « Fermer les réponses » ; un `question.open` envoyé quand même est refusé (« déjà ouvertes »,
+jamais un événement sans effet) ; annuler la présentation revient entre deux questions. Faux : étape de lecture
+(`presenting`, puis « Ouvrir les réponses »), pour un buzzer façon télé où l'animateur lit toute la question avant que
+quiconque puisse buzzer. Vérifié mécanique par mécanique (`open-on-present.test.ts`) : plateau (buzz dès la case
+choisie), paliers (jokers avant la réponse), vote du chat, sondage (main donnée puis réponse jugée, réponses ouvertes),
+chaîne (jugement oral), indices et image dévoilée (premier indice / cases à la présentation), buzzer.
+
 ## Contrat d'une mécanique
 
 ```ts
@@ -150,7 +160,8 @@ nécessaire (révéler montre la réponse attendue à tous). Juste : la chaîne 
 `chain.bank { participantId }` (le joueur au tour, ou l'animateur / la régie pour lui, avant le jugement) : la valeur
 de la chaîne passe en banque, la chaîne repart de 0. Le dernier cran se met en banque tout seul. La banque est plafonnée
 à `bankTarget` : pleine, la manche est finie. Fin aussi quand les questions sont épuisées, ou `chain.end` (régie : le
-temps est écoulé ; à l'antenne ou entre deux tours). Ce qui n'est pas en banque est perdu. Statistiques par joueur
+temps est écoulé ; à l'antenne, ou entre deux tours : la manche se termine alors tout de suite, phase `round.end`). Ce
+qui n'est pas en banque est perdu. `answer.verdict` est refusé (corriger = annuler le jugement). Statistiques par joueur
 (bonnes, mauvaises réponses, montant mis en banque) ; maillon fort = le plus de bonnes réponses puis le plus mis en
 banque, maillon faible = l'inverse (publics).
 
@@ -161,14 +172,20 @@ un joueur) → `chain.closeVote` (régie) : le plus de voix est éliminé (statu
 le maillon fort de la manche choisit parmi les ex aequo (`chain.pick { participantId: maillon fort, eliminated }`, depuis
 sa tablette ou par la régie pour lui). Vote secret : bulletins et décompte à `null` pour joueurs et sorties tant qu'il est
 ouvert (testé), chacun voit son propre vote (`myVote`) ; régie et animateur voient tout. Un vote ouvert bloque la
-présentation de la manche suivante. Un vote par manche (annuler pour le refaire).
+présentation et le démarrage de la manche suivante, quelle qu'elle soit (« terminer le vote d'élimination d'abord »).
+Un vote par manche (annuler pour le refaire). Clore sans aucun bulletin est refusé (« aucun vote reçu »). Une égalité
+dont les ex aequo sont retirés (ou dont seul le maillon fort reste) rouvre le vote. `canOpenVote` (vue) : un vote peut
+s'ouvrir maintenant ; la touche « Suivant » (`nextStep`) propose ouvrir puis clore le vote avant la manche suivante.
+Les choix d'un joueur (banque, vote, départage) ne sont jamais la cible d'un `undo` sans cible.
 
 **Duel final** (`stage: duel`) : exactement deux joueurs actifs (sinon refus à la présentation). Le plus fort de la
 dernière manche de chaîne commence ; ils répondent à tour de rôle (le moins interrogé répond), `questionsEach` chacun,
 puis mort subite par paires. Le duel s'arrête dès que l'un ne peut plus être rattrapé. Le vainqueur reçoit la
 **cagnotte** = toutes les banques de la partie, écrite une fois au registre : à la révélation de la question décisive,
-sinon au `question.next` qui clôt le duel. Personne ne marque avant. Questions épuisées sans vainqueur : rien n'est
-versé (prévoir assez de questions, sinon points à la main). Pas de banque ni de `chain.end` pendant le duel.
+sinon au `question.next` qui clôt le duel. Personne ne marque avant. Jamais de fin silencieuse sans vainqueur : le
+dernier « Suivante » (ou passer la dernière question, ou sauter à une autre manche) est refusé (« duel sans
+vainqueur… ») ; ajouter des questions (studio), ou `chain.end` : le duel finit **sans vainqueur**, la cagnotte n'est pas
+versée. Pas de banque ni de vote pendant le duel.
 
 Vue `ChainMechanicView` (à l'antenne, entre deux tours, entre deux manches, en fin de partie) : `stage`, `order`, `turn`,
 `expected` (secret : régie / animateur, tout le monde à la révélation), `verdict`, `steps`, `level`, `chainValue`,
@@ -224,7 +241,37 @@ termine la manche comme une « Suivante » (une manche à paliers verse le palie
 `baseVersion ≠ gameVersion` ; `question.regrade`, `question.edit`, `question.replaceFromReserve` et `game.patch`
 incrémentent `gameVersion`. Règles de ce qui peut changer : `live-patch.ts` (`livePatchProblem`).
 
+### QCM à plusieurs réponses : comptage (`multiScoring`)
+
+Quatre façons de compter (`MultiScoring`, formule unique `multiShare` dans `packages/schema`, partagée par le moteur et
+les explications des écrans) :
+- `all` — tout ou rien (exactement les bonnes réponses ; défaut) ;
+- `partial-penalty` — (bonnes cochées − mauvaises cochées) / nombre de bonnes, jamais sous 0 ;
+- `partial` — bonnes cochées / nombre de bonnes, les erreurs ne retirent rien, **mais cocher plus de cases qu'il n'y a de
+  bonnes réponses vaut 0** (sinon tout cocher gagnerait tout) ;
+- `any-no-wrong` — 100 % dès qu'au moins une bonne est cochée sans aucune erreur.
+
+Priorité : choix de la régie en direct > réglage de la question (`answerSpec.multiScoring`) > réglage de la catégorie
+« QCM et vrai / faux » (`kinds.choice.multiScoring`, ou `multiScoring` d'une manche `choice`) > `all`. L'ancien réglage
+`partialMulti` (config `choice`, `kinds.choice`, états de mécanique des snapshots) se lit toujours : `true` =
+`partial-penalty`, `false` = `all`.
+
+`question.setMultiScoring { questionId, mode | null }` (régie, journalisé, annulable ; `null` = retour au réglage de la
+question / catégorie) : gardé par question (`GameState.multiScoring`, aussi pour ses présentations suivantes) ; la
+question à l'antenne le prend tout de suite (avant la révélation : il compte à la révélation) ; chaque révélation déjà
+faite de la question est recomptée comme un regrade (lignes `auto` / `regrade` annulées et réécrites en `regrade`,
+lignes manuelles gardées, verdicts forcés prioritaires). Refusé sur une question qui n'est pas un QCM à plusieurs réponses.
+Vue : `ChoiceMechanicView.multiScoring { mode, from: category | question | control }` (public : rien de secret).
+Une part entre 0 et 1 donne « En partie juste » sur la tablette ; une part de 100 % (dont `any-no-wrong`), « juste ».
+
 ### Corrections en direct (phase 3, implémentées)
+
+Toute réécriture des points d'une question révélée (`question.regrade`, `answer.verdict`, `question.setMultiScoring`)
+passe par une seule fonction (`rescoreRecord`) : une ligne annulée à la main (`score.void`) n'est jamais rendue (sa cible
+est notée dans `QuestionRecord.voidedTargets` ; un verdict décidé à nouveau sur ce joueur la libère) ; chaque ligne
+réécrite crédite l'équipe du joueur **au moment de la révélation** (`QuestionRecord.teamAt`) ; les lignes d'un joueur
+retiré depuis restent telles quelles (`departed` : son équipe garde ses points) et un identifiant réutilisé n'hérite ni
+de ses verdicts forcés ni de nouvelles lignes.
 
 - `question.replaceFromReserve { reserveId, questionIndex? }` : question à l'antenne → remplacée et
   représentée de zéro (réponses perdues) ; entre deux questions → remplace la suivante (ou `questionIndex`).

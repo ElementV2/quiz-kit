@@ -54,7 +54,7 @@ log(`${TABLETS} tablettes connectées en ${Date.now() - t0} ms`);
 // Broadcast latency as seen by the output: time from control ack to the output view change.
 const broadcast: number[] = [];
 for (let q = 1; q <= QUESTIONS; q++) {
-  for (const type of ["question.present", "question.open"] as const) {
+  for (const type of ["question.present"] as const) { // presenting opens the answers (round default)
     const before = out.view?.phase;
     const s = Date.now();
     await drive(ctl, { type });

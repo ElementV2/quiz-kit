@@ -27,7 +27,7 @@ mechanicContractSuite({
   },
 });
 
-const OPEN = [ctl({ type: "game.start" }), ctl({ type: "round.start" }), ...addPlayers(2), ctl({ type: "question.present" }), ctl({ type: "question.open" })];
+const OPEN = [ctl({ type: "game.start" }), ctl({ type: "round.start" }), ...addPlayers(2), ctl({ type: "question.present" })];
 const submitPairs = (pid: string, matches: { left: string; right: string }[]) => [actor("player", pid), { type: "answer.submit", participantId: pid, answer: { kind: "pairs", matches } }] as const;
 
 describe("pairs", () => {

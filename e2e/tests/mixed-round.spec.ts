@@ -40,10 +40,9 @@ test("mixed round: QCM, free text then survey in the same round — the tablet f
     }
   };
   await expect(control.locator(".c-round-meta").first()).toContainText("Mixte");
-  await space(4); // start, round, present, open: the QCM
+  await space(3); // start, round, present (answers open): the QCM
   await expect(phone.locator(".p-option").first()).toBeVisible();
   await space(4); // lock, reveal, next, present → the free text
-  await space(1); // open
   await expect(phone.locator(".p-input")).toBeVisible();
   await phone.locator(".p-input").fill("van gogh");
   await phone.getByRole("button", { name: "Envoyer" }).click();

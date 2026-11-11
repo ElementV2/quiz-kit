@@ -37,7 +37,7 @@ mechanicContractSuite({
   },
 });
 
-const OPEN = [ctl({ type: "game.start" }), ctl({ type: "round.start" }), ...addPlayers(2), ctl({ type: "question.present" }), ctl({ type: "question.open" })];
+const OPEN = [ctl({ type: "game.start" }), ctl({ type: "round.start" }), ...addPlayers(2), ctl({ type: "question.present" })];
 
 const tap = (pid: string, x: number, y: number) => [actor("player", pid), { type: "answer.submit", participantId: pid, answer: { kind: "pin", x, y } }] as const;
 

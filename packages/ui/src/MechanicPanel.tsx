@@ -5,6 +5,7 @@ import type { Action, ControlView, HostView } from "@quiz/schema";
 import { Button } from "./components.tsx";
 import { Phase3Panel } from "./AnswerPanels.tsx";
 import { CrowdVotePanel } from "./CrowdVotePanel.tsx";
+import { ChainPanel } from "./ChainPanel.tsx";
 
 /**
  * Mechanic-specific controls (doc 08 « actions contextuelles »), shared by the control room and the host.
@@ -101,6 +102,9 @@ export function MechanicPanel(p: {
 
       {/* ── Vote du chat ── */}
       <CrowdVotePanel mechanic={p.view.mechanic} teams={p.mode === "control" && p.view.role === "control" ? p.view.teams : undefined} revealed={p.view.phase === "revealed"} act={p.mode === "control" ? p.act : undefined} />
+
+      {/* ── La chaîne (banque et élimination) ── */}
+      <ChainPanel view={p.view} mode={p.mode} act={p.act} />
 
       {/* ── Paliers ── */}
       <Show when={asLadder(p.view.mechanic)}>

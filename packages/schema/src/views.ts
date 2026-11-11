@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { Phase } from "./phase.ts";
-import { AnswerSpec, Media, NormRect } from "./content.ts";
+import { AnswerSpec, Media, MultiScoring, NormRect } from "./content.ts";
 import { OptionId, ParticipantId, QuestionId, SessionId, TeamId } from "./ids.ts";
 import { Participant, ParticipantStatus, ScoreEntry, Team } from "./session.ts";
 
@@ -23,6 +23,11 @@ export const ChoiceMechanicView = z.strictObject({
   counts: z.record(OptionId, z.number().int()).nullable(),
   /** Live number of answers. Null for players: it would change every tablet's view on every answer (O(n²) broadcast). */
   answeredCount: z.number().int().nullable(),
+  /**
+   * Several right answers (`multi`): how they are counted and where that comes from (the round's category, the
+   * question, or the control room live). Public (not a secret: a tablet may say « points partiels possibles »). Null otherwise.
+   */
+  multiScoring: z.strictObject({ mode: MultiScoring, from: z.enum(["category", "question", "control"]) }).nullable().default(null),
 });
 export type ChoiceMechanicView = z.infer<typeof ChoiceMechanicView>;
 
@@ -324,6 +329,11 @@ export type ChainVoteView = z.infer<typeof ChainVoteView>;
  */
 export const ChainMechanicView = z.strictObject({
   mechanic: z.literal("chain"),
+  /**
+   * Round these figures belong to. Between two rounds the view still carries the round just played until the next
+   * one presents its first question: screens compare it with the current round (never guess).
+   */
+  roundIndex: z.number().int().min(0),
   /** `chain`: a chain round; `duel`: the final duel. */
   stage: z.enum(["chain", "duel"]),
   /** Players of the round, in turn order. */
@@ -355,6 +365,10 @@ export const ChainMechanicView = z.strictObject({
   /** Fewest right answers, then least banked. */
   weakest: ParticipantId.nullable(),
   vote: ChainVoteView.nullable(),
+  /** An elimination vote can be opened now (chain round over, no vote yet, at least 3 active players of the round). */
+  canOpenVote: z.boolean().default(false),
+  /** `chain.end` would be accepted now (end the chain round, or the duel without a winner). */
+  canEnd: z.boolean().default(false),
   /** Players voted off so far, by round. */
   eliminations: z.array(z.strictObject({ roundIndex: z.number().int().min(0), participantId: ParticipantId })),
   /** Final duel (stage `duel`): questions each, sudden death once they are all asked and still tied, winner. */

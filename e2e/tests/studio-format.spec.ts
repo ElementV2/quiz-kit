@@ -170,8 +170,8 @@ test("studio Replay: the journal of the current session replays step by step wit
   const control = await ctx.newPage();
   await control.goto(path("control"));
   await expect(control.getByText("connecté").first()).toBeVisible();
-  for (let i = 0; i < 4; i++) {
-    await control.locator("body").press("Space"); // start, round, present, open
+  for (let i = 0; i < 3; i++) {
+    await control.locator("body").press("Space"); // start, round, present (the answers open with it)
     await control.waitForTimeout(150);
   }
   const studio = await ctx.newPage();

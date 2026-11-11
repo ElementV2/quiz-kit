@@ -40,7 +40,7 @@ describe("category settings change the game", () => {
     const primes = q(DEMO_GAME, "q_primes"); // right: a, c
     const half: [string, AnswerValue][] = [["p_1", { kind: "choice", optionIds: ["a"] }], ["p_2", { kind: "choice", optionIds: ["a", "b"] }]];
     expect(points(of(play(choice, {}, primes, half), "p_1"))).toBe(0);
-    const partial = play(choice, { partialMulti: true }, primes, half);
+    const partial = play(choice, { multiScoring: "partial-penalty" }, primes, half);
     expect(points(of(partial, "p_1"))).toBe(50); // 1 right of 2
     expect(points(of(partial, "p_2"))).toBe(0); // 1 right − 1 wrong
   });

@@ -24,7 +24,7 @@ const toOpen = (act: (a: Action) => unknown) => {
     { type: "player.add", participantId: "p_1", displayName: "Ana", seat: 1, channel: "seat" },
     { type: "round.start" },
     { type: "question.present" },
-    { type: "question.open" },
+    
   ] as const satisfies readonly Action[]) act(a);
 };
 
@@ -120,7 +120,7 @@ describe("SessionRuntime — server timers", () => {
     act({ type: "question.lock" });
     expect(time.armed).toBe(0);
     time.advance(30_000);
-    expect(rt.current.state.lastSeq).toBe(6);
+    expect(rt.current.state.lastSeq).toBe(5);
   });
 });
 

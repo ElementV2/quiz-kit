@@ -87,7 +87,7 @@ const WRONG = ["a", "a", "b", "a", "b", "a"] as const;
 
 const START: Step[] = [ctl({ type: "game.start" }), ctl({ type: "player.add", participantId: "p_1", displayName: "Candidat", seat: 1, channel: "seat" }), ctl({ type: "round.start" })];
 const say = (optionId: string, pid = "p_1"): Step => [actor("player", pid), { type: "answer.submit", participantId: pid, answer: { kind: "choice", optionIds: [optionId] } }];
-const OPEN: Step[] = [ctl({ type: "question.present" }), ctl({ type: "question.open" })];
+const OPEN: Step[] = [ctl({ type: "question.present" })];
 const SHOW: Step[] = [ctl({ type: "question.lock" }), ctl({ type: "question.reveal" })];
 const NEXT: Step = ctl({ type: "question.next" });
 /** Plays question i with the given answer, up to reveal. */

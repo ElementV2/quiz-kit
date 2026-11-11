@@ -1,10 +1,10 @@
 import { For, Match, Show, Switch, createMemo, createSignal, type JSX } from "solid-js";
 import { defaultRegistry, pointsInfo } from "@quiz/engine";
-import { GameDocument, ruleSummary, type Round, type ScoringComponent } from "@quiz/schema";
+import { GameDocument, opensOnPresent, ruleSummary, type Round, type ScoringComponent } from "@quiz/schema";
 import { Button, Panel, confirmDialog } from "@quiz/ui";
 import { NumField } from "./fields.tsx";
 import { FlowEditor } from "./flow-editor.tsx";
-import { MECHANICS, MIXED_CATEGORIES, normalizeRule, SCORING_LABEL, mechanicLabel, mixedCategoryCounts, mixedCategoryValues, mixedScoring, setMixedField, setMixedScoring, addToRound, configValues, deleteRound, duplicateRound, mechanicOptions, moveItem, newRound, newScoring, parseNumberList, removeFromRound, roundIssues, setConfigField, setMechanic, swapList, type ConfigField, type RoundIssue, type RoundList } from "./format-logic.ts";
+import { MECHANICS, MIXED_CATEGORIES, setOpenOnPresent, normalizeRule, SCORING_LABEL, mechanicLabel, mixedCategoryCounts, mixedCategoryValues, mixedScoring, setMixedField, setMixedScoring, addToRound, configValues, deleteRound, duplicateRound, mechanicOptions, moveItem, newRound, newScoring, parseNumberList, removeFromRound, roundIssues, setConfigField, setMechanic, swapList, fieldShown, type ConfigField, type RoundIssue, type RoundList } from "./format-logic.ts";
 import { kindLabel } from "./question-factories.ts";
 import { clone, hex, snapshot, type Update } from "./util.ts";
 
@@ -108,6 +108,10 @@ function RoundCard(p: { doc: GameDocument; round: Round; ri: number; count: numb
           <QuestionList title="Réserve (questions de secours)" list="reserve" doc={p.doc} round={p.round} ri={p.ri} issues={p.issues} update={p.update} />
         </div>
         <div class="s-round-col">
+          <div class="s-section">
+            <span class="s-label">Déroulé</span>
+            <label class="s-inline"><input type="checkbox" checked={opensOnPresent(p.round)} onChange={(e) => { const on = e.currentTarget.checked; edit((r) => setOpenOnPresent(r, on)); }} /> Ouvrir les réponses dès que la question s'affiche (décocher pour une étape de lecture avant, ex. buzzer façon télé)</label>
+          </div>
           <div class="s-section">
             <span class="s-label">Chrono</span>
             <div class="s-row">
@@ -290,7 +294,8 @@ function MixedSettings(p: { doc: GameDocument; round: Round; ri: number; update:
 function ConfigForm(p: { round: Round; ri: number; update: Update }): JSX.Element {
   const values = createMemo(() => configValues(defaultRegistry, p.round));
   const set = (key: string, v: unknown) => p.update((d) => setConfigField(d, p.ri, key, v));
-  const fields = () => MECHANICS[p.round.mechanic]?.fields ?? [];
+  // Only the fields of this kind of round (chain: amounts for a chain round, length for the duel).
+  const fields = () => (MECHANICS[p.round.mechanic]?.fields ?? []).filter((f) => fieldShown(f, values()));
   return (
     <div class="s-section">
       <span class="s-label">Réglages de la mécanique</span>
@@ -319,7 +324,7 @@ function ConfigInput(p: { field: ConfigField; values: Record<string, unknown>; s
         {(b) => <label class="s-inline s-check"><input type="checkbox" checked={v() === true} onChange={(e) => p.set(b().key, e.currentTarget.checked)} /> {b().label}</label>}
       </Match>
       <Match when={f.kind === "number" && f}>
-        {(n) => <label class="s-field-row"><span>{n().label}</span><NumField min={n().min} max={n().max} step={n().step ?? 1} value={typeof v() === "number" ? Number(v()) : undefined} onChange={(x) => p.set(n().key, n().step === undefined ? Math.round(x) : x)} /></label>}
+        {(n) => <label class="s-field-row"><span>{n().label}</span><NumField label={n().label} min={n().min} max={n().max} step={n().step ?? 1} placeholder={n().placeholder} value={typeof v() === "number" ? Number(v()) : undefined} onChange={(x) => p.set(n().key, n().step === undefined ? Math.round(x) : x)} onEmpty={() => { if (n().optional === true) p.set(n().key, undefined); }} /></label>}
       </Match>
       <Match when={f.kind === "enum" && f}>
         {(en) => (
@@ -333,8 +338,9 @@ function ConfigInput(p: { field: ConfigField; values: Record<string, unknown>; s
       <Match when={f.kind === "numbers" && f}>
         {(l) => (
           <label class="s-field"><span class="s-label">{l().label}</span>
-            <input class="q-mono" data-bad={String(bad())} placeholder={l().hint} value={nums(l().key).join(", ")} onChange={(e) => { const list = parseNumberList(e.currentTarget.value); setBad(list === null || list.length === 0); if (list !== null && list.length > 0) p.set(l().key, list.map((x) => Math.round(x))); }} />
+            <input class="q-mono" data-bad={String(bad() || (l().required !== undefined && nums(l().key).length === 0))} aria-invalid={bad() || (l().required !== undefined && nums(l().key).length === 0)} placeholder={l().hint} value={nums(l().key).join(", ")} onChange={(e) => { const list = parseNumberList(e.currentTarget.value); setBad(list === null || list.length === 0); if (list !== null && list.length > 0) p.set(l().key, list.map((x) => Math.round(x))); }} />
             <Show when={bad()}><span class="s-warn-text">Saisir des nombres séparés par des virgules.</span></Show>
+            <Show when={!bad() && nums(l().key).length === 0 ? l().required : undefined}>{(msg) => <span class="s-warn-text" role="alert">{msg()}</span>}</Show>
           </label>
         )}
       </Match>

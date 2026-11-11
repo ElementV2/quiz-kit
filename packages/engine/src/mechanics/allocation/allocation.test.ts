@@ -22,7 +22,7 @@ mechanicContractSuite({
   },
 });
 
-const OPEN = [ctl({ type: "game.start" }), ctl({ type: "round.start" }), ...addPlayers(2), ctl({ type: "question.present" }), ctl({ type: "question.open" })];
+const OPEN = [ctl({ type: "game.start" }), ctl({ type: "round.start" }), ...addPlayers(2), ctl({ type: "question.present" })];
 
 const put = (pid: string, amounts: [string, number][]) => [actor("player", pid), { type: "answer.submit", participantId: pid, answer: { kind: "allocation", amounts: amounts.map(([optionId, amount]) => ({ optionId, amount })) } }] as const;
 

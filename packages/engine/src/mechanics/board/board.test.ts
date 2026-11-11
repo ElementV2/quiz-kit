@@ -37,7 +37,7 @@ describe("board", () => {
   it("shows the grid between cells, plays cells in any order, + value / − value", () => {
     let g = run(reg, START, g0());
     expect(project(g, { role: "output", scene: "program" }, reg).mechanic).toMatchObject({ mechanic: "board", cell: null, categories: [{ name: "Sciences" }, { name: "Géographie" }, { name: "Lettres" }] });
-    g = run(reg, [ctl({ type: "question.present", questionIndex: 3 }), ctl({ type: "question.open" }), buzz("p_1"), buzz("p_2"), ctl({ type: "answer.judge", participantId: "p_1", correct: false }), ctl({ type: "answer.judge", participantId: "p_2", correct: true }), ctl({ type: "question.lock" }), ctl({ type: "question.reveal" })], g);
+    g = run(reg, [ctl({ type: "question.present", questionIndex: 3 }), buzz("p_1"), buzz("p_2"), ctl({ type: "answer.judge", participantId: "p_1", correct: false }), ctl({ type: "answer.judge", participantId: "p_2", correct: true }), ctl({ type: "question.lock" }), ctl({ type: "question.reveal" })], g);
     expect(participantTotal(g.state, "p_1")).toBe(-400);
     expect(participantTotal(g.state, "p_2")).toBe(400);
     g = run(reg, [ctl({ type: "question.next" })], g);
@@ -54,23 +54,23 @@ describe("board", () => {
 
   it("ends the round when every cell is played, whatever the order", () => {
     let g = run(reg, START, g0());
-    for (const i of [5, 0, 4, 1, 3, 2]) g = run(reg, [ctl({ type: "question.present", questionIndex: i }), ctl({ type: "question.open" }), ctl({ type: "question.lock" }), ctl({ type: "question.reveal" }), ctl({ type: "question.next" })], g);
+    for (const i of [5, 0, 4, 1, 3, 2]) g = run(reg, [ctl({ type: "question.present", questionIndex: i }), ctl({ type: "question.lock" }), ctl({ type: "question.reveal" }), ctl({ type: "question.next" })], g);
     expect(g.state.phase).toBe("game.end");
   });
 
   it("never sends the expected answer to a tablet before the reveal", () => {
-    const g = run(reg, [...START, ctl({ type: "question.present", questionIndex: 4 }), ctl({ type: "question.open" }), buzz("p_1")], g0());
+    const g = run(reg, [...START, ctl({ type: "question.present", questionIndex: 4 }), buzz("p_1")], g0());
     expect(JSON.stringify(project(g, { role: "player", participantId: "p_2" }, reg))).not.toContain("Hugo");
     expect(project(g, { role: "host" }, reg).mechanic).toMatchObject({ correct: "Victor Hugo", hand: "p_1" });
   });
 
   it("refuses round.start while cells are left, whatever cell was played last", () => {
-    const g = run(reg, [...START, ctl({ type: "question.present", questionIndex: 5 }), ctl({ type: "question.open" }), ctl({ type: "question.lock" }), ctl({ type: "question.reveal" }), ctl({ type: "question.next" })], g0());
+    const g = run(reg, [...START, ctl({ type: "question.present", questionIndex: 5 }), ctl({ type: "question.lock" }), ctl({ type: "question.reveal" }), ctl({ type: "question.next" })], g0());
     expect(() => run(reg, [ctl({ type: "round.start" })], g)).toThrow(/conflict/);
   });
 
   it("a cell judged right then skipped keeps its value; undo of next / present restores the grid", () => {
-    let g = run(reg, [...START, ctl({ type: "question.present", questionIndex: 1 }), ctl({ type: "question.open" }), buzz("p_1"), ctl({ type: "answer.judge", participantId: "p_1", correct: true }), ctl({ type: "question.next" })], g0());
+    let g = run(reg, [...START, ctl({ type: "question.present", questionIndex: 1 }), buzz("p_1"), ctl({ type: "answer.judge", participantId: "p_1", correct: true }), ctl({ type: "question.next" })], g0());
     expect(participantTotal(g.state, "p_1")).toBe(400);
     g = run(reg, [ctl({ type: "undo" })], g);
     expect(participantTotal(g.state, "p_1")).toBe(0);
@@ -89,7 +89,7 @@ describe("board", () => {
       format: { ...DEMO_BOARD_GAME.format, rounds: DEMO_BOARD_GAME.format.rounds.map((r) => ({ ...r, questions: ["q_brd_1", "q_brd_2", "q_n"] })) },
     };
     let g = run(reg, START, createGame(makeSession(withNumber)));
-    for (const i of [0, 1]) g = run(reg, [ctl({ type: "question.present", questionIndex: i }), ctl({ type: "question.open" }), ctl({ type: "question.lock" }), ctl({ type: "question.reveal" }), ctl({ type: "question.next" })], g);
+    for (const i of [0, 1]) g = run(reg, [ctl({ type: "question.present", questionIndex: i }), ctl({ type: "question.lock" }), ctl({ type: "question.reveal" }), ctl({ type: "question.next" })], g);
     expect(g.state.phase).toBe("game.end");
   });
 });

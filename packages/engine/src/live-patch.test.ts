@@ -7,7 +7,7 @@ import { actor, addPlayers, answer, ctl, makeSession, run } from "./testing/harn
 
 const clone = (g: GameDocument): GameDocument => structuredClone(g);
 const extra: Question = { id: "q_new", prompt: { text: "Question ajoutée en direct ?" }, answerSpec: { kind: "boolean", correct: true }, hints: [], tags: [] };
-const START = [ctl({ type: "game.start" }), ctl({ type: "round.start" }), ...addPlayers(2), ctl({ type: "question.present" }), ctl({ type: "question.open" }), answer("p_1", "b"), ctl({ type: "question.lock" }), ctl({ type: "question.reveal" })];
+const START = [ctl({ type: "game.start" }), ctl({ type: "round.start" }), ...addPlayers(2), ctl({ type: "question.present" }), answer("p_1", "b"), ctl({ type: "question.lock" }), ctl({ type: "question.reveal" })];
 
 describe("game.patch (Envoyer au direct)", () => {
   it("adds a question and a round live; the control view, rundown and version follow; replay identical", () => {

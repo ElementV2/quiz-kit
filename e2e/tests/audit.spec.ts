@@ -103,7 +103,7 @@ test("audit: accessibility and responsive, every screen, every size", async ({ b
   await control.getByText("Importer des joueurs").click();
   await control.locator(".c-csv textarea").fill("Ana;1\nBo;2");
   await control.getByRole("button", { name: "Importer", exact: true }).click();
-  for (let i = 0; i < 4; i++) {
+  for (let i = 0; i < 3; i++) { // start, round, present (answers open)
     await control.locator("body").press("Space");
     await control.waitForTimeout(200);
   }

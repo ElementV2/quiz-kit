@@ -1,5 +1,5 @@
 import { MIXED_CATEGORY, createRng, playedBy, type MixedCategory, type Registry } from "@quiz/engine";
-import { ScoringComponent as ScoringComponentSchema, mechanicLabel as frenchMechanicLabel, type AnswerKind, type GameDocument, type Question, type Round, type ScoringComponent } from "@quiz/schema";
+import { MULTI_SCORING_LABEL_FR, MultiScoring, ScoringComponent as ScoringComponentSchema, mechanicLabel as frenchMechanicLabel, type AnswerKind, type GameDocument, type Question, type Round, type ScoringComponent } from "@quiz/schema";
 import { pruneRound } from "./flow-logic.ts";
 import { newQuestion } from "./question-factories.ts";
 
@@ -10,16 +10,25 @@ import { newQuestion } from "./question-factories.ts";
 
 export type Choice = { readonly value: string; readonly label: string };
 
-export type ConfigField =
-  | { readonly key: string; readonly kind: "number"; readonly label: string; readonly min?: number; readonly max?: number; readonly step?: number }
+/** Shown only when another field of the config has this value (chain: the duel has no amounts, the chain no duel length). */
+export type FieldCondition = { readonly key: string; readonly value: string };
+
+export type ConfigField = { readonly showIf?: FieldCondition } & (
+  /** `optional`: an empty box removes the field from the config (the mechanic's own default applies). */
+  | { readonly key: string; readonly kind: "number"; readonly label: string; readonly min?: number; readonly max?: number; readonly step?: number; readonly optional?: boolean; readonly placeholder?: string }
   | { readonly key: string; readonly kind: "boolean"; readonly label: string }
   | { readonly key: string; readonly kind: "enum"; readonly label: string; readonly options: readonly Choice[] }
-  | { readonly key: string; readonly kind: "numbers"; readonly label: string; readonly hint?: string }
+  /** `required`: said in French under the box while the list is empty. */
+  | { readonly key: string; readonly kind: "numbers"; readonly label: string; readonly hint?: string; readonly required?: string }
   /** Indices into another number-list field (ladder safe steps): one checkbox per item. */
   | { readonly key: string; readonly kind: "indexFlags"; readonly label: string; readonly of: string }
   | { readonly key: string; readonly kind: "flags"; readonly label: string; readonly options: readonly Choice[] }
   /** Optional text (empty = field removed). */
-  | { readonly key: string; readonly kind: "text"; readonly label: string; readonly placeholder?: string };
+  | { readonly key: string; readonly kind: "text"; readonly label: string; readonly placeholder?: string }
+);
+
+/** Is this field relevant with these config values? */
+export const fieldShown = (f: ConfigField, values: Readonly<Record<string, unknown>>): boolean => f.showIf === undefined || values[f.showIf.key] === f.showIf.value;
 
 export type MechanicInfo = {
   readonly label: string;
@@ -29,7 +38,15 @@ export type MechanicInfo = {
   readonly fields: readonly ConfigField[];
   /** Explicit starting config (when `{}` is not valid on its own). */
   readonly seed?: Readonly<Record<string, unknown>>;
+  /**
+   * A settings problem that makes every question of the round unplayable (chain without amounts): said once for the
+   * round, in French, instead of once per question.
+   */
+  readonly settingsIssue?: (config: Readonly<Record<string, unknown>>) => string | null;
 };
+
+/** Chain round without amounts (doc 03: no default amount). */
+export const CHAIN_NO_STEPS = "aucun montant de chaîne : renseigner « Montants de la chaîne » dans les réglages (ex. 20, 50, 100, 200), la manche ne peut pas se jouer sans";
 
 const progressive: ConfigField[] = [
   { key: "maxPoints", kind: "number", label: "Points si trouvé tout de suite", min: 0, max: 1_000_000 },
@@ -79,12 +96,13 @@ export const MECHANICS: Readonly<Record<string, MechanicInfo>> = {
     usesScoring: false,
     fields: [
       { key: "stage", kind: "enum", label: "Cette manche est", options: [{ value: "chain", label: "une manche de chaîne (tours, banque, vote)" }, { value: "duel", label: "le duel final (les deux derniers joueurs)" }] },
-      { key: "steps", kind: "numbers", label: "Montants de la chaîne (croissants, manche de chaîne)", hint: "à renseigner, ex. 20, 50, 100, 200" },
-      { key: "bankTarget", kind: "number", label: "Banque maximale de la manche (vide = le dernier montant)", min: 1, max: 100_000_000 },
-      { key: "questionsEach", kind: "number", label: "Duel final : questions par joueur avant la mort subite", min: 1, max: 20 },
+      { key: "steps", kind: "numbers", label: "Montants de la chaîne (croissants)", hint: "à renseigner, ex. 20, 50, 100, 200", required: "Montants obligatoires : sans eux la manche ne peut pas se jouer.", showIf: { key: "stage", value: "chain" } },
+      { key: "bankTarget", kind: "number", label: "Banque maximale de la manche (vide = le dernier montant)", min: 1, max: 100_000_000, optional: true, placeholder: "dernier montant", showIf: { key: "stage", value: "chain" } },
+      { key: "questionsEach", kind: "number", label: "Questions par joueur avant la mort subite", min: 1, max: 20, showIf: { key: "stage", value: "duel" } },
     ],
     // No amount imposed: the steps are left empty (a round without steps is refused when played, and listed in the issues).
     seed: { stage: "chain", steps: [] },
+    settingsIssue: (c) => (c["stage"] !== "duel" && (!Array.isArray(c["steps"]) || c["steps"].length === 0) ? CHAIN_NO_STEPS : null),
   },
   hints: { label: "Indices dégressifs", explain: "Les indices de la question tombent un à un ; plus on répond tôt, plus on marque.", usesScoring: false, fields: progressive },
   "crowd-vote": {
@@ -159,6 +177,9 @@ export function roundIssues(doc: GameDocument, ri: number, registry: Registry): 
   if (m === null) return [...issues, { questionId: null, message: `mécanique inconnue : ${round.mechanic}` }];
   const cfg = m.configSchema.safeParse(round.mechanicConfig);
   if (!cfg.success) return [...issues, { questionId: null, message: `réglages invalides : ${cfg.error.issues.map((i) => i.message).join(" ; ")}` }];
+  // Every question would fail for the same settings reason: said once for the round.
+  const settings = isRecord(cfg.data) ? (MECHANICS[round.mechanic]?.settingsIssue?.(cfg.data) ?? null) : null;
+  if (settings !== null) return [...issues, { questionId: null, message: settings }];
   const questions = round.questions.flatMap((id) => byId.get(id) ?? []);
   const check = (q: Question, questionIndex: number, list: readonly Question[]) => {
     // The mechanic that will play this question (a mixed round picks one per answer kind).
@@ -319,6 +340,25 @@ export type MixedCategoryInfo = {
 
 const change: ConfigField = { key: "allowChange", kind: "boolean", label: "Le joueur peut changer sa réponse jusqu'à la fermeture" };
 
+/** « Ouvrir les réponses dès que la question s'affiche » (the default: the key is then left out of the document). */
+export function setOpenOnPresent(r: Round, on: boolean): void {
+  if (on) delete r.openOnPresent;
+  else r.openOnPresent = false;
+}
+
+/** The four ways of counting a several-answers QCM, in words (category select and question select). */
+export const MULTI_SCORING_OPTIONS: readonly Choice[] = MultiScoring.options.map((m) => ({ value: m, label: MULTI_SCORING_LABEL_FR[m] }));
+
+/** A question's own way of counting (`null`: back to its category's). Only on a several-answers QCM. */
+export function setQuestionMultiScoring(q: Question, mode: MultiScoring | null): void {
+  if (q.answerSpec.kind !== "multi") return;
+  if (mode === null) delete q.answerSpec.multiScoring;
+  else q.answerSpec.multiScoring = mode;
+}
+
+/** Keys of older games, still read by the engine but never offered (replaced by another setting). */
+export const LEGACY_CATEGORY_KEYS: Readonly<Partial<Record<MixedCategory, readonly string[]>>> = { choice: ["partialMulti"], poll: ["strikesReset"] };
+
 /** One block per category in Format (order = how often they are used). */
 export const MIXED_CATEGORIES: readonly MixedCategoryInfo[] = [
   {
@@ -329,7 +369,7 @@ export const MIXED_CATEGORIES: readonly MixedCategoryInfo[] = [
     fields: [
       { key: "shuffleOptions", kind: "boolean", label: "Mélanger l'ordre des réponses (même ordre pour tout le monde)" },
       change,
-      { key: "partialMulti", kind: "boolean", label: "Plusieurs bonnes réponses : points partiels (bonnes cochées − mauvaises cochées), sinon tout ou rien" },
+      { key: "multiScoring", kind: "enum", label: "Plusieurs bonnes réponses : comptage (une question peut avoir le sien ; la régie peut le changer en direct)", options: MULTI_SCORING_OPTIONS },
       { key: "race", kind: "number", label: "Course : seuls les N plus rapides à répondre juste marquent (0 = tous)", min: 0, max: 1000 },
     ],
   },
@@ -356,7 +396,6 @@ export const MIXED_CATEGORIES: readonly MixedCategoryInfo[] = [
       { key: "multiplier", kind: "number", label: "Multiplicateur (manche double, triple…)", min: 0.5, max: 100, step: 0.5 },
       { key: "steal", kind: "boolean", label: "Vol possible après la dernière erreur (une seule réponse pour l'autre camp)" },
       { key: "revealAll", kind: "boolean", label: "À la révélation, montrer aussi les réponses non trouvées" },
-      { key: "strikesReset", kind: "boolean", label: "Erreurs remises à zéro quand la main passe (sinon elles restent pour tout le monde)" },
     ],
   },
   { id: "oral", label: "Réponse orale (buzzer)", kinds: ["oral"], explain: "Le premier qui buzze répond à voix haute ; l'animateur ou la régie juge.", fields: [{ key: "lockoutOnWrong", kind: "boolean", label: "Qui se trompe ne peut plus buzzer sur la question" }] },
@@ -412,6 +451,8 @@ export function mixedCategoryValues(registry: Registry, round: Pick<Round, "mech
   const played = registry.get(routed.id)?.configSchema.safeParse(routed.config);
   const values: Record<string, unknown> = played?.success === true && isRecord(played.data) ? played.data : {};
   for (const f of info.fields) out[f.key] = values[ROUTED_KEY[cat]?.[f.key] ?? f.key];
+  // Several right answers counted all or nothing when nothing says otherwise (the engine's default).
+  if (cat === "choice" && out["multiScoring"] === undefined) out["multiScoring"] = "all";
   return out;
 }
 
@@ -423,6 +464,8 @@ export function setMixedField(d: GameDocument, ri: number, cat: MixedCategory, k
   const kinds = kindsOf(cfg);
   const block: Record<string, unknown> = { ...kinds[cat], [key]: value };
   if (value === undefined) delete block[key];
+  // A setting chosen now replaces the legacy key it supersedes (older games: `partialMulti`).
+  if (cat === "choice" && key === "multiScoring") for (const k of LEGACY_CATEGORY_KEYS.choice ?? []) delete block[k];
   cfg["kinds"] = { ...kinds, [cat]: block };
   r.mechanicConfig = cfg;
 }

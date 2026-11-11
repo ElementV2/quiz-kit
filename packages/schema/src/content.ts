@@ -30,6 +30,37 @@ export const SingleAnswer = z
   .strictObject({ kind: z.literal("single"), options: options(2, 6), correct: OptionId })
   .refine((a) => a.options.some((o) => o.id === a.correct), "la bonne réponse doit être une des options");
 
+/**
+ * How a several-answers QCM is counted (category setting, question default, live choice of the control room):
+ * - `all`: all or nothing (exactly the right answers);
+ * - `partial-penalty`: (right ticks − wrong ticks) / right answers, never below 0;
+ * - `partial`: right ticks / right answers, wrong ticks cost nothing — but ticking more boxes than there are right
+ *   answers scores 0 (else ticking everything would win everything);
+ * - `any-no-wrong`: right (100 %) with at least one right tick and no wrong one.
+ */
+export const MultiScoring = z.enum(["all", "partial-penalty", "partial", "any-no-wrong"]);
+export type MultiScoring = z.infer<typeof MultiScoring>;
+
+/** Share of the points (0..1) of a several-answers QCM answer with `good` right and `wrong` wrong ticks. Pure. */
+export function multiShare(mode: MultiScoring, good: number, wrong: number, correctCount: number): number {
+  if (correctCount <= 0) return 0;
+  if (good === correctCount && wrong === 0) return 1;
+  switch (mode) {
+    case "all":
+      return 0;
+    case "partial-penalty":
+      return Math.max(0, (good - wrong) / correctCount);
+    case "partial":
+      return good + wrong > correctCount ? 0 : good / correctCount;
+    case "any-no-wrong":
+      return good > 0 && wrong === 0 ? 1 : 0;
+    default: {
+      const unknown: never = mode;
+      return unknown;
+    }
+  }
+}
+
 export const MultiAnswer = z
   .strictObject({
     kind: z.literal("multi"),
@@ -37,6 +68,8 @@ export const MultiAnswer = z
     correct: z.array(OptionId).min(1),
     minPick: z.number().int().min(1).optional(),
     maxPick: z.number().int().min(1).optional(),
+    /** This question's own way of counting (absent: its category's). The control room may still change it live. */
+    multiScoring: MultiScoring.optional(),
   })
   .refine((a) => a.correct.every((c) => a.options.some((o) => o.id === c)), "bonne réponse inconnue")
   .refine((a) => (a.minPick ?? 1) <= (a.maxPick ?? a.options.length), "minPick > maxPick");

@@ -10,7 +10,7 @@ import { actor, addPlayers, answer, CONTROL, ctl, makeSession, run } from "./tes
 /** One test per finding of the first engine review (keeps them fixed). */
 
 const START = [ctl({ type: "game.start" }), ctl({ type: "round.start" }), ...addPlayers(2)];
-const OPEN_Q1 = [...START, ctl({ type: "question.present" }), ctl({ type: "question.open" })];
+const OPEN_Q1 = [...START, ctl({ type: "question.present" })];
 const lastSeq = (g: { events: readonly Event[] }): number => g.events.at(-1)?.seq ?? 0;
 
 describe("review #1 — multi-level undo / redo / re-undo", () => {
@@ -42,7 +42,7 @@ describe("review #2 — a question cannot be scored twice", () => {
   it("replaying a question replaces its automatic points", () => {
     let g = run(reg, [...OPEN_Q1, answer("p_1", "b"), ctl({ type: "question.lock" }), ctl({ type: "question.reveal" }), ctl({ type: "question.next" })]);
     const first = participantTotal(g.state, "p_1");
-    g = run(reg, [ctl({ type: "question.present", questionIndex: 0 }), ctl({ type: "question.open" }), answer("p_1", "b"), ctl({ type: "question.lock" }), ctl({ type: "question.reveal" })], g);
+    g = run(reg, [ctl({ type: "question.present", questionIndex: 0 }), answer("p_1", "b"), ctl({ type: "question.lock" }), ctl({ type: "question.reveal" })], g);
     expect(participantTotal(g.state, "p_1")).toBe(first);
     expect(g.state.ledger.filter((e) => e.questionId === "q_capital_fr" && !e.voided)).toHaveLength(1);
   });
@@ -153,7 +153,7 @@ describe("phase 1 review — replay scope and snapshots", () => {
     const round = DEMO_GAME.format.rounds[0];
     if (round === undefined) throw new Error("fixture");
     const game = { ...DEMO_GAME, format: { ...DEMO_GAME.format, rounds: [{ ...round, questions: ["q_capital_fr"] }, { ...round, id: "r_2", questions: ["q_capital_fr"] }] } };
-    const once = [ctl({ type: "question.present" }), ctl({ type: "question.open" }), answer("p_1", "b"), ctl({ type: "question.lock" }), ctl({ type: "question.reveal" }), ctl({ type: "question.next" })];
+    const once = [ctl({ type: "question.present" }), answer("p_1", "b"), ctl({ type: "question.lock" }), ctl({ type: "question.reveal" }), ctl({ type: "question.next" })];
     const g = run(reg, [...START, ...once, ctl({ type: "round.start" }), ...once], createGame(makeSession(game)));
     expect(g.state.ledger.filter((e) => e.reason === "auto" && !e.voided)).toHaveLength(2);
   });
@@ -175,7 +175,7 @@ describe("projection cost with 500 tablets (review I4)", () => {
     const counting = createRegistry([{ ...base, judge: (st: unknown) => { calls++; return base.judge(st); } }, ...defaultRegistry.ids().filter((id) => id !== "text-answer").flatMap((id) => { const m = defaultRegistry.get(id); return m === null ? [] : [m]; })]);
     const players = Array.from({ length: 500 }, (_, i) => ctl({ type: "player.add", participantId: `p_${i + 1}`, displayName: `J${i + 1}`, channel: "play" }));
     const answers = Array.from({ length: 500 }, (_, i) => [actor("player", `p_${i + 1}`), { type: "answer.submit", participantId: `p_${i + 1}`, answer: { kind: "text", text: i % 2 === 0 ? "Van Gogh" : "Monet" } }] as const);
-    const g = run(counting, [ctl({ type: "game.start" }), ctl({ type: "round.start" }), ...players, ctl({ type: "question.present" }), ctl({ type: "question.open" }), ...answers, ctl({ type: "question.lock" }), ctl({ type: "question.reveal" })], createGame(makeSession(DEMO_TEXT_GAME)));
+    const g = run(counting, [ctl({ type: "game.start" }), ctl({ type: "round.start" }), ...players, ctl({ type: "question.present" }), ...answers, ctl({ type: "question.lock" }), ctl({ type: "question.reveal" })], createGame(makeSession(DEMO_TEXT_GAME)));
     calls = 0;
     for (let i = 1; i <= 500; i++) project(g, { role: "player", participantId: `p_${i}` }, counting);
     expect(calls).toBe(1);

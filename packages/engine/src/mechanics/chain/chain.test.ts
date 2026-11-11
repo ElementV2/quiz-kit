@@ -45,8 +45,12 @@ function controlActionFor(control: ControlView, picks: readonly number[]): Actio
   if (m === null) return { type: "answer.judge", correct: true };
   if (control.question !== null && control.phase !== "revealed") {
     if (p0 % 12 === 1 && m.stage === "chain" && m.bank > 0) return { type: "chain.end" }; // time is up, after some banking
+    // Last duel question and still no winner: the control room ends the duel (pot not paid) rather than stay stuck.
+    if (p0 % 2 === 1 && m.stage === "duel" && control.nextQuestion === null && m.duel?.winner === null) return { type: "chain.end" };
     if (p0 % 6 === 0 && m.turn !== null && m.chainValue > 0) return { type: "chain.bank", participantId: m.turn };
-    return { type: "answer.judge", correct: p1 % 10 < (m.stage === "duel" ? 5 : 9) };
+    // Duel: the first player is usually right, the second usually wrong, so duels get decided within a run.
+    const rightRate = m.stage === "chain" ? 9 : m.turn === m.order[0] ? 8 : 2;
+    return { type: "answer.judge", correct: p1 % 10 < rightRate };
   }
   if (control.question !== null) return null;
   const v = m.vote;
@@ -107,7 +111,7 @@ const CONTRACT_GAME: GameDocument = (() => {
       participants: { max: 10 },
       rounds: [0, 1, 2].flatMap((i) => [
         { ...c1, id: `r_c_${i}`, questions: c1.questions.slice(i, i === 0 ? 3 : i + 3), mechanicConfig: CONTRACT_CHAINS[i] },
-        { ...duel, id: `r_d_${i}`, questions: duel.questions.slice(i, i + 9), mechanicConfig: { stage: "duel", questionsEach: 1 } },
+        { ...duel, id: `r_d_${i}`, questions: duel.questions, mechanicConfig: { stage: "duel", questionsEach: 1 } },
       ]),
     },
   };
@@ -141,7 +145,6 @@ function withRounds(patches: Readonly<Record<number, RoundPatch>>): GameDocument
 const START: Step[] = [...addPlayers(4), ctl({ type: "game.start" }), ctl({ type: "round.start" })];
 const PRESENT = ctl({ type: "question.present" });
 const NEXT = ctl({ type: "question.next" });
-const OPEN = ctl({ type: "question.open" });
 const LOCK = ctl({ type: "question.lock" });
 const REVEAL = ctl({ type: "question.reveal" });
 const judge = (correct: boolean): Step => ctl({ type: "answer.judge", correct });
@@ -160,6 +163,7 @@ const viewOf = (g: Game, viewer: Viewer = { role: "control" }): ChainMechanicVie
 };
 const attempt = (g: Game, [who, action]: Step) => decide(g, { action, actor: who, idempotencyKey: null }, 9_000_000 + g.events.length * 1000, reg);
 const statusOf = (g: Game, pid: string) => g.state.participants.find((p) => p.id === pid)?.status;
+const CHAIN_STEPS_OF_DEMO = [20, 50, 100, 200, 300, 450, 600, 800, 1000];
 
 describe("chain settings", () => {
   it("imposes no amounts: a chain round without steps is refused when presented, with a clear message", () => {
@@ -257,10 +261,21 @@ describe("chain turns", () => {
     expect(viewOf(next)).toMatchObject({ bank: 0, level: 0, totalBank: 20 });
   });
 
-  it("the control room can end the round between two turns", () => {
+  it("the control room can end the round between two turns: the round ends there, « Suivant » goes on", () => {
     const g = play([...START, ...turn(true), ctl({ type: "chain.end" })]);
     expect(viewOf(g).over).toBe("ended");
+    expect(g.state.phase).toBe("round.end");
     expect(attempt(g, PRESENT).ok).toBe(false);
+    // What the « Suivant » key proposes (nextStep): the vote, then the next round — each accepted.
+    expect(viewOf(g).canOpenVote).toBe(true);
+    const voted = run(reg, [OPEN_VOTE, vote("p_1", "p_2"), CLOSE_VOTE, ctl({ type: "round.start" })], g);
+    expect(voted.state).toMatchObject({ phase: "idle", roundIndex: 1 });
+    // Without a vote (fewer than 3 players): the next round straight away.
+    const two = play([...START, ctl({ type: "player.setStatus", participantId: "p_3", status: "eliminated" }), ctl({ type: "player.setStatus", participantId: "p_4", status: "eliminated" }), ...turn(true), ctl({ type: "chain.end" })]);
+    expect(viewOf(two).canOpenVote).toBe(false);
+    expect(attempt(two, ctl({ type: "round.start" })).ok).toBe(true);
+    // Undo of that end: back between two turns.
+    expect(run(reg, [ctl({ type: "undo" })], g).state.phase).toBe("idle");
   });
 
   it("running out of questions ends the round", () => {
@@ -271,7 +286,7 @@ describe("chain turns", () => {
 
 describe("chain projections", () => {
   it("the expected answer is for the host and the control room until the reveal", () => {
-    const g = play([...START, PRESENT, OPEN, judge(false), LOCK]);
+    const g = play([...START, PRESENT, judge(false), LOCK]);
     expect(viewOf(g, { role: "host" }).expected).toBe("Mars");
     expect(viewOf(g, { role: "player", participantId: "p_1" }).expected).toBeNull();
     expect(viewOf(g, { role: "output", scene: "program" }).expected).toBeNull();
@@ -400,7 +415,7 @@ describe("final duel", () => {
   it("the reveal of the deciding question writes the pot once", () => {
     let g = play(TO_DUEL);
     for (let i = 0; i < 2; i++) g = run(reg, [...duelTurn(true), ...duelTurn(false)], g);
-    g = run(reg, [...duelTurn(true), PRESENT, OPEN, judge(false), LOCK, REVEAL], g);
+    g = run(reg, [...duelTurn(true), PRESENT, judge(false), LOCK, REVEAL], g);
     expect(participantTotal(g.state, "p_1")).toBe(70);
     expect(participantTotal(run(reg, [NEXT], g).state, "p_1")).toBe(70);
   });
@@ -419,7 +434,148 @@ describe("final duel", () => {
   it("no bank and no vote in the duel", () => {
     const g = play([...TO_DUEL, PRESENT]);
     expect(attempt(g, bank("p_1")).ok).toBe(false);
-    expect(attempt(g, ctl({ type: "chain.end" })).ok).toBe(false);
+    expect(attempt(g, OPEN_VOTE).ok).toBe(false);
+  });
+
+  it("never ends silently without a winner: the last « Suivante » is refused, the control room decides", () => {
+    // Every pair right: still tied when the 14 questions run out.
+    let g = play(TO_DUEL);
+    for (let i = 0; i < 6; i++) g = run(reg, [...duelTurn(true), ...duelTurn(true)], g);
+    g = run(reg, [...duelTurn(true), PRESENT, judge(true)], g);
+    expect(viewOf(g).duel).toMatchObject({ suddenDeath: true, winner: null });
+    expect(attempt(g, NEXT)).toMatchObject({ ok: false, error: { message: expect.stringMatching(/duel sans vainqueur/) } });
+    // Explicit end without a winner: the pot is not paid, the game ends.
+    const ended = run(reg, [ctl({ type: "chain.end" }), NEXT], g);
+    expect(ended.state.phase).toBe("game.end");
+    expect(ended.state.ledger).toEqual([]);
+  });
+
+  it("passing the last duel question, or jumping out of the duel, is refused the same way", () => {
+    let g = play(TO_DUEL);
+    for (let i = 0; i < 6; i++) g = run(reg, [...duelTurn(true), ...duelTurn(true)], g);
+    g = run(reg, duelTurn(true), g);
+    expect(attempt(g, ctl({ type: "question.skip", roundIndex: 2, questionIndex: 13 }))).toMatchObject({ ok: false, error: { message: expect.stringMatching(/duel sans vainqueur/) } });
+    const base = withRounds({});
+    const [first] = base.format.rounds;
+    if (first === undefined) throw new Error("demo has rounds");
+    const longer: GameDocument = { ...base, format: { ...base.format, rounds: [...base.format.rounds, { ...first, id: "r_after", title: "Après" }] } };
+    const mid = play([...TO_DUEL, ...duelTurn(true)], longer);
+    expect(attempt(mid, ctl({ type: "round.start", roundIndex: 3 }))).toMatchObject({ ok: false, error: { message: expect.stringMatching(/duel sans vainqueur/) } });
+  });
+
+  it("a duel player removed: the duel cannot go on and the control room may move on", () => {
+    const g = play([...TO_DUEL, ...duelTurn(true), ctl({ type: "player.remove", participantId: "p_2" })]);
+    expect(attempt(g, PRESENT).ok).toBe(false);
+    expect(viewOf(g).duel?.winner).toBeNull();
+  });
+});
+
+describe("chain safeguards", () => {
+  it("a vote left open blocks the next round, whatever it is", () => {
+    const base = withRounds({});
+    const [c1, , duel] = base.format.rounds;
+    if (c1 === undefined || duel === undefined) throw new Error("3 rounds");
+    // A chain round followed by a « Mixte » round (spoken questions are played at the buzzer).
+    const g2: GameDocument = { ...base, format: { ...base.format, rounds: [c1, { ...duel, id: "r_mixed", title: "Mixte", mechanic: "mixed", mechanicConfig: {} }] } };
+    const g = play([...START, ...turn(true), ctl({ type: "chain.end" }), OPEN_VOTE], g2);
+    expect(g.state.phase).toBe("round.end");
+    expect(attempt(g, ctl({ type: "round.start" }))).toMatchObject({ ok: false, error: { message: expect.stringMatching(/terminer le vote d'élimination d'abord/) } });
+    expect(attempt(g, ctl({ type: "round.start", roundIndex: 1 })).ok).toBe(false);
+    const tied = run(reg, [vote("p_1", "p_2"), vote("p_2", "p_1"), CLOSE_VOTE], g);
+    const v = viewOf(tied).vote;
+    expect(v?.status).toBe("tie");
+    expect(attempt(tied, ctl({ type: "round.start" })).ok).toBe(false);
+    const done = run(reg, [ctl({ type: "chain.pick", participantId: v?.picker ?? "p_1", eliminated: "p_2" })], tied);
+    expect(attempt(done, ctl({ type: "round.start" })).ok).toBe(true);
+  });
+
+  it("closing a vote nobody voted in is refused (the control room may vote for the players)", () => {
+    const g = play([...ROUND_1, OPEN_VOTE]);
+    expect(attempt(g, CLOSE_VOTE)).toMatchObject({ ok: false, error: { message: expect.stringMatching(/aucun vote reçu/) } });
+    expect(attempt(run(reg, [ctl({ type: "chain.vote", participantId: "p_1", against: "p_3" })], g), CLOSE_VOTE).ok).toBe(true);
+  });
+
+  it("a tie whose tied players are removed reopens the vote", () => {
+    const g = play([...ROUND_1, OPEN_VOTE, vote("p_1", "p_3"), vote("p_2", "p_4"), vote("p_3", "p_4"), vote("p_4", "p_3"), CLOSE_VOTE]);
+    expect(viewOf(g).vote).toMatchObject({ status: "tie", tied: ["p_3", "p_4"], picker: "p_1" });
+    const one = run(reg, [ctl({ type: "player.remove", participantId: "p_3" })], g);
+    expect(viewOf(one).vote).toMatchObject({ status: "tie", tied: ["p_4"] }); // still someone to pick
+    const none = run(reg, [ctl({ type: "player.remove", participantId: "p_4" })], one);
+    expect(viewOf(none).vote).toMatchObject({ status: "open", tied: [], picker: null, voters: ["p_1", "p_2"] });
+    expect(attempt(none, CLOSE_VOTE).ok).toBe(false); // their ballots went with them: vote again
+  });
+
+  it("refuses forced verdicts on chain questions: the judgement is undone instead", () => {
+    const g = play([...START, PRESENT, judge(true), LOCK]);
+    const forced = ctl({ type: "answer.verdict", roundIndex: 0, questionIndex: 0, participantId: "p_1", correct: false });
+    expect(attempt(g, forced)).toMatchObject({ ok: false, error: { message: expect.stringMatching(/annuler \(undo\) le jugement/) } });
+    expect(attempt(run(reg, [REVEAL, NEXT], g), forced).ok).toBe(false);
+  });
+
+  it("refuses question.regrade (judged by a human)", () => {
+    const g = play([...START, PRESENT, judge(true), LOCK, REVEAL]);
+    expect(attempt(g, ctl({ type: "question.regrade", questionId: "q_ch1_1", answerSpec: { kind: "oral", expected: "La planète Mars" } })).ok).toBe(false);
+  });
+
+  it("a passed question keeps the chain; the next one goes to the next player", () => {
+    const g = play([...START, ...turn(true), ctl({ type: "question.skip", roundIndex: 0, questionIndex: 1 }), PRESENT]);
+    expect(viewOf(g)).toMatchObject({ turn: "p_2", level: 1 });
+    expect(g.state.questionIndex).toBe(2);
+  });
+
+  it("studio sends: the chain round in progress keeps its amounts, the next chain round takes the new ones", () => {
+    const g = play([...START, ...turn(true)]);
+    expect(attempt(g, ctl({ type: "game.patch", game: withRounds({ 0: { steps: [5, 10] } }), baseVersion: g.state.gameVersion })).ok).toBe(false);
+    const patched = withRounds({ 1: { steps: [1, 2, 3] } });
+    const after = run(reg, [ctl({ type: "game.patch", game: patched, baseVersion: g.state.gameVersion }), PRESENT], g);
+    expect(viewOf(after)).toMatchObject({ steps: CHAIN_STEPS_OF_DEMO, level: 1 });
+    const next = run(reg, [ctl({ type: "chain.end" }), NEXT, ctl({ type: "round.start" }), PRESENT], after);
+    expect(viewOf(next).steps).toEqual([1, 2, 3]);
+  });
+});
+
+describe("chain undo", () => {
+  it("undoing a bank (explicit target) puts the amount back on the chain; replay agrees", () => {
+    const g = play([...START, ...turn(true), ...turn(true), PRESENT, bank("p_3")]);
+    const bankSeq = g.events.at(-1)?.seq ?? 0;
+    const u = run(reg, [ctl({ type: "undo", targetSeq: bankSeq })], g);
+    expect(viewOf(u)).toMatchObject({ bank: 0, level: 2, chainValue: 50 });
+    expect(replay(u.session, u.events, reg).state).toEqual(u.state);
+  });
+
+  it("a targetless undo never cancels a player's bank or pick", () => {
+    const g = play([...START, ...turn(true), PRESENT, bank("p_2")]);
+    const bankSeq = g.events.at(-1)?.seq;
+    const u = run(reg, [ctl({ type: "undo" })], g);
+    expect(u.events.at(-1)?.action).not.toEqual({ type: "undo", targetSeq: bankSeq });
+    const tie = play([...ROUND_1, OPEN_VOTE, vote("p_1", "p_3"), vote("p_2", "p_4"), vote("p_3", "p_4"), vote("p_4", "p_3"), CLOSE_VOTE, [actor("player", "p_1"), { type: "chain.pick", participantId: "p_1", eliminated: "p_4" }]]);
+    const pickSeq = tie.events.at(-1)?.seq;
+    const undone = run(reg, [ctl({ type: "undo" })], tie);
+    expect(undone.events.at(-1)?.action).not.toEqual({ type: "undo", targetSeq: pickSeq });
+  });
+
+  it("undo across a round boundary: back to the closed vote, then to the open vote", () => {
+    const g = play([...ROUND_1, OPEN_VOTE, vote("p_1", "p_3"), vote("p_2", "p_3"), CLOSE_VOTE, PRESENT]);
+    const back = run(reg, [ctl({ type: "undo" })], g); // the presentation
+    expect(back.state).toMatchObject({ phase: "idle", roundIndex: 1 });
+    expect(viewOf(back).vote?.status).toBe("done");
+    const reopened = run(reg, [ctl({ type: "undo" })], back); // the close
+    expect(viewOf(reopened).vote?.status).toBe("open");
+    expect(statusOf(reopened, "p_3")).toBe("active");
+    const beforeRound = run(reg, [ctl({ type: "undo" }), ctl({ type: "undo" }), ctl({ type: "undo" })], reopened); // open vote, round.start, chain.end
+    expect(beforeRound.state).toMatchObject({ phase: "idle", roundIndex: 0 });
+    expect(replay(beforeRound.session, beforeRound.events, reg).state).toEqual(beforeRound.state);
+  });
+
+  it("a snapshot taken while a vote is open resumes the same vote (reconnection, crash)", () => {
+    const g = play([...ROUND_1, OPEN_VOTE, vote("p_1", "p_3")]);
+    const at = g.events.length;
+    const snap = GameState.parse(JSON.parse(JSON.stringify(g.state)));
+    const later = run(reg, [vote("p_2", "p_3"), CLOSE_VOTE], g);
+    const resumed = replay(later.session, later.events, reg, { seq: at, state: snap });
+    expect(resumed.state).toEqual(later.state);
+    expect(statusOf(resumed, "p_3")).toBe("eliminated");
+    expect(viewOf({ ...g, state: snap }, { role: "player", participantId: "p_1" }).vote).toMatchObject({ status: "open", myVote: "p_3", ballots: null });
   });
 });
 
@@ -436,5 +592,54 @@ describe("chain journal", () => {
     const g = play(ROUND_1);
     expect(attempt(g, [actor("player", "p_1"), { type: "chain.openVote" }]).ok).toBe(false);
     expect(attempt(g, [actor("host"), { type: "chain.openVote" }]).ok).toBe(false); // unless the host drives
+  });
+});
+
+describe("chain: removals during a vote, undo of a bank, round of the view", () => {
+  it("a vote left with fewer than two voters is cancelled: nothing blocks the game any more", () => {
+    const g = play([...ROUND_1, OPEN_VOTE, vote("p_1", "p_4")]);
+    const two = run(reg, [ctl({ type: "player.remove", participantId: "p_1" }), ctl({ type: "player.remove", participantId: "p_2" })], g);
+    expect(viewOf(two).vote).toMatchObject({ status: "open", voters: ["p_3", "p_4"] }); // two can still vote
+    const one = run(reg, [ctl({ type: "player.remove", participantId: "p_3" })], two);
+    expect(viewOf(one).vote).toBeNull();
+    expect(attempt(one, PRESENT).ok).toBe(true);
+  });
+
+  it("Ctrl+Z takes back a bank sent by the control room / the host, never a player's own", () => {
+    const g = play([...START, ...turn(true), PRESENT]);
+    expect(viewOf(g)).toMatchObject({ turn: "p_2", chainValue: 20, bank: 0 });
+    for (const who of [actor("control", "op"), actor("host")]) {
+      const banked = run(reg, [[who, { type: "chain.bank", participantId: "p_2" }]], g);
+      expect(viewOf(banked).bank).toBe(20);
+      const undone = run(reg, [ctl({ type: "undo" })], banked);
+      expect(viewOf(undone)).toMatchObject({ bank: 0, chainValue: 20 });
+    }
+    const banked = run(reg, [bank("p_2")], g);
+    const bankSeq = banked.events.at(-1)?.seq;
+    const mine = run(reg, [ctl({ type: "undo" })], banked);
+    const u = mine.events.at(-1)?.action;
+    // A player's own bank is never what a targetless undo takes back (it goes to the control room's last action).
+    expect(u?.type === "undo" ? u.targetSeq : null).not.toBe(bankSeq);
+  });
+
+  it("the view says which round its figures belong to", () => {
+    const g = play([...ROUND_1]);
+    expect(g.state.roundIndex).toBe(1);
+    expect(viewOf(g).roundIndex).toBe(0); // round 1 started, nothing played yet: still round 0's chain
+    expect(viewOf(run(reg, [PRESENT], g)).roundIndex).toBe(1);
+  });
+});
+
+describe("chain « end » key (canEnd)", () => {
+  it("is offered exactly when chain.end is accepted", () => {
+    const states = [
+      play([...START, PRESENT]), // on air
+      play([...START, ...turn(true)]), // between two turns
+      play([...START, ...turn(true), ctl({ type: "chain.end" })]), // round over (round.end)
+      play([...ROUND_1]), // another round started, the view shows the round before
+      play([...START, ...turn(true), PRESENT, judge(true)], withRounds({ 0: { questions: ["q_ch1_1", "q_ch1_2"] } })), // last question judged
+    ];
+    expect(states.map((g) => viewOf(g).canEnd)).toEqual(states.map((g) => attempt(g, ctl({ type: "chain.end" })).ok));
+    expect(states.map((g) => viewOf(g).canEnd)).toEqual([true, true, false, false, false]);
   });
 });

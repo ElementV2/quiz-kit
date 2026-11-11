@@ -31,7 +31,7 @@ describe("hot standby", () => {
   it("mirrors the primary's journal exactly, refuses intents, follows a game switch, takes over when promoted", async () => {
     const primary = await boot();
     const standby = await boot({ standbyOf: `http://127.0.0.1:${primary.port}`, standbyToken: controlToken(primary) });
-    for (const a of [{ type: "game.start" }, { type: "round.start" }, { type: "player.add", participantId: "p_1", displayName: "Ana", channel: "play" }, { type: "question.present" }, { type: "question.open" }] as const) primary.runtime.submit(a, CONTROL, null);
+    for (const a of [{ type: "game.start" }, { type: "round.start" }, { type: "player.add", participantId: "p_1", displayName: "Ana", channel: "play" }, { type: "question.present" }] as const) primary.runtime.submit(a, CONTROL, null);
     primary.runtime.submit({ type: "answer.submit", participantId: "p_1", answer: { kind: "choice", optionIds: ["b"] } }, CONTROL, null);
     await until(() => standby.runtime.current.state.lastSeq === primary.runtime.current.state.lastSeq);
     expect(standby.runtime.session.id).toBe(primary.runtime.session.id);
@@ -60,7 +60,7 @@ describe("hot standby", () => {
     // Once promoted, replication is refused outright.
     expect(() => standby.runtime.replicate([])).toThrow(/plus en secours/);
     expect(standby.runtime.submit({ type: "question.present" }, CONTROL, null)).toMatchObject({ ok: true });
-    expect(standby.runtime.current.state.phase).toBe("presenting");
+    expect(standby.runtime.current.state.phase).toBe("open");
     expect((await standby.http.inject({ method: "POST", url: `/api/standby/promote?t=${controlToken(standby)}`, payload: { force: true } })).statusCode).toBe(409);
   });
 

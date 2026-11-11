@@ -64,7 +64,7 @@ test("text-answer: typed answers, fuzzy match, control overrules, answer on air 
   const errors: string[] = [];
   const { control, output, tablets, next } = await setup(browser, request, "g_e2e_texte", "Ana;1\nBo;2", 2, errors);
   const [ana, bo] = pair(tablets);
-  await next(4); // start, round, present, open
+  await next(3); // start, round, present (the answers open with it)
   await ana.page.locator(".p-input").fill("van gogh");
   await ana.page.getByRole("button", { name: "Envoyer" }).click();
   await expect(ana.page.getByText("Réponse enregistrée")).toBeVisible();
@@ -102,7 +102,7 @@ test("order: up / down buttons build the ordering, the right order goes on air a
   const errors: string[] = [];
   const { output, tablets, next } = await setup(browser, request, "g_e2e_ordre", "Ana;1\nBo;2", 2, errors);
   const [ana, bo] = pair(tablets);
-  await next(4);
+  await next(3); // start, round, present (answers open)
   await expect(output.locator(".q-order")).toHaveAttribute("data-revealed", "false");
   await expect(output.locator(".q-order-item")).toHaveCount(4);
   // Ana sorts the list into the right order with ▲ only.
@@ -143,7 +143,7 @@ test("board: control picks a cell on the grid, first buzz judged, played cell di
   await expect(output.locator(".q-zone-question")).toContainText("Plus haut sommet d'Afrique");
   await expect(output.locator('.q-board-cell[data-state="selected"]')).toHaveText("400");
   await expect(output.locator(".q-board-current")).toContainText("Géographie");
-  await next(1); // open
+  // Picking the cell presented it and opened the buzzers (round default).
   await ana.page.getByRole("button", { name: "BUZZ" }).click();
   await expect(ana.page.getByText("Vous avez la main")).toBeVisible();
   await bo.page.getByRole("button", { name: "BUZZ" }).click();

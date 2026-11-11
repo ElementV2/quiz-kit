@@ -1,7 +1,7 @@
 import { For, Show, createMemo, type JSX } from "solid-js";
 import { asChoice, asLadder, asPin, optionLetter } from "@quiz/renderer";
 import type { HostView } from "@quiz/schema";
-import { ConfirmKey, formatAnswer } from "@quiz/ui";
+import { ConfirmKey, formatAnswer, multiScoringLine } from "@quiz/ui";
 import type { PresentOffer, Reading } from "./logic.ts";
 
 /**
@@ -68,6 +68,7 @@ export function Prompter(p: {
             vaut {p.view.stakes?.worth !== undefined && p.view.stakes.worth !== "" && p.view.stakesTarget?.roundIndex === r().round.index && p.view.stakesTarget.questionIndex === r().question.index ? `${p.view.stakes.worth} (mise)` : r().question.points.summary}
           </span>
         </Show>
+        <Show when={onAir() ? multiScoringLine(p.view.mechanic) : null}>{(line) => <span class="h-worth">{line()}</span>}</Show>
         <Show when={r().mode === "preview"}>
           <button type="button" class="q-btn q-btn-ghost h-back" onClick={() => p.onBack()}>Revenir au direct</button>
         </Show>

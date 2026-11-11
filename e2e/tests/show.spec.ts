@@ -49,8 +49,8 @@ test("a full question with control, output and two tablets over plain HTTP", asy
     await s.getByText("Touchez l'écran pour commencer").click();
   }
 
-  // Space = next step: start game, start round, present, open.
-  for (let i = 0; i < 4; i++) {
+  // Space = next step: start game, start round, present (the answers open with it).
+  for (let i = 0; i < 3; i++) {
     await control.locator("body").press("Space");
     await control.waitForTimeout(150);
   }

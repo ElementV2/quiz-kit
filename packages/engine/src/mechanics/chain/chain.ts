@@ -19,7 +19,9 @@ import { err, ok, type Rejection, type Result } from "../../result.ts";
  * Final duel (`stage: duel`): the two players left answer in turn (the stronger of the last round first), `questionsEach`
  * questions each, then sudden death by pairs. The duel stops as soon as one cannot catch up. The winner takes every
  * bank of the game, written to the ledger once: at the reveal of the deciding question, else at the `question.next` that
- * ends the round (`closeRound`). Nothing is scored before: banks are shown, not scored.
+ * ends the round (`closeRound`). Nothing is scored before: banks are shown, not scored. A duel never ends silently
+ * without a winner (`holdsRound`): the last « Suivante » is refused until questions are added, or the control room ends
+ * the duel without a winner (`chain.end`, pot not paid).
  *
  * Banks, stats, vote and eliminations travel from question to question (`RoundContext.previous`) and from round to round
  * (`RoundContext.earlier`, `GameState.across`): the whole game is in the journaled state (replay, undo, reconnection).
@@ -190,9 +192,13 @@ function bankChain(s: S, a: ActionOf<"chain.bank">, env: MechanicEnv): R {
   return ok({ ...s, bank, level: 0, stats: bump(s.stats, a.participantId, { banked: added }), over: bank >= s.target ? "target" : null });
 }
 
-function endChain(s: S, env: MechanicEnv): R {
-  if (s.stage !== "chain") return err("unsupported", "le duel se termine par ses questions (corriger les points à la main si besoin)");
-  if (s.over !== null) return err("conflict", "manche de chaîne déjà terminée");
+/**
+ * `chain.end`: the chain round's time is up (the chain not banked is lost). In the duel, only while there is no winner:
+ * it ends the duel WITHOUT a winner, the pot is not paid (explicit decision of the control room, ADR-0016).
+ */
+function endChain(s: S, env: Pick<MechanicEnv, "phase" | "roundIndex">): R {
+  if (s.winner !== null) return err("conflict", overMessage(s));
+  if (s.over !== null) return err("conflict", s.stage === "duel" ? "duel déjà terminé" : "manche de chaîne déjà terminée");
   // On air, or between two turns of its own round (not once the round is over or another one started).
   const between = env.phase === "idle" && env.roundIndex === s.roundIndex && !s.lastQuestion;
   if (!ON_AIR.has(env.phase) && env.phase !== "revealed" && !between) return err("wrong-phase", "manche de chaîne déjà terminée");
@@ -201,7 +207,9 @@ function endChain(s: S, env: MechanicEnv): R {
 
 const BETWEEN_ROUNDS: ReadonlySet<Phase> = new Set(["idle", "round.end"]);
 
-function openVote(s: S, env: MechanicEnv): R {
+type VoteEnv = Pick<MechanicEnv, "phase" | "roundIndex" | "activePlayers">;
+
+function openVote(s: S, env: VoteEnv): R {
   if (!BETWEEN_ROUNDS.has(env.phase)) return err("wrong-phase", "le vote se fait entre deux manches : passer d'abord à la suite");
   if (s.stage !== "chain") return err("conflict", "pas de vote après le duel final");
   if (s.vote !== null) return err("conflict", s.vote.status === "done" ? "vote déjà fait pour cette manche (annuler pour le refaire)" : "vote déjà ouvert");
@@ -237,6 +245,8 @@ const withElimination = (s: S, v: NonNullable<S["vote"]>, id: string): S => ({
 function closeVote(s: S): R {
   const v = s.vote;
   if (v === null || v.status !== "open") return err("conflict", "aucun vote d'élimination ouvert");
+  // Nobody voted: closing would make every player tied. The players vote (or the control room votes for them).
+  if (v.ballots.length === 0) return err("conflict", "aucun vote reçu : faire voter les joueurs (la régie peut voter pour eux) avant de clore");
   const tally = tallyOf(v);
   const max = tally[0]?.votes ?? 0;
   const leaders = tally.filter((t) => t.votes === max).map((t) => t.participantId);
@@ -285,6 +295,7 @@ export const chain = defineMechanic<ChainConfig, ChainState>({
   ownPoints: true,
   noStakes: true,
   spansRounds: true,
+  noForcedVerdict: true,
 
   init(cfg, question, env, round) {
     const spec = question.answerSpec;
@@ -387,14 +398,17 @@ export const chain = defineMechanic<ChainConfig, ChainState>({
     let vote = v;
     if (v !== null) {
       const voters = v.voters.filter((id) => id !== pid);
-      vote = {
-        ...v,
-        voters,
-        ballots: v.ballots.filter((b) => b.voter !== pid && b.against !== pid),
-        tied: v.tied.filter((id) => id !== pid),
-        picker: v.picker === pid ? link(stats, voters, 1) : v.picker,
-        eliminated: v.eliminated === pid ? null : v.eliminated,
-      };
+      const tied = v.tied.filter((id) => id !== pid);
+      const picker = v.picker === pid ? link(stats, voters, 1) : v.picker;
+      const ballots = v.ballots.filter((b) => b.voter !== pid && b.against !== pid);
+      // A tie left with nobody to pick (the tied players gone, or only the picker): the vote reopens, to be closed again.
+      const stuck = v.status === "tie" && !tied.some((id) => id !== picker);
+      vote = stuck
+        ? { ...v, status: "open", voters, ballots, tied: [], picker: null }
+        : { ...v, voters, ballots, tied, picker, eliminated: v.eliminated === pid ? null : v.eliminated };
+      // Fewer than two voters left: nobody can vote against anybody. The unfinished vote is cancelled (the next round,
+      // or the duel, is no longer blocked by it).
+      if (vote.status !== "done" && voters.length < 2) vote = null;
     }
     return {
       ...s,
@@ -424,6 +438,7 @@ export const chain = defineMechanic<ChainConfig, ChainState>({
     const [a, b] = s.order;
     return {
       mechanic: "chain",
+      roundIndex: s.roundIndex,
       stage: s.stage,
       order: [...s.order],
       turn: s.turn,
@@ -440,12 +455,28 @@ export const chain = defineMechanic<ChainConfig, ChainState>({
       strongest: link(s.stats, ids, 1),
       weakest: link(s.stats, ids, -1),
       vote: s.vote === null ? null : voteView(s, s.vote, privileged, env.audience === "player" ? env.participantId : null),
+      // What « Suivant » proposes between rounds: only for the round just played (not once another one started).
+      // The « end » key exactly when the engine accepts `chain.end` (same check).
+      canEnd: endChain(s, { phase: env.phase, roundIndex: env.roundIndex }).ok,
+      canOpenVote: env.activePlayers !== undefined && (env.phase === "round.end" || env.roundIndex === s.roundIndex) && openVote(s, { phase: env.phase, roundIndex: env.roundIndex, activePlayers: env.activePlayers }).ok,
       eliminations: s.eliminations.map((e) => ({ ...e })),
       duel:
         s.stage === "duel"
           ? { questionsEach: s.questionsEach, suddenDeath: a !== undefined && b !== undefined && asked(statOf(s.stats, a)) >= s.questionsEach && asked(statOf(s.stats, b)) >= s.questionsEach, winner: s.winner }
           : null,
     };
+  },
+
+  pending(s) {
+    if (s.vote?.status === "open") return "terminer le vote d'élimination d'abord (le clore)";
+    if (s.vote?.status === "tie") return "terminer le vote d'élimination d'abord (le maillon fort départage les ex aequo)";
+    return null;
+  },
+
+  holdsRound(s) {
+    // A duel ended explicitly (`chain.end`) or broken (a player removed) may end; otherwise never silently.
+    if (s.stage !== "duel" || s.winner !== null || s.over !== null || s.order.length < 2) return null;
+    return "duel sans vainqueur : ajouter des questions à la manche (studio, « Envoyer au direct »), ou terminer le duel sans vainqueur (« Terminer le duel sans vainqueur » : la cagnotte n'est pas versée)";
   },
 
   eliminates(before, after) {

@@ -321,6 +321,7 @@ export function buildHttpApp(deps: HttpDeps, options: FastifyServerOptions): Fas
     const byPid = new Map(given.map((a) => [a.participantId, a.optionIds]));
     const forced = new Map(h.verdicts.map((v) => [v.participantId, v.correct]));
     return {
+      questionId: h.questionId,
       mechanic: m.project(h.state, { audience: "control", phase: "revealed", participantId: null }),
       rows: ids.map((pid) => ({ participantId: pid, name: names.get(pid) ?? "joueur retiré", optionIds: [...(byPid.get(pid) ?? [])], auto: auto.get(pid) ?? null, forced: forced.get(pid) ?? null })),
     };

@@ -15,7 +15,7 @@ const answerFor = (view: View, picks: readonly number[]): Action | null => {
 
 mechanicContractSuite({ mechanic: choice, registry: reg, game: DEMO_GAME, answerFor });
 
-const OPEN = [ctl({ type: "game.start" }), ctl({ type: "round.start" }), ...addPlayers(2), ctl({ type: "question.present" }), ctl({ type: "question.open" })];
+const OPEN = [ctl({ type: "game.start" }), ctl({ type: "round.start" }), ...addPlayers(2), ctl({ type: "question.present" })];
 
 describe("choice projections", () => {
   it("hides the correct answer and distribution from players and outputs until reveal", () => {

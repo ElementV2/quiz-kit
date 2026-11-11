@@ -22,7 +22,7 @@ const FLOW_GAME: GameDocument = {
   },
 };
 const say = (pid: string, text: string) => [actor("player", pid), { type: "answer.submit", participantId: pid, answer: { kind: "text", text } }] as const;
-const play = (answers: (readonly [ReturnType<typeof actor>, never])[] | ReturnType<typeof say>[]) => [ctl({ type: "question.present" }), ctl({ type: "question.open" }), ...answers, ctl({ type: "question.lock" }), ctl({ type: "question.reveal" }), ctl({ type: "question.next" })];
+const play = (answers: (readonly [ReturnType<typeof actor>, never])[] | ReturnType<typeof say>[]) => [ctl({ type: "question.present" }), ...answers, ctl({ type: "question.lock" }), ctl({ type: "question.reveal" }), ctl({ type: "question.next" })];
 
 describe("format flow", () => {
   it("validates transitions against the rounds", () => {

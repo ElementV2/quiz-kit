@@ -3,6 +3,8 @@ export { Button, ConfirmKey, HomeLink, MECHANIC_LABEL, PHASE_LABEL, Panel, Statu
 export * from "./rundown.ts";
 export { MechanicPanel } from "./MechanicPanel.tsx";
 export { VerdictsPanel } from "./AnswerPanels.tsx";
+export { MultiScoringPicker, multiChoiceOf, multiScoringLine } from "./MultiScoring.tsx";
 export { CrowdVotePanel } from "./CrowdVotePanel.tsx";
 export { confirmDialog, copyDialog, isDialogOpen, type ConfirmOptions } from "./Dialog.tsx";
 export { StakesBar, stakesLabel } from "./StakesBar.tsx";
+export { ChainPanel } from "./ChainPanel.tsx";

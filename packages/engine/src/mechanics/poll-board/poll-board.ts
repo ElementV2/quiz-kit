@@ -15,7 +15,8 @@ const flag = (v: boolean | undefined, byDefault: boolean): boolean => v ?? byDef
  * goes to the stealing team if its steal is right, to the team with the hand otherwise. It is written to
  * the ledger on `question.reveal`, which also shows the whole board to everyone (found slots stay marked).
  * Before it, control may flip a slot (`element.reveal`): flipped slots score for nobody. The hand may pass to
- * another team at any time before the reveal (`poll.control`: strikes restart, a steal in progress is dropped).
+ * another team at any time before the reveal (`poll.control`: each side keeps its own strikes on the question, a
+ * side that made all of them cannot take the hand back, a steal in progress is dropped).
  */
 
 export const PollBoardConfig = z.strictObject({
@@ -32,8 +33,8 @@ export const PollBoardConfig = z.strictObject({
   steal: z.boolean().default(true),
   /** At the reveal, show the answers nobody found. Off: only the found ones stay on the board. */
   revealAll: z.boolean().default(true),
-  /** Strikes back to zero when the hand passes. Off: they are kept (shared by every side of the question). */
-  strikesReset: z.boolean().default(true),
+  /** @deprecated Older documents only, never read: strikes are always each side's own. */
+  strikesReset: z.boolean().optional(),
 });
 export type PollBoardConfig = z.infer<typeof PollBoardConfig>;
 
@@ -60,8 +61,12 @@ export const PollBoardState = z.strictObject({
   scoring: z.enum(["per-answer", "bank"]).default("bank"),
   steal: z.boolean().default(true),
   revealAll: z.boolean().default(true),
-  strikesReset: z.boolean().default(true),
+  /** Older snapshots only (never read): strikes are always each side's own. */
+  strikesReset: z.boolean().optional(),
+  /** Strikes of the side holding the hand. */
   strikes: z.number().int().min(0),
+  /** Each side's own strikes on this question (a side taking the hand back finds its own again). */
+  strikesBy: z.record(z.string(), z.number().int().min(0)).default({}),
   stage: z.enum(["play", "steal", "done"]),
   controllingTeamId: Side.nullable(),
   stealingTeamId: Side.nullable(),
@@ -81,8 +86,8 @@ const SHOWN: ReadonlySet<Phase> = new Set(["presenting", "open", "locked", "judg
 
 /**
  * Gives the hand — first, or to the other team at any time while the question is played (the host decides). The
- * answers found stay on the board (the bank goes to whoever wins it), the strikes restart for the team taking over,
- * a steal attempt in progress is dropped.
+ * answers found stay on the board (the bank goes to whoever wins it), the side taking over finds its own strikes of
+ * this question (none the first time; refused once it made them all), a steal attempt in progress is dropped.
  */
 const sideOf = (a: { readonly teamId?: string | undefined; readonly participantId?: string | undefined }): string => a.teamId ?? a.participantId ?? "";
 
@@ -92,9 +97,11 @@ function giveHand(s: S, a: ActionOf<"poll.control">, env: MechanicEnv): R {
   if (s.stage === "done" && s.slots.every((x) => x.found)) return err("conflict", "toutes les réponses sont trouvées");
   const side = sideOf(a);
   if (s.controllingTeamId === side && s.stage !== "done") return err("conflict", "a déjà la main");
-  const strikes = flag(s.strikesReset, true) ? 0 : s.strikes;
-  // Strikes kept and all used: the new side gets one more try (else giving the hand would be pointless).
-  return ok({ ...s, controllingTeamId: side, strikes: strikes >= s.maxStrikes ? s.maxStrikes - 1 : strikes, stage: "play", stealingTeamId: null, winnerTeamId: null });
+  // Every side has its own strikes: it finds them again with the hand, never those of another side.
+  const strikesBy = { ...s.strikesBy, ...(s.controllingTeamId === null ? {} : { [s.controllingTeamId]: s.strikes }) };
+  const strikes = strikesBy[side] ?? 0;
+  if (strikes >= s.maxStrikes) return err("conflict", `a déjà fait ses ${s.maxStrikes} erreur(s) sur cette question`);
+  return ok({ ...s, strikesBy, controllingTeamId: side, strikes, stage: "play", stealingTeamId: null, winnerTeamId: null });
 }
 
 function handSteal(s: S, a: ActionOf<"poll.steal">, env: MechanicEnv): R {
@@ -132,9 +139,10 @@ function judgeAnswer(s: S, a: ActionOf<"answer.judge">, env: MechanicEnv): R {
       if (s.controllingTeamId === null) return err("conflict", "donner la main à une équipe d'abord (poll.control)");
       if (!a.correct) {
         const strikes = s.strikes + 1;
-        if (strikes < s.maxStrikes) return ok({ ...s, strikes, stage: "play" });
+        const strikesBy = { ...s.strikesBy, [s.controllingTeamId]: strikes };
+        if (strikes < s.maxStrikes) return ok({ ...s, strikes, strikesBy, stage: "play" });
         // Last strike: the steal — or, without steal, the end (the side with the hand keeps what it found).
-        return ok(!flag(s.steal, true) ? { ...s, strikes, stage: "done", winnerTeamId: s.controllingTeamId } : { ...s, strikes, stage: "steal" });
+        return ok(!flag(s.steal, true) ? { ...s, strikes, strikesBy, stage: "done", winnerTeamId: s.controllingTeamId } : { ...s, strikes, strikesBy, stage: "steal" });
       }
       const i = find(s, a.optionId);
       if (!i.ok) return i;
@@ -173,7 +181,7 @@ export const pollBoard = defineMechanic<PollBoardConfig, PollBoardState>({
 
   reconfigure(s, cfg) {
     // Display and flow settings: safe mid-question (the bank / the found answers do not move).
-    return { ...s, steal: cfg.steal, revealAll: cfg.revealAll, strikesReset: cfg.strikesReset, maxStrikes: Math.max(cfg.maxStrikes, s.strikes) };
+    return { ...s, steal: cfg.steal, revealAll: cfg.revealAll, maxStrikes: Math.max(cfg.maxStrikes, s.strikes) };
   },
 
   init(cfg, question) {
@@ -191,8 +199,8 @@ export const pollBoard = defineMechanic<PollBoardConfig, PollBoardState>({
       scoring: cfg.scoring,
       steal: cfg.steal,
       revealAll: cfg.revealAll,
-      strikesReset: cfg.strikesReset,
       strikes: 0,
+      strikesBy: {},
       stage: "play",
       controllingTeamId: null,
       stealingTeamId: null,
@@ -242,6 +250,7 @@ export const pollBoard = defineMechanic<PollBoardConfig, PollBoardState>({
     return {
       ...s,
       slots: s.slots.map((x) => (x.foundBy === participantId ? { ...x, foundBy: null } : x)),
+      strikesBy: Object.fromEntries(Object.entries(s.strikesBy ?? {}).filter(([k]) => k !== participantId)),
       controllingTeamId: off(s.controllingTeamId),
       stealingTeamId: off(s.stealingTeamId),
       winnerTeamId: off(s.winnerTeamId),

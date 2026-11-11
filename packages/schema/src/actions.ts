@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { AnswerSpec } from "./content.ts";
+import { AnswerSpec, MultiScoring } from "./content.ts";
 import { OptionId, ParticipantId, QuestionId, ScoreEntryId, TeamId } from "./ids.ts";
 import type { Role } from "./roles.ts";
 import { DisplayName, GameDocument, ParticipantStatus, ScoreTarget, Channel } from "./session.ts";
@@ -85,6 +85,11 @@ export const Action = z.discriminatedUnion("type", [
    * are voided and rewritten (`reason: regrade`). Mechanics judged by a human (buzzer, board) cannot be regraded.
    */
   action("question.regrade", { questionId: QuestionId, answerSpec: AnswerSpec }),
+  /**
+   * How a several-answers QCM is counted, chosen live by the control room (`mode` null = back to the question's or the
+   * category's). Applies to the question on air before its reveal, and rescores every reveal of it already made.
+   */
+  action("question.setMultiScoring", { questionId: QuestionId, mode: MultiScoring.nullable() }),
   // Answers
   action("answer.submit", { participantId: ParticipantId, answer: AnswerValue }),
   /**
@@ -195,7 +200,7 @@ export const HOST_DRIVE_ACTIONS: ReadonlySet<ActionType> = new Set<ActionType>([
   "element.reveal", "timer.set", "timer.stop", "joker.use", "ladder.stop", "poll.control", "poll.steal", "question.setStakes", "question.skip",
   "chain.end", "chain.openVote", "chain.closeVote",
 ]);
-const SCORING: readonly ActionType[] = ["score.adjust", "score.setTotal", "score.void", "question.regrade", "answer.verdict"];
+const SCORING: readonly ActionType[] = ["score.adjust", "score.setTotal", "score.void", "question.regrade", "answer.verdict", "question.setMultiScoring"];
 
 /** What a player does from their tablet (or a seat): answer, buzz, bank the chain, vote, pick on a tied vote. */
 const PLAYER_ACTIONS: readonly ActionType[] = ["answer.submit", "buzz", "chain.bank", "chain.vote", "chain.pick"];
@@ -217,12 +222,18 @@ export function isAllowed(role: Role, type: ActionType): boolean {
   return actionPermissions[role].has(type);
 }
 
+/** A player's own chain decisions (bank, ballot, tie pick): like an answer, never the target of a targetless undo. */
+const PLAYER_CHAIN_ACTIONS: ReadonlySet<ActionType> = new Set<ActionType>(["chain.bank", "chain.vote", "chain.pick"]);
+
 /**
- * Actions that `undo` without target may cancel: everything except player answers (submit, buzz, chain vote) and undos.
- * `timer.expired` is included so that "undo" right after an auto-lock simply re-opens answers.
+ * Actions that `undo` without target may cancel: everything except player answers (submit, buzz, chain bank / vote /
+ * pick) and undos. `timer.expired` is included so that "undo" right after an auto-lock simply re-opens answers.
+ * `by`: role of whoever sent it. A bank sent by the control room or the host (for the player on turn) is theirs: a
+ * targetless undo (Ctrl+Z) takes it back; a player's own bank stays protected.
  */
-export function isUndoableByDefault(type: ActionType): boolean {
-  return type !== "answer.submit" && type !== "buzz" && type !== "chain.vote" && type !== "undo" && type !== "crowd.tally" && !NEVER_UNDONE.has(type);
+export function isUndoableByDefault(type: ActionType, by?: Role): boolean {
+  if (type === "chain.bank" && (by === "control" || by === "host")) return true;
+  return type !== "answer.submit" && type !== "buzz" && !PLAYER_CHAIN_ACTIONS.has(type) && type !== "undo" && type !== "crowd.tally" && !NEVER_UNDONE.has(type);
 }
 
 /**

@@ -90,7 +90,7 @@ const START: Action[] = [
   { type: "player.add", participantId: "p_1", displayName: "Ana", seat: 1, channel: "seat" },
   { type: "round.start" },
   { type: "question.present" },
-  { type: "question.open" },
+  
 ];
 
 describe("server over WebSocket (integration)", () => {

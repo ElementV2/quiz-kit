@@ -28,7 +28,7 @@ mechanicContractSuite({
 });
 
 const say = (pid: string, text: string) => [actor("player", pid), { type: "answer.submit", participantId: pid, answer: { kind: "text", text } }] as const;
-const OPEN = [ctl({ type: "game.start" }), ctl({ type: "round.start" }), ...addPlayers(3), ctl({ type: "question.present" }), ctl({ type: "question.open" })];
+const OPEN = [ctl({ type: "game.start" }), ctl({ type: "round.start" }), ...addPlayers(3), ctl({ type: "question.present" })];
 const g0 = () => createGame(makeSession(DEMO_TEXT_GAME));
 
 describe("fuzzy matching", () => {

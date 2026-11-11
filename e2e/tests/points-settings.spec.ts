@@ -107,13 +107,13 @@ test("points by hand in the studio — round barème, category rule, one questio
   const expected = [300, 600, 1600];
   await space(2); // start, round
   for (const total of expected) {
-    await space(2); // present, open
+    await space(1); // present (answers open)
     await tablet.locator(".p-option").filter({ hasText: "Deux" }).click();
     await expect(tablet.getByText("Réponse enregistrée").or(tablet.locator('.p-option[data-state="selected"]')).first()).toBeVisible();
     await space(3); // lock, reveal, next
     await expect(tablet.locator(".p-score")).toContainText(`${total} pts`);
   }
-  await space(2); // present, open: the free text, on the round barème
+  await space(1); // present (answers open): the free text, on the round barème
   await tablet.locator(".p-input").fill("paris");
   await tablet.getByRole("button", { name: "Envoyer" }).click();
   await space(2); // lock, reveal

@@ -57,7 +57,7 @@ test("control room at 1366×768 and 1920×1080, host and tablets on a QCM", asyn
   const phone = await seat(browser, 1, PHONE, errors);
   const tablet = await seat(browser, 2, TABLET, errors);
   await phone.screenshot({ path: "screenshots/ux-player-phone-waiting.png" });
-  await next(4);
+  await next(3); // start, round, present (answers open)
   await expect(phone.getByRole("button", { name: /Paris/ })).toBeEnabled();
   await phone.screenshot({ path: "screenshots/ux-player-phone-choice.png" });
   await tablet.screenshot({ path: "screenshots/ux-player-tablet-choice.png" });
@@ -90,7 +90,7 @@ test("buzzer: host judges the hand, tablets show the states", async ({ browser, 
   const host = await open(browser, path("host"), { width: 1280, height: 800 }, errors);
   const ana = await seat(browser, 1, PHONE, errors);
   const bo = await seat(browser, 2, PHONE, errors);
-  await next(4);
+  await next(3); // start, round, present (answers open)
   await expect(ana.getByRole("button", { name: "BUZZ" })).toBeEnabled();
   await ana.screenshot({ path: "screenshots/ux-player-phone-buzzer.png" });
   await ana.getByRole("button", { name: "BUZZ" }).click();
@@ -109,7 +109,7 @@ test("text answer: host overrules from the tablet", async ({ browser, request })
   const host = await open(browser, path("host"), { width: 1280, height: 800 }, errors);
   const ana = await seat(browser, 1, PHONE, errors);
   const bo = await seat(browser, 2, PHONE, errors);
-  await next(4);
+  await next(3); // start, round, present (answers open)
   await ana.screenshot({ path: "screenshots/ux-player-phone-text.png" });
   await ana.locator(".p-input").fill("van gogh");
   await ana.getByRole("button", { name: "Envoyer" }).click();
@@ -126,7 +126,7 @@ for (const [template, name] of [["g_e2e_estimation", "number"], ["g_e2e_ordre", 
     const { next } = await setup(browser, request, template, "Ana;1;Rouges\nBo;2;Bleus", errors);
     const phone = await seat(browser, 1, PHONE, errors);
     const tablet = await seat(browser, 2, TABLET, errors);
-    await next(4);
+    await next(3); // start, round, present (answers open)
     await phone.waitForTimeout(400);
     await phone.screenshot({ path: `screenshots/ux-player-phone-${name}.png` });
     await tablet.screenshot({ path: `screenshots/ux-player-tablet-${name}.png` });
@@ -147,7 +147,7 @@ test("responsive: host on a portrait tablet and a phone, tablets in landscape, h
   const hosts = await Promise.all(Object.values(sizes).map((vp) => open(browser, path("host"), vp, errors)));
   const tabletLand = await seat(browser, 1, { width: 1024, height: 768 }, errors);
   const phoneLand = await seat(browser, 2, { width: 844, height: 390 }, errors);
-  await next(4); // a QCM open
+  await next(3); // a QCM open (start, round, present)
   const pages = [...hosts, tabletLand, phoneLand];
   const names = [...Object.keys(sizes), "player-tablet-landscape", "player-phone-landscape"];
   for (const [i, pg] of pages.entries()) {

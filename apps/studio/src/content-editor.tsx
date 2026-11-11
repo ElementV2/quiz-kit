@@ -1,10 +1,10 @@
 import { For, Match, Show, Switch, createMemo, createSignal, type JSX } from "solid-js";
 import { defaultRegistry, pointsInfo } from "@quiz/engine";
-import { parseQuestionsCsv, type AnswerKind, type AnswerSpec, type GameDocument, type NormRect, type Question } from "@quiz/schema";
+import { MultiScoring, multiScoringExplain, parseQuestionsCsv, type AnswerKind, type AnswerSpec, type GameDocument, type NormRect, type Question } from "@quiz/schema";
 import { Button, Panel, confirmDialog } from "@quiz/ui";
 import { api, mediaUrl } from "./api.ts";
 import { NumField } from "./fields.tsx";
-import { deleteQuestion, moveItem, pointsRule, questionPoints, roundIssues, roundsOf, type QuestionPoints } from "./format-logic.ts";
+import { MULTI_SCORING_OPTIONS, setQuestionMultiScoring, deleteQuestion, moveItem, pointsRule, questionPoints, roundIssues, roundsOf, type QuestionPoints } from "./format-logic.ts";
 import { mediaInfo } from "./studio-logic.ts";
 import { QUESTION_TYPES, freeOptionId, kindLabel, newQuestion, normRectFromDrag, splitList } from "./question-factories.ts";
 import { hex, snapshot, type Update } from "./util.ts";
@@ -373,6 +373,21 @@ function ChoiceEditor(p: { q: Question; edit: EditQ }): JSX.Element {
             : { kind: "single", options, correct: s.kind === "multi" ? (s.correct[0] ?? "a") : "a" };
         });
       }} /> plusieurs bonnes réponses</label>
+      <Show when={p.q.answerSpec.kind === "multi" ? p.q.answerSpec : null}>
+        {(m) => (
+          <label class="s-label">
+            Comptage des réponses multiples
+            <select aria-label="Comptage des réponses multiples" value={m().multiScoring ?? ""} onChange={(e) => {
+              const v = MultiScoring.safeParse(e.currentTarget.value);
+              p.edit((x) => setQuestionMultiScoring(x, v.success ? v.data : null));
+            }}>
+              <option value="">comme la catégorie (réglage de la manche)</option>
+              <For each={MULTI_SCORING_OPTIONS}>{(o) => <option value={o.value}>{o.label}</option>}</For>
+            </select>
+            <Show when={m().multiScoring}>{(mode) => <span class="muted">{multiScoringExplain(mode(), m().correct.length, m().options.length)} — la régie peut le changer en direct.</span>}</Show>
+          </label>
+        )}
+      </Show>
     </div>
   );
 }

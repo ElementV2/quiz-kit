@@ -4,6 +4,8 @@ import { formatNumber } from "./answers.ts";
 import { asBoard, asBuzzer, asLadder, asPollBoard, nameOf, optionLetter, optionShare, optionState, optionsOf, readPath, secondsLeft, sideName } from "./logic.ts";
 import { BoardZone, MEDIA_MECHANICS, MechanicMedia, NumberAnswerZone, OrderZone, PairsZone, RevealAnswerZone } from "./mechanic-zones.tsx";
 import { FitText, num, panel, str, type ZoneProps } from "./zone-kit.tsx";
+import { asChain } from "./chain.ts";
+import { ChainBoardZone, ChainLadderZone, ChainTurnZone } from "./chain-zones.tsx";
 
 export type { ZoneProps } from "./zone-kit.tsx";
 
@@ -72,7 +74,7 @@ const OptionGridZone: Component<ZoneProps> = (p) => {
 const amountOf = (m: NonNullable<ZoneProps["view"]["mechanic"]>, id: string): number => (m.mechanic === "allocation" ? (m.counts?.[id] ?? 0) : 0);
 
 /** Typed answers (no option list): only the right answer, at reveal. */
-const TYPED: ReadonlySet<string> = new Set(["text-answer", "pin"]);
+const TYPED: ReadonlySet<string> = new Set(["text-answer", "pin", "chain"]);
 
 /**
  * `answer-list`: the option grid (choice, ladder, buzzer, allocation, hints / reveal-image in choice mode),
@@ -127,6 +129,16 @@ const TimerZone: Component<ZoneProps> = (p) => {
 };
 
 const LeaderboardZone: Component<ZoneProps> = (p) => {
+  // « La chaîne » between turns / rounds: nobody has points before the final, its figures and its vote take the board.
+  const chain = () => (p.view.phase === "idle" || p.view.phase === "round.end" ? asChain(p.view.mechanic) : null);
+  return (
+    <Show when={chain()} fallback={<LeaderboardRows {...p} />}>
+      {(m) => <ChainBoardZone {...p} m={m()} />}
+    </Show>
+  );
+};
+
+const LeaderboardRows: Component<ZoneProps> = (p) => {
   const rows = () => p.view.leaderboard.slice(0, num(p.zone, "maxRows", 10));
   const rowH = () => Math.min(80, (p.zone.rect.h - 80) / Math.max(1, num(p.zone, "maxRows", 10)));
   // Between two cells of a board round the grid takes the screen (program scene "grid" layer).
@@ -270,7 +282,11 @@ const PollBoardZone: Component<ZoneProps> = (p) => (
 );
 
 /** Buzzer (and board): who has the hand, who won; on the board, the cell in play while nobody has the hand. */
-const BuzzerZone: Component<ZoneProps> = (p) => {
+const BuzzerZone: Component<ZoneProps> = (p) => (
+  <Show when={p.view.mechanic?.mechanic !== "chain"} fallback={<ChainTurnZone {...p} />}><BuzzerHand {...p} /></Show>
+);
+
+const BuzzerHand: Component<ZoneProps> = (p) => {
   const m = () => asBuzzer(p.view.mechanic) ?? asBoard(p.view.mechanic);
   const cell = () => asBoard(p.view.mechanic)?.cell ?? null;
   const fs = () => `${Math.round(p.zone.rect.h * 0.42)}px`;
@@ -304,7 +320,7 @@ const BuzzerZone: Component<ZoneProps> = (p) => {
 
 /** Ladder (« paliers ») : steps bottom-up, current level, safe steps, jokers. */
 const LadderZone: Component<ZoneProps> = (p) => (
-  <Show when={asLadder(p.view.mechanic)}>
+  <Show when={asLadder(p.view.mechanic)} fallback={<ChainLadderZone {...p} />}>
     {(m) => {
       const rows = () => m().steps.map((amount, i) => ({ amount, i })).toReversed();
       const rowH = () => Math.max(18, Math.min(48, (p.zone.rect.h - 70) / Math.max(1, m().steps.length)));

@@ -43,7 +43,8 @@ export const PROGRAM_SCENE: Scene = Scene.parse({
         { id: "answers", type: "answer-list", rect: { x: 96, y: 760, w: 1728, h: 260 }, props: { columns: 2, gap: 20 } },
         { id: "poll", type: "poll-board", rect: { x: 96, y: 760, w: 1728, h: 260 } },
         { id: "buzzer", type: "buzzer", rect: { x: 96, y: 440, w: 720, h: 100 } },
-        { id: "ladder", type: "ladder", rect: { x: 1520, y: 60, w: 304, h: 300 } },
+        // Ladder (paliers) and « La chaîne »: up to ~10 steps readable from the back of a room (≈ 40 px rows at 1080p).
+        { id: "ladder", type: "ladder", rect: { x: 1424, y: 60, w: 400, h: 480 } },
       ],
     },
     {

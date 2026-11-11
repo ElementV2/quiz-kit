@@ -1,5 +1,5 @@
 import type { z } from "zod";
-import type { Action, AnswerValue, MechanicView, ParticipantId, Phase, Question, ScoreTarget, ScoringRule } from "@quiz/schema";
+import type { Action, AnswerValue, MechanicView, MultiScoring, ParticipantId, Phase, Question, ScoreTarget, ScoringRule } from "@quiz/schema";
 import type { Result, Rejection } from "./result.ts";
 import type { Rng } from "./rng.ts";
 
@@ -26,6 +26,10 @@ export type ProjectEnv = {
   readonly phase: Phase;
   /** Set when audience = player. */
   readonly participantId: ParticipantId | null;
+  /** Active participants, registration order (round-spanning views: can a vote be opened). Absent: unknown. */
+  readonly activePlayers?: readonly ParticipantId[] | undefined;
+  /** Current round index (null before the first round). */
+  readonly roundIndex?: number | null | undefined;
 };
 
 /**
@@ -160,6 +164,23 @@ export interface Mechanic<C, S> {
   readonly spansRounds?: boolean;
   /** Participants an accepted action eliminates (chain vote): the core sets their status to `eliminated`. */
   eliminates?(before: S, after: S): readonly ParticipantId[];
+  /**
+   * Round-spanning state not settled yet (chain: elimination vote open or tied): reason, else null. While any held
+   * state (`GameState.across`) is pending, `round.start` and `question.present` are refused with it, whatever round follows.
+   */
+  pending?(state: S): string | null;
+  /**
+   * This state cannot end the round silently (duel without a winner): reason, else null. The `question.next` /
+   * `question.skip` / `round.start` jump that would end the round in this state is refused with it.
+   */
+  holdsRound?(state: S): string | null;
+  /**
+   * Several-answers QCM (choice): the same state counted another way, chosen live by the control room (`null` = back to
+   * the question's / category's way). Null: this state has no several-answers question (nothing to change).
+   */
+  setMultiScoring?(state: S, mode: MultiScoring | null): S | null;
+  /** The verdict is the live judgement itself (chain): `answer.verdict` is refused (undo the judgement instead). */
+  readonly noForcedVerdict?: boolean;
 }
 
 /** Type-erased mechanic stored in the registry. */

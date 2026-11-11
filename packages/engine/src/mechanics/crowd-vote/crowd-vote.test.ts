@@ -33,7 +33,7 @@ mechanicContractSuite({
 
 const SYSTEM = actor("system");
 const tally = (votes: [string, string][]): readonly [typeof SYSTEM, Action] => [SYSTEM, { type: "crowd.tally", votes: votes.map(([userId, optionId]) => ({ userId, optionId })) }];
-const START = [ctl({ type: "team.add", teamId: "t_chat", name: "Le chat", color: "#f0a830" }), ctl({ type: "game.start" }), ctl({ type: "round.start" }), ctl({ type: "question.present" }), ctl({ type: "question.open" })];
+const START = [ctl({ type: "team.add", teamId: "t_chat", name: "Le chat", color: "#f0a830" }), ctl({ type: "game.start" }), ctl({ type: "round.start" }), ctl({ type: "question.present" })];
 
 describe("crowd-vote", () => {
   it("one vote per viewer (the last one counts), majority revealed, the chat team scores when right", () => {

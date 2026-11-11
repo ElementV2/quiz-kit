@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { ScoringRule, type AnswerKind, type MechanicView } from "@quiz/schema";
+import { MultiScoring, ScoringRule, type AnswerKind, type MechanicView } from "@quiz/schema";
 import { defineMechanic } from "../../mechanic.ts";
 import { assertNever, err } from "../../result.ts";
 
@@ -19,8 +19,10 @@ const scoring = ScoringRule.optional();
  * round's). Survey and allocation decide their own points (no rule).
  */
 export const MixedKinds = z.strictObject({
-  choice: z.strictObject({ shuffleOptions: z.boolean().optional(), allowChange, partialMulti: z.boolean().optional(), race: z.number().int().min(0).max(1000).optional(), scoring }).optional(),
+  // `partialMulti`: legacy key of older games (true = « partial-penalty »), replaced by `multiScoring`.
+  choice: z.strictObject({ shuffleOptions: z.boolean().optional(), allowChange, multiScoring: MultiScoring.optional(), partialMulti: z.boolean().optional(), race: z.number().int().min(0).max(1000).optional(), scoring }).optional(),
   vote: z.strictObject({ mode: z.enum(["none", "majority", "minority"]).optional(), shuffleOptions: z.boolean().optional(), allowChange, scoring }).optional(),
+  // `strikesReset`: deprecated key of older documents, never read (strikes are always each side's own).
   poll: z.strictObject({ mode: z.enum(["per-answer", "bank"]).optional(), maxStrikes: z.number().int().min(1).max(10).optional(), multiplier: z.number().positive().max(100).optional(), steal: z.boolean().optional(), revealAll: z.boolean().optional(), strikesReset: z.boolean().optional() }).optional(),
   oral: z.strictObject({ lockoutOnWrong: z.boolean().optional(), scoring }).optional(),
   text: z.strictObject({ allowChange, typos: z.enum(["auto", "0", "1", "2", "3"]).optional(), scoring }).optional(),
@@ -95,7 +97,7 @@ function routedConfig(cat: MixedCategory, c: MixedConfig): Record<string, unknow
       return {
         shuffleOptions: k.choice?.shuffleOptions ?? c.shuffleOptions,
         allowChange: k.choice?.allowChange ?? c.allowChange,
-        ...(k.choice?.partialMulti === undefined ? {} : { partialMulti: k.choice.partialMulti }),
+        ...(k.choice?.multiScoring !== undefined ? { multiScoring: k.choice.multiScoring } : k.choice?.partialMulti === undefined ? {} : { multiScoring: k.choice.partialMulti ? "partial-penalty" : "all" }),
         ...(k.choice?.race === undefined ? {} : { race: k.choice.race }),
       };
     case "vote":
@@ -115,7 +117,6 @@ function routedConfig(cat: MixedCategory, c: MixedConfig): Record<string, unknow
         scoring: k.poll?.mode ?? c.pollScoring,
         ...(k.poll?.steal === undefined ? {} : { steal: k.poll.steal }),
         ...(k.poll?.revealAll === undefined ? {} : { revealAll: k.poll.revealAll }),
-        ...(k.poll?.strikesReset === undefined ? {} : { strikesReset: k.poll.strikesReset }),
       };
     case "allocation":
       return { allowChange: k.allocation?.allowChange ?? c.allowChange, keepOneEmpty: k.allocation?.keepOneEmpty ?? c.allocationKeepOneEmpty };

@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { Media, OptionId, ParticipantId, type ChoiceMechanicView, unsupportedQuestion } from "@quiz/schema";
+import { Media, MultiScoring, OptionId, ParticipantId, multiShare, type ChoiceMechanicView, type Question, unsupportedQuestion } from "@quiz/schema";
 import { defineMechanic, type Judgement } from "../../mechanic.ts";
 import { assertNever, err, ok } from "../../result.ts";
 
@@ -11,8 +11,10 @@ export const ChoiceConfig = z.strictObject({
   shuffleOptions: z.boolean().default(false),
   /** A player may change their answer until lock. */
   allowChange: z.boolean().default(true),
-  /** Several right answers: partial points (right ticks − wrong ticks) / right answers, instead of all or nothing. */
-  partialMulti: z.boolean().default(false),
+  /** Several right answers: how they are counted (absent: all or nothing, or the legacy `partialMulti`). */
+  multiScoring: MultiScoring.optional(),
+  /** Legacy (before `multiScoring`): true = partial points with wrong ticks deducted, false = all or nothing. */
+  partialMulti: z.boolean().optional(),
   /** Race: only the N fastest right answers score (0 = everyone who is right). */
   race: z.number().int().min(0).max(1000).default(0),
   /** Vote (no right answer): no points, or points to those who voted like the majority / the minority. */
@@ -27,7 +29,13 @@ export const ChoiceState = z.strictObject({
   minPick: z.number().int(),
   maxPick: z.number().int(),
   allowChange: z.boolean(),
+  /** Legacy (states written before `multiScoring`): true = `partial-penalty`. */
   partialMulti: z.boolean().default(false),
+  /** Several right answers: the default way of counting (the question's, else the category's), and where it comes from. */
+  multiScoring: MultiScoring.optional(),
+  multiFrom: z.enum(["category", "question"]).optional(),
+  /** The way chosen live by the control room (`question.setMultiScoring`); wins over the default. */
+  multiLive: MultiScoring.nullable().optional(),
   race: z.number().int().default(0),
   vote: z.enum(["none", "majority", "minority"]).default("none"),
   answers: z.array(z.strictObject({ participantId: ParticipantId, optionIds: z.array(OptionId), at: z.number().int() })),
@@ -35,6 +43,19 @@ export const ChoiceState = z.strictObject({
 export type ChoiceState = z.infer<typeof ChoiceState>;
 
 const sameSet = (a: readonly string[], b: readonly string[]): boolean => a.length === b.length && a.every((x) => b.includes(x));
+
+/** The category's way of counting several right answers (the legacy `partialMulti` read as `partial-penalty`). */
+const categoryMode = (cfg: ChoiceConfig): MultiScoring => cfg.multiScoring ?? (cfg.partialMulti === true ? "partial-penalty" : "all");
+
+/** Default way of counting of a several-answers question: its own, else its category's. */
+function multiDefault(cfg: ChoiceConfig, question: Question): Pick<ChoiceState, "multiScoring" | "multiFrom"> {
+  const own = question.answerSpec.kind === "multi" ? question.answerSpec.multiScoring : undefined;
+  return own !== undefined ? { multiScoring: own, multiFrom: "question" } : { multiScoring: categoryMode(cfg), multiFrom: "category" };
+}
+
+/** The way this state is counted: live choice > question > category (older states: their `partialMulti`). */
+const modeOf = (s: ChoiceState): MultiScoring => s.multiLive ?? s.multiScoring ?? (flag(s.partialMulti, false) ? "partial-penalty" : "all");
+const fromOf = (s: ChoiceState): "category" | "question" | "control" => (s.multiLive !== null && s.multiLive !== undefined ? "control" : (s.multiFrom ?? "category"));
 
 /** Votes per option (vote kind). */
 function voteCounts(s: ChoiceState): Map<string, number> {
@@ -83,14 +104,18 @@ export const choice = defineMechanic<ChoiceConfig, ChoiceState>({
   configSchema: ChoiceConfig,
   stateSchema: ChoiceState,
 
-  reconfigure(s, cfg) {
+  reconfigure(s, cfg, question) {
     // Not the option order (already shown); everything that only decides how the answers will be scored.
-    return { ...s, allowChange: cfg.allowChange, partialMulti: cfg.partialMulti, race: cfg.race, vote: cfg.vote };
+    return { ...s, allowChange: cfg.allowChange, partialMulti: cfg.partialMulti ?? false, race: cfg.race, vote: cfg.vote, ...(s.kind === "multi" ? multiDefault(cfg, question) : {}) };
+  },
+
+  setMultiScoring(s, mode) {
+    return s.kind === "multi" ? { ...s, multiLive: mode } : null;
   },
 
   init(cfg, question, env) {
     const spec = question.answerSpec;
-    let base: Omit<ChoiceState, "allowChange" | "answers" | "partialMulti" | "race" | "vote">;
+    let base: Omit<ChoiceState, "allowChange" | "answers" | "partialMulti" | "race" | "vote" | "multiScoring" | "multiFrom" | "multiLive">;
     switch (spec.kind) {
       case "single":
         base = { kind: "single", options: spec.options.map(({ id, label, media }) => (media ? { id, label, media } : { id, label })), correct: [spec.correct], minPick: 1, maxPick: 1 };
@@ -123,7 +148,7 @@ export const choice = defineMechanic<ChoiceConfig, ChoiceState>({
         return assertNever(spec);
     }
     const options = cfg.shuffleOptions && base.kind !== "boolean" ? env.rng.shuffle(base.options) : base.options;
-    return ok({ ...base, options, allowChange: cfg.allowChange, partialMulti: cfg.partialMulti, race: cfg.race, vote: cfg.vote, answers: [] });
+    return ok({ ...base, options, allowChange: cfg.allowChange, partialMulti: cfg.partialMulti ?? false, race: cfg.race, vote: cfg.vote, answers: [], ...(base.kind === "multi" ? multiDefault(cfg, question) : {}) });
   },
 
   submit(s, participantId, answer, env) {
@@ -173,10 +198,12 @@ export const choice = defineMechanic<ChoiceConfig, ChoiceState>({
 
   judge(s): Judgement[] {
     if (s.kind === "vote") return judgeVote(s);
+    const mode = modeOf(s);
     const all = s.answers.map((a): Judgement => {
-      if (s.kind !== "multi" || !flag(s.partialMulti, false) || sameSet(a.optionIds, s.correct)) return { kind: "rule", participantId: a.participantId, outcome: sameSet(a.optionIds, s.correct) ? "correct" : "wrong", answeredAt: a.at };
+      if (s.kind !== "multi" || sameSet(a.optionIds, s.correct)) return { kind: "rule", participantId: a.participantId, outcome: sameSet(a.optionIds, s.correct) ? "correct" : "wrong", answeredAt: a.at };
       const good = a.optionIds.filter((x) => s.correct.includes(x)).length;
-      const share = Math.max(0, (good - (a.optionIds.length - good)) / s.correct.length);
+      const share = multiShare(mode, good, a.optionIds.length - good, s.correct.length);
+      if (share >= 1) return { kind: "rule", participantId: a.participantId, outcome: "correct", answeredAt: a.at };
       return share > 0 ? { kind: "rule", participantId: a.participantId, outcome: "correct", answeredAt: a.at, share } : { kind: "rule", participantId: a.participantId, outcome: "wrong", answeredAt: a.at };
     });
     return raced(all, s.race ?? 0);
@@ -214,6 +241,7 @@ export const choice = defineMechanic<ChoiceConfig, ChoiceState>({
       correct: s.kind === "vote" ? (revealed || privileged ? topVoted(s) : null) : revealed || privileged ? [...s.correct] : null,
       counts: showCounts ? counts : null,
       answeredCount: env.audience === "player" ? null : s.answers.length,
+      multiScoring: s.kind === "multi" ? { mode: modeOf(s), from: fromOf(s) } : null,
     };
   },
 });

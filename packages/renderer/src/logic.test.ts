@@ -11,6 +11,7 @@ const choice = (over: Partial<Extract<MechanicView, { mechanic: "choice" }>> = {
   correct: null,
   counts: null,
   answeredCount: 0,
+  multiScoring: null,
   ...over,
 });
 

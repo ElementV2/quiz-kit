@@ -184,8 +184,8 @@ test("studio theme: material, logo palette, sound pack — exported with the gam
   const control = await ctx.newPage();
   await control.goto(path("control"));
   await expect(control.getByText("connecté").first()).toBeVisible();
-  for (let i = 0; i < 6; i++) {
-    await control.locator("body").press("Space"); // start, round, present, open, lock, reveal
+  for (let i = 0; i < 5; i++) {
+    await control.locator("body").press("Space"); // start, round, present (answers open), lock, reveal
     await control.waitForTimeout(120);
   }
   await expect(output.locator('.q-answer[data-state="correct"]')).toHaveCount(1);

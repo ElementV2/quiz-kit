@@ -24,7 +24,7 @@ function journal(): Game {
   }
   step({ type: "undo", targetSeq: 5 }); // crosses every small checkpoint
   step({ type: "question.present", questionIndex: 0 });
-  step({ type: "question.open" });
+  // The presentation opens the answers (round default).
   step({ type: "answer.submit", participantId: "p_a", answer: { kind: "choice", optionIds: ["b"] } }, { role: "player", id: "p_a" });
   step({ type: "question.lock" });
   step({ type: "question.reveal" });

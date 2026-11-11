@@ -160,7 +160,17 @@ function spanningMechanic(s: GameState, audience: Audience, participantId: strin
   const m = round === null ? null : registry.get(round.mechanic);
   if (m === null || m.spansRounds !== true) return null;
   const held = s.across[m.id];
-  return held === undefined ? null : m.project(held.state, { audience, phase: s.phase, participantId });
+  return held === undefined ? null : m.project(held.state, { audience, phase: s.phase, participantId, activePlayers: activeOf(s), roundIndex: s.roundIndex });
+}
+
+/** Active participant ids, once per participants list (500 tablet views share it). */
+const activeCache = new WeakMap<object, readonly string[]>();
+function activeOf(s: GameState): readonly string[] {
+  const cached = activeCache.get(s.participants);
+  if (cached !== undefined) return cached;
+  const ids = s.participants.filter((p) => p.status === "active").map((p) => p.id);
+  activeCache.set(s.participants, ids);
+  return ids;
 }
 
 /** Memoised per (ledger, teams) identity like the player leaderboard. Teams are few: sent to everyone. */

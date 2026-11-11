@@ -1,5 +1,5 @@
 import { For, Show, createSignal, type JSX } from "solid-js";
-import { asBoard, asBuzzer, asHints, asLadder, asNumberAnswer, asPollBoard, asRevealImage, asTextAnswer, boardRows, formatNumber, nameOf, pollSideAction, pollSides, sideName } from "@quiz/renderer";
+import { asBoard, asBuzzer, asChain, asHints, asLadder, asNumberAnswer, asPollBoard, asRevealImage, asTextAnswer, boardRows, chainCanBank, chainOfEarlierRound, chainOverText, chainSteps, duelScores, formatNumber, nameOf, pollSideAction, pollSides, sideName } from "@quiz/renderer";
 import type { Action, HostView } from "@quiz/schema";
 import { ConfirmKey } from "@quiz/ui";
 
@@ -174,11 +174,79 @@ function BoardPick(p: { readonly view: HostView; readonly act: Act }): JSX.Eleme
   );
 }
 
+const CHAIN_ON_AIR = new Set(["presenting", "open", "locked", "judging"]);
+
+/**
+ * « La chaîne »: the player to read the question to, Juste / Faux in one tap (no need to open the answers), Banque
+ * for the player; the chain and its bank; between rounds the vote (followed, never cast here) and the duel score.
+ */
+function Chain(p: { readonly view: HostView; readonly act: Act }): JSX.Element {
+  return (
+    <Show when={asChain(p.view.mechanic)}>
+      {(m) => {
+        const name = (id: string | null) => nameOf(p.view, id);
+        const onAir = () => CHAIN_ON_AIR.has(p.view.phase);
+        const earlier = () => chainOfEarlierRound(m(), p.view.round);
+        const judgeable = () => onAir() && m().turn !== null && m().verdict === null && m().over === null && (m().duel?.winner ?? null) === null;
+        const judge = (correct: boolean) => {
+          const turn = m().turn;
+          if (turn !== null) void p.act({ type: "answer.judge", participantId: turn, correct });
+        };
+        return (
+          <div class="h-block h-chain" data-stage={m().stage}>
+            <Show when={!earlier() && (onAir() || p.view.phase === "revealed")}>
+              <span class="q-label">{m().stage === "duel" ? "Duel · question pour" : "Question pour"}</span>
+              <p class="h-hand" data-testid="host-chain-turn">{m().turn === null ? "personne" : name(m().turn)}</p>
+              <Show when={m().verdict}>{(v) => <p class={v() === "right" ? "h-found" : "h-wrong"}>{v() === "right" ? "✓ Juste" : "✗ Faux : la chaîne retombe à 0"}</p>}</Show>
+              <div class="h-verdict">
+                <button type="button" class="h-key h-key-ok" disabled={!judgeable()} onClick={() => judge(true)}>✓ Juste</button>
+                <button type="button" class="h-key h-key-no" disabled={!judgeable()} onClick={() => judge(false)}>✗ Faux</button>
+              </div>
+              <Show when={m().stage === "chain"}>
+                <button type="button" class="h-key" disabled={!chainCanBank(m(), p.view.phase)} onClick={() => { const t = m().turn; if (t !== null) void p.act({ type: "chain.bank", participantId: t }); }}>
+                  Banque <span class="q-mono">{m().chainValue > 0 ? formatNumber(m().chainValue) : "chaîne à zéro"}</span>
+                </button>
+              </Show>
+            </Show>
+            <Show when={m().stage === "chain"}>
+              <p class="h-chain-figs"><span>Banque <b class="q-mono">{formatNumber(m().bank)}</b><span class="h-small q-mono"> / {formatNumber(m().bankTarget)}</span></span><span>En jeu <b class="q-mono">{formatNumber(m().chainValue)}</b></span><span>Cagnotte <b class="q-mono">{formatNumber(m().totalBank)}</b></span></p>
+              <ol class="h-chain-steps" aria-label="Montants de la chaîne">
+                <For each={chainSteps(m()).toReversed()}>{(s) => <li data-state={s.state}>{formatNumber(s.amount)}</li>}</For>
+              </ol>
+              <Show when={!earlier() ? chainOverText(m().over) : null}>{(t) => <p class="h-alert">{t()}</p>}</Show>
+              <Show when={m().over !== null && m().strongest !== null}>
+                <p class="h-small">Maillon fort : <b>{name(m().strongest)}</b> · maillon faible : <b>{name(m().weakest)}</b></p>
+              </Show>
+            </Show>
+            <Show when={m().stage === "duel"}>
+              <ol class="h-slots">
+                <For each={duelScores(m())}>{(s) => <li data-found={String(m().duel?.winner === s.participantId)}><span class="h-slot-label">{name(s.participantId)}</span><span class="h-slot-v">{s.right} / {s.asked}</span></li>}</For>
+              </ol>
+              <Show when={m().duel?.winner}>{(w) => <p class="h-found">{name(w())} remporte la cagnotte ({formatNumber(m().totalBank)})</p>}</Show>
+            </Show>
+            <Show when={m().vote}>
+              {(v) => (
+                <div class="h-chain-vote">
+                  <span class="q-label">Vote d'élimination</span>
+                  <Show when={v().status === "open"}><p class="h-small">Les joueurs votent sur leur tablette : <b class="q-mono">{v().cast} / {v().voters.length}</b></p></Show>
+                  <Show when={v().status === "tie"}><p class="h-alert">Égalité : {v().tied.map((id) => name(id)).join(", ")}. {name(v().picker)} (maillon fort) choisit.</p></Show>
+                  <Show when={v().eliminated}>{(id) => <p class="h-found">{name(id())} quitte la partie</p>}</Show>
+                </div>
+              )}
+            </Show>
+          </div>
+        );
+      }}
+    </Show>
+  );
+}
+
 export function Judge(p: { readonly view: HostView; readonly act: Act }): JSX.Element {
   const hand = () => asBuzzer(p.view.mechanic) ?? (asBoard(p.view.mechanic)?.cell !== null ? asBoard(p.view.mechanic) : null);
   return (
     <>
       <Show when={hand()}>{(m) => <Hand view={p.view} act={p.act} m={m()} />}</Show>
+      <Chain view={p.view} act={p.act} />
       <PollBoard view={p.view} act={p.act} />
       <TextReview view={p.view} act={p.act} />
       <Ranking view={p.view} />
@@ -197,6 +265,17 @@ export function DriveTools(p: { readonly view: HostView; readonly act: Act }): J
       </Show>
       <Show when={asRevealImage(p.view.mechanic)}>
         {(m) => <button type="button" class="h-key" disabled={!live() || m().revealed.length >= m().cols * m().rows} onClick={() => void p.act({ type: "element.reveal", index: m().revealed.length })}>Dévoiler une case <span class="q-mono">{m().revealed.length}/{m().cols * m().rows}</span></button>}
+      </Show>
+      <Show when={asChain(p.view.mechanic)}>
+        {(m) => {
+          // Never once the round is over / decided, nor on the figures of the round before.
+          const off = () => m().over !== null || (m().duel?.winner ?? null) !== null || chainOfEarlierRound(m(), p.view.round) || p.view.phase === "round.end" || p.view.phase === "game.end";
+          return (
+            <Show when={m().stage === "duel"} fallback={<ConfirmKey class="h-key" label="Fin de la manche (temps écoulé)" confirmLabel="Confirmer : la chaîne non mise en banque est perdue ?" disabled={off()} onConfirm={() => void p.act({ type: "chain.end" })} />}>
+              <ConfirmKey class="h-key" label="Terminer le duel sans vainqueur" confirmLabel="Confirmer : la cagnotte n'est pas versée ?" disabled={off()} onConfirm={() => void p.act({ type: "chain.end" })} />
+            </Show>
+          );
+        }}
       </Show>
       <Show when={asLadder(p.view.mechanic)}>
         {(m) => (

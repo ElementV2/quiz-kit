@@ -46,7 +46,7 @@ test("host reads the next question before anything is on air, then follows the c
     await control.waitForTimeout(150);
   }
   await expect(host.getByText("À l'antenne", { exact: true })).toBeVisible();
-  await control.locator("body").press("Space"); // open
+  // The presentation opened the answers (round default): the timer runs.
   await expect(host.locator(".h-clock-time")).not.toHaveText("–:––");
 
   // Run-down: preview another question (read only), then back to what is on air.
@@ -59,7 +59,7 @@ test("host reads the next question before anything is on air, then follows the c
   expect(errors).toEqual([]);
 });
 
-test("with drive on, the host presents, opens, reveals and skips from the tablet; the output follows", async ({ browser }) => {
+test("with drive on, the host presents (answers open at once), reveals and skips from the tablet; the output follows", async ({ browser }) => {
   const errors: string[] = [];
   const control = await open(browser, path("control"), { width: 1366, height: 768 }, errors);
   const output = await open(browser, path("out-program"), { width: 1920, height: 1080 }, errors);
@@ -75,8 +75,7 @@ test("with drive on, the host presents, opens, reveals and skips from the tablet
   await expect(key).toHaveText("Présenter la question");
   await key.click();
   await expect(output.locator(".q-zone-question")).toContainText("capitale de la France");
-  await expect(key).toHaveText("Ouvrir les réponses");
-  await key.click();
+  // No separate « Ouvrir les réponses » step: the presentation opened them (round default).
   await expect(key).toHaveText("Fermer les réponses");
   await host.screenshot({ path: "screenshots/ux-host-landscape-onair.png" });
   await host.getByRole("button", { name: "Révéler", exact: true }).click();
@@ -106,7 +105,7 @@ test("portrait tablet layout", async ({ browser }) => {
   const control = await open(browser, path("control"), { width: 1366, height: 768 }, errors);
   const host = await open(browser, path("host"), PORTRAIT, errors);
   await control.getByRole("switch", { name: "L'animateur pilote" }).click();
-  for (let i = 0; i < 4; i++) {
+  for (let i = 0; i < 3; i++) { // start, round, present (the answers open with it)
     await control.locator("body").press("Space");
     await control.waitForTimeout(150);
   }

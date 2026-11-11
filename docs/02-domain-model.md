@@ -7,7 +7,8 @@ sont des fonctions pures `vN → vN+1` testées sur des fixtures.
 
 - `Question` : `id`, `prompt` ({ text, media? }), `answerSpec`, `hints[]`, `tags[]`, `notes` (fiche animateur).
 - `AnswerSpec` (union discriminée sur `kind`) :
-  - `single` / `multi` (`options[]`, `correct: id | id[]`, `minPick`, `maxPick`)
+  - `single` / `multi` (`options[]`, `correct: id | id[]`, `minPick`, `maxPick` ; `multi` : `multiScoring?`, comptage
+    propre à la question, doc 03)
   - `boolean`, `categories` (`categories[]`, mapping option → catégorie)
   - `text` (`accepted[]`, `synonyms[]`, `fuzzy` : seuil, casse/accents ignorés)
   - `number` (`value`, `tolerance`, `mode` : exact | closest | closest-without-over)

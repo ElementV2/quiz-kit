@@ -54,7 +54,7 @@ test("buzzer: first buzz gets the hand, the host / control judges, the output sh
   const { control, output, tablets, next } = await setup(browser, request, "g_modele_buzzer", "Ana;1\nBo;2", 2, errors);
   const [ana, bo] = tablets;
   if (ana === undefined || bo === undefined) throw new Error("tablets");
-  await next(4); // start, round, present, open
+  await next(3); // start, round, present (the answers open with it)
   await expect(ana.getByRole("button", { name: "BUZZ" })).toBeEnabled();
   await ana.getByRole("button", { name: "BUZZ" }).click();
   await expect(ana.getByText("Vous avez la main")).toBeVisible();
@@ -74,7 +74,7 @@ test("buzzer: first buzz gets the hand, the host / control judges, the output sh
 test("poll-board: hand to a team, found answers flip on the output, strikes, masked slots never leak", async ({ browser, request }) => {
   const errors: string[] = [];
   const { control, output, tablets, next } = await setup(browser, request, "g_modele_sondage", "Ana;1;Rouges\nBo;2;Bleus", 1, errors);
-  await next(4);
+  await next(3); // start, round, present (answers open)
   await control.locator(".q-mech select").selectOption({ label: "Rouges" });
   await control.getByRole("button", { name: "Donner la main" }).click();
   await expect(control.getByText("Main :")).toContainText("Rouges");
@@ -100,7 +100,7 @@ test("ladder: the candidate climbs a step, 50:50 hides two answers on air", asyn
   const { control, output, tablets, next } = await setup(browser, request, "g_modele_paliers", "Ana;1", 1, errors);
   const ana = tablets[0];
   if (ana === undefined) throw new Error("tablet");
-  await next(4);
+  await next(3); // start, round, present (answers open)
   await control.getByRole("button", { name: "50:50" }).click();
   await expect(output.locator('.q-answer[data-state="disabled"]')).toHaveCount(2);
   await ana.getByRole("button", { name: /8/ }).click();

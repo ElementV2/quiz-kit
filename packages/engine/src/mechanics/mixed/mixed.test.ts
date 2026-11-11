@@ -40,13 +40,13 @@ describe("mixed round (ADR-0015): every question kind in one round", () => {
     if (qcm.answerSpec.kind !== "single") throw new Error("fixture");
     const g = run(reg, [
       ...START,
-      ctl({ type: "question.present" }), ctl({ type: "question.open" }), answer("p_1", qcm.answerSpec.correct), ctl({ type: "question.lock" }), ctl({ type: "question.reveal" }), NEXT,
+      ctl({ type: "question.present" }), answer("p_1", qcm.answerSpec.correct), ctl({ type: "question.lock" }), ctl({ type: "question.reveal" }), NEXT,
     ], createGame(makeSession(MIXED)));
     const afterQcm = g.state.ledger.filter((e) => !e.voided).reduce((t, e) => t + e.delta, 0);
     expect(afterQcm).toBeGreaterThan(0);
     const t = run(reg, [
       ctl({ type: "question.skip", roundIndex: 0, questionIndex: 1 }), ctl({ type: "question.skip", roundIndex: 0, questionIndex: 2 }),
-      ctl({ type: "question.present" }), ctl({ type: "question.open" }), text("p_2", "van gogh"), ctl({ type: "question.lock" }), ctl({ type: "question.reveal" }),
+      ctl({ type: "question.present" }), text("p_2", "van gogh"), ctl({ type: "question.lock" }), ctl({ type: "question.reveal" }),
     ], g);
     expect(t.state.mechanic?.id).toBe("text-answer");
     expect(t.state.ledger.some((e) => !e.voided && "participantId" in e.target && e.target.participantId === "p_2" && e.delta > 0)).toBe(true);
@@ -65,7 +65,7 @@ const total = (g: ReturnType<typeof run>, pid: string) => g.state.ledger.filter(
 describe("mixed round — what must not break live", () => {
   const qcm = pick("q_capital_fr");
   const correct = qcm.answerSpec.kind === "single" ? qcm.answerSpec.correct : "";
-  const REVEALED: Step[] = [...START, ctl({ type: "question.present" }), ctl({ type: "question.open" }), answer("p_1", correct), ctl({ type: "question.lock" }), ctl({ type: "question.reveal" })];
+  const REVEALED: Step[] = [...START, ctl({ type: "question.present" }), answer("p_1", correct), ctl({ type: "question.lock" }), ctl({ type: "question.reveal" })];
 
   it("a routed QCM is regraded like any QCM (its own mechanic, from the history)", () => {
     const g = run(reg, REVEALED, createGame(makeSession(MIXED)));
@@ -102,7 +102,7 @@ describe("mixed round — what must not break live", () => {
   });
 
   it("resuming from a snapshot taken mid-round gives the same game (other kind on air)", () => {
-    const g = run(reg, [...REVEALED, NEXT, ctl({ type: "question.present" }), ctl({ type: "question.open" })], createGame(makeSession(MIXED)));
+    const g = run(reg, [...REVEALED, NEXT, ctl({ type: "question.present" })], createGame(makeSession(MIXED)));
     const cut = g.events.findIndex((e) => e.action.type === "question.reveal");
     const prefix = replay(g.session, g.events.slice(0, cut + 1), reg);
     expect(replay(g.session, g.events, reg, { seq: prefix.state.lastSeq, state: prefix.state }).state).toEqual(g.state);
@@ -126,11 +126,11 @@ describe("mixed round — settings and points rule by category", () => {
     r0.mechanicConfig = { kinds: { text: { scoring: [{ type: "base", points: 500 }] }, choice: { allowChange: false } } };
     const qcm = pick("q_capital_fr");
     const correct = qcm.answerSpec.kind === "single" ? qcm.answerSpec.correct : "";
-    let g = run(reg, [...START, ctl({ type: "question.present" }), ctl({ type: "question.open" }), answer("p_1", correct), ctl({ type: "question.lock" }), ctl({ type: "question.reveal" }), NEXT], createGame(makeSession(GameDocument.parse(doc))));
+    let g = run(reg, [...START, ctl({ type: "question.present" }), answer("p_1", correct), ctl({ type: "question.lock" }), ctl({ type: "question.reveal" }), NEXT], createGame(makeSession(GameDocument.parse(doc))));
     const qcmPoints = total(g, "p_1");
     expect(qcmPoints).toBeGreaterThan(0);
     expect(qcmPoints).not.toBe(500);
-    g = run(reg, [ctl({ type: "question.skip", roundIndex: 0, questionIndex: 1 }), ctl({ type: "question.skip", roundIndex: 0, questionIndex: 2 }), ctl({ type: "question.present" }), ctl({ type: "question.open" }), text("p_2", "van gogh"), ctl({ type: "question.lock" }), ctl({ type: "question.reveal" })], g);
+    g = run(reg, [ctl({ type: "question.skip", roundIndex: 0, questionIndex: 1 }), ctl({ type: "question.skip", roundIndex: 0, questionIndex: 2 }), ctl({ type: "question.present" }), text("p_2", "van gogh"), ctl({ type: "question.lock" }), ctl({ type: "question.reveal" })], g);
     expect(total(g, "p_2")).toBe(500);
     expect(replay(g.session, g.events, reg).state).toEqual(g.state);
     // A verdict correction then a regrade of that text question still score with the category's rule.
@@ -153,7 +153,7 @@ describe("survey in a game played individually", () => {
         ctl({ type: "question.skip", roundIndex: 0, questionIndex: 0 }),
         ctl({ type: "question.present" }),
         ctl({ type: "poll.control", participantId: "p_2" }),
-        ctl({ type: "question.open" }),
+        
         ctl({ type: "answer.judge", correct: true, optionId: top }),
         ctl({ type: "question.lock" }),
         ctl({ type: "question.reveal" }),
@@ -179,7 +179,7 @@ describe("survey played individually — steal, removal", () => {
   it("bank rule: a player steals after the strikes and takes the bank; the other player gets « wrong »", () => {
     const g = run(reg, [
       ...PRESENTED,
-      ctl({ type: "poll.control", participantId: "p_1" }), ctl({ type: "question.open" }),
+      ctl({ type: "poll.control", participantId: "p_1" }), 
       ctl({ type: "answer.judge", correct: true, optionId: ids[0] ?? "" }),
       ctl({ type: "answer.judge", correct: false }), ctl({ type: "answer.judge", correct: false }), ctl({ type: "answer.judge", correct: false }),
       ctl({ type: "poll.steal", participantId: "p_2" }),
@@ -192,7 +192,7 @@ describe("survey played individually — steal, removal", () => {
   });
 
   it("a removed player holding the hand keeps nothing: back to « give the hand »", () => {
-    const g = run(reg, [...PRESENTED, ctl({ type: "poll.control", participantId: "p_1" }), ctl({ type: "question.open" }), ctl({ type: "answer.judge", correct: true, optionId: ids[0] ?? "" }), ctl({ type: "player.remove", participantId: "p_1" })], createGame(makeSession(MIXED)));
+    const g = run(reg, [...PRESENTED, ctl({ type: "poll.control", participantId: "p_1" }), ctl({ type: "answer.judge", correct: true, optionId: ids[0] ?? "" }), ctl({ type: "player.remove", participantId: "p_1" })], createGame(makeSession(MIXED)));
     const v = project(g, { role: "control" }, reg);
     expect(v.mechanic).toMatchObject({ controllingTeamId: null, stage: "play", strikes: 0 });
     expect(JSON.stringify(g.state.mechanic?.state)).not.toMatch(/"foundBy":"/); // what the removed player found is theirs no more
@@ -208,10 +208,10 @@ describe("points of one question win over its category and the round", () => {
     r0.mechanicConfig = { kinds: { choice: { scoring: [{ type: "base", points: 300 }] } } };
     q0.scoring = [{ type: "base", points: 1000 }];
     const correct = q0.answerSpec.kind === "single" ? q0.answerSpec.correct : "";
-    const g = run(reg, [...START, ctl({ type: "question.present" }), ctl({ type: "question.open" }), answer("p_1", correct), ctl({ type: "question.lock" }), ctl({ type: "question.reveal" })], createGame(makeSession(GameDocument.parse(doc))));
+    const g = run(reg, [...START, ctl({ type: "question.present" }), answer("p_1", correct), ctl({ type: "question.lock" }), ctl({ type: "question.reveal" })], createGame(makeSession(GameDocument.parse(doc))));
     expect(total(g, "p_1")).toBe(1000);
     // live stakes still apply on top (×2)
-    const staked = run(reg, [...START, ctl({ type: "question.setStakes", roundIndex: 0, questionIndex: 0, points: null, multiplier: 2 }), ctl({ type: "question.present" }), ctl({ type: "question.open" }), answer("p_1", correct), ctl({ type: "question.lock" }), ctl({ type: "question.reveal" })], createGame(makeSession(GameDocument.parse(doc))));
+    const staked = run(reg, [...START, ctl({ type: "question.setStakes", roundIndex: 0, questionIndex: 0, points: null, multiplier: 2 }), ctl({ type: "question.present" }), answer("p_1", correct), ctl({ type: "question.lock" }), ctl({ type: "question.reveal" })], createGame(makeSession(GameDocument.parse(doc))));
     expect(total(staked, "p_1")).toBe(2000);
   });
 
@@ -222,7 +222,7 @@ describe("points of one question win over its category and the round", () => {
     q0.scoring = [{ type: "base", points: 1000 }];
     const correct = q0.answerSpec.correct;
     const wrong = q0.answerSpec.options.find((o) => o.id !== correct)?.id ?? "";
-    const g = run(reg, [...START, ctl({ type: "question.present" }), ctl({ type: "question.open" }), answer("p_1", wrong), ctl({ type: "question.lock" }), ctl({ type: "question.reveal" })], createGame(makeSession(GameDocument.parse(doc))));
+    const g = run(reg, [...START, ctl({ type: "question.present" }), answer("p_1", wrong), ctl({ type: "question.lock" }), ctl({ type: "question.reveal" })], createGame(makeSession(GameDocument.parse(doc))));
     expect(total(g, "p_1")).toBe(0);
     const re = run(reg, [ctl({ type: "question.regrade", questionId: q0.id, answerSpec: { ...q0.answerSpec, correct: wrong } })], g);
     expect(total(re, "p_1")).toBe(1000);
@@ -261,7 +261,7 @@ describe("every category setting reaches the mechanic that plays the question", 
     expect(routeOf(kinds, "order")).toEqual({ id: "order", config: { allowChange: false }, scoring: rule });
     expect(routeOf({ pairs: { allowChange: false }, pin: { allowChange: false }, allocation: { allowChange: false, keepOneEmpty: false } }, "allocation")).toEqual({ id: "allocation", config: { allowChange: false, keepOneEmpty: false } });
     // the newer keys travel too
-    expect(routeOf({ choice: { partialMulti: true } }, "single")?.config).toMatchObject({ partialMulti: true });
+    expect(routeOf({ choice: { partialMulti: true } }, "single")?.config).toMatchObject({ multiScoring: "partial-penalty" }); // legacy key of older games
     expect(routeOf({ number: { tolerancePercent: 5, winners: 3, graded: true } }, "number")?.config).toMatchObject({ tolerancePercent: 5, winners: 3, graded: true });
     expect(routeOf({ text: { typos: "2" } }, "text")?.config).toMatchObject({ typos: "2" });
     expect(routeOf({ order: { partial: true } }, "order")?.config).toMatchObject({ partial: true });
@@ -278,9 +278,9 @@ describe("every category setting reaches the mechanic that plays the question", 
     const game = GameDocument.parse(doc);
     const qcm = pick("q_capital_fr");
     const [a, b] = qcm.answerSpec.kind === "single" ? qcm.answerSpec.options.map((o) => o.id) : [];
-    const g = run(reg, [...START, ctl({ type: "question.present" }), ctl({ type: "question.open" }), answer("p_1", a ?? "")], createGame(makeSession(game)));
+    const g = run(reg, [...START, ctl({ type: "question.present" }), answer("p_1", a ?? "")], createGame(makeSession(game)));
     expect(() => run(reg, [answer("p_1", b ?? "")], g)).toThrow(/rejected/);
-    const poll = run(reg, [...START, ctl({ type: "question.skip", roundIndex: 0, questionIndex: 0 }), ctl({ type: "question.present" }), ctl({ type: "poll.control", participantId: "p_1" }), ctl({ type: "question.open" }), ctl({ type: "answer.judge", correct: false }), ctl({ type: "answer.judge", correct: false })], createGame(makeSession(game)));
+    const poll = run(reg, [...START, ctl({ type: "question.skip", roundIndex: 0, questionIndex: 0 }), ctl({ type: "question.present" }), ctl({ type: "poll.control", participantId: "p_1" }), ctl({ type: "answer.judge", correct: false }), ctl({ type: "answer.judge", correct: false })], createGame(makeSession(game)));
     expect(project(poll, { role: "control" }, reg).mechanic).toMatchObject({ stage: "steal", maxStrikes: 2 });
   });
 });
@@ -326,7 +326,7 @@ describe("verdict on a survey (points decided by the game)", () => {
     const top = poll.answerSpec.kind === "poll" ? (poll.answerSpec.options[0]?.id ?? "") : "";
     const g = run(reg, [
       ...START, ctl({ type: "question.skip", roundIndex: 0, questionIndex: 0 }), ctl({ type: "question.present" }),
-      ctl({ type: "poll.control", participantId: "p_2" }), ctl({ type: "question.open" }), ctl({ type: "answer.judge", correct: true, optionId: top }),
+      ctl({ type: "poll.control", participantId: "p_2" }), ctl({ type: "answer.judge", correct: true, optionId: top }),
       ctl({ type: "question.lock" }), ctl({ type: "question.reveal" }),
     ], createGame(makeSession(MIXED)));
     const won = total(g, "p_2");
@@ -340,7 +340,7 @@ describe("verdict on a survey (points decided by the game)", () => {
 
 describe("live settings change on the survey on air", () => {
   it("« show the answers nobody found » turned off while the survey is on air applies to it at the reveal", () => {
-    const g = run(reg, [...START, ctl({ type: "question.skip", roundIndex: 0, questionIndex: 0 }), ctl({ type: "question.present" }), ctl({ type: "poll.control", participantId: "p_1" }), ctl({ type: "question.open" })], createGame(makeSession(MIXED)));
+    const g = run(reg, [...START, ctl({ type: "question.skip", roundIndex: 0, questionIndex: 0 }), ctl({ type: "question.present" }), ctl({ type: "poll.control", participantId: "p_1" })], createGame(makeSession(MIXED)));
     const patched = structuredClone(g.state.game);
     const r0 = patched.format.rounds[0];
     if (r0 === undefined) throw new Error("fixture");
@@ -367,7 +367,7 @@ const LOCK_REVEAL = [ctl({ type: "question.lock" }), ctl({ type: "question.revea
 
 describe("live settings change on any question on air, before its reveal", () => {
   it("a number: a tolerance given while answers are open counts at the reveal; replay identical", () => {
-    const g = run(reg, [...START, ...skipTo(4), ctl({ type: "question.present" }), ctl({ type: "question.open" }), num("p_1", 200)], createGame(makeSession(MIXED)));
+    const g = run(reg, [...START, ...skipTo(4), ctl({ type: "question.present" }), num("p_1", 200)], createGame(makeSession(MIXED)));
     expect(won(run(reg, LOCK_REVEAL, g), "p_1")).toBe(false);
     const after = run(reg, [ctl({ type: "game.patch", baseVersion: g.state.gameVersion, game: withKinds(g.state.game, { number: { tolerancePercent: 5 } }) }), ...LOCK_REVEAL], g);
     expect(won(after, "p_1")).toBe(true);
@@ -375,7 +375,7 @@ describe("live settings change on any question on air, before its reveal", () =>
   });
 
   it("a free text: « no typo » given live refuses a misspelt answer at the reveal", () => {
-    const g = run(reg, [...START, ...skipTo(3), ctl({ type: "question.present" }), ctl({ type: "question.open" }), text("p_1", "van gog")], createGame(makeSession(MIXED)));
+    const g = run(reg, [...START, ...skipTo(3), ctl({ type: "question.present" }), text("p_1", "van gog")], createGame(makeSession(MIXED)));
     expect(won(run(reg, LOCK_REVEAL, g), "p_1")).toBe(true);
     const after = run(reg, [ctl({ type: "game.patch", baseVersion: g.state.gameVersion, game: withKinds(g.state.game, { text: { typos: "0" } }) }), ...LOCK_REVEAL], g);
     expect(won(after, "p_1")).toBe(false);
@@ -386,7 +386,7 @@ describe("live settings change on any question on air, before its reveal", () =>
     const t = game.questions.find((q) => q.id === "q_txt_1");
     if (t?.answerSpec.kind !== "text") throw new Error("fixture");
     t.answerSpec.maxDistance = 1;
-    const g = run(reg, [...START, ...skipTo(3), ctl({ type: "question.present" }), ctl({ type: "question.open" }), text("p_1", "van gog")], createGame(makeSession(game)));
+    const g = run(reg, [...START, ...skipTo(3), ctl({ type: "question.present" }), text("p_1", "van gog")], createGame(makeSession(game)));
     const after = run(reg, [ctl({ type: "game.patch", baseVersion: g.state.gameVersion, game: withKinds(g.state.game, { text: { typos: "0" } }) }), ...LOCK_REVEAL], g);
     expect(won(after, "p_1")).toBe(true);
     expect(replay(after.session, after.events, reg).state).toEqual(after.state);
@@ -395,7 +395,7 @@ describe("live settings change on any question on air, before its reveal", () =>
   it("a QCM: « answers cannot change » given live is applied to the next answer", () => {
     const qcm = pick("q_capital_fr");
     if (qcm.answerSpec.kind !== "single") throw new Error("fixture");
-    const g = run(reg, [...START, ctl({ type: "question.present" }), ctl({ type: "question.open" }), answer("p_1", qcm.answerSpec.correct)], createGame(makeSession(MIXED)));
+    const g = run(reg, [...START, ctl({ type: "question.present" }), answer("p_1", qcm.answerSpec.correct)], createGame(makeSession(MIXED)));
     const after = run(reg, [ctl({ type: "game.patch", baseVersion: g.state.gameVersion, game: withKinds(g.state.game, { choice: { allowChange: false } }) })], g);
     const right = qcm.answerSpec.correct;
     const other = qcm.answerSpec.options.find((o) => o.id !== right)?.id ?? "";
@@ -403,7 +403,7 @@ describe("live settings change on any question on air, before its reveal", () =>
   });
 
   it("a question already revealed keeps the settings it was scored with", () => {
-    const g = run(reg, [...START, ...skipTo(4), ctl({ type: "question.present" }), ctl({ type: "question.open" }), num("p_1", 200), ...LOCK_REVEAL], createGame(makeSession(MIXED)));
+    const g = run(reg, [...START, ...skipTo(4), ctl({ type: "question.present" }), num("p_1", 200), ...LOCK_REVEAL], createGame(makeSession(MIXED)));
     const after = run(reg, [ctl({ type: "game.patch", baseVersion: g.state.gameVersion, game: withKinds(g.state.game, { number: { tolerancePercent: 5 } }) })], g);
     expect(after.state.mechanic).toEqual(g.state.mechanic);
     expect(won(after, "p_1")).toBe(false);

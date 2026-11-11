@@ -1,6 +1,6 @@
 import { answerKindLabel } from "@quiz/schema";
 import { For, Match, Show, Switch, createResource, createSignal, type JSX } from "solid-js";
-import { Button, confirmDialog } from "@quiz/ui";
+import { Button, MultiScoringPicker, confirmDialog } from "@quiz/ui";
 import type { Action, ControlView, MechanicView } from "@quiz/schema";
 import { answerText } from "@quiz/renderer";
 import { REGRADABLE_KINDS, initialRegradeDraft, questionOnAir, regradeSpec } from "./logic.ts";
@@ -270,7 +270,7 @@ export function ResultsPanel(p: { readonly withToken: WithToken }): JSX.Element 
 }
 
 type PastRow = { participantId: string; name: string; optionIds: string[]; auto: boolean | null; forced: boolean | null };
-type PastAnswers = { mechanic: MechanicView; rows: PastRow[] };
+type PastAnswers = { questionId: string; mechanic: MechanicView; rows: PastRow[] };
 
 /**
  * « Corriger » on a question already revealed: every player's answer with its verdict; ✓ / ✗ force it (cheating, a
@@ -297,6 +297,7 @@ export function PastVerdicts(p: { readonly round: number; readonly question: num
     <Show when={ok()} fallback={<p class="muted">{(() => { const d = data(); return d !== undefined && "error" in d ? d.error : "Chargement…"; })()}</p>}>
       {(d) => (
         <div class="c-past">
+          <MultiScoringPicker questionId={d().questionId} mechanic={d().mechanic} revealed readonly={false} act={(a, t) => p.act(a, t).then((done) => { setMine((n) => n + 1); return done; })} />
           <span class="q-label">Réponses des joueurs ({d().rows.length}) — corriger un verdict</span>
           <ul class="q-mech-review">
             <For each={d().rows} fallback={<li class="muted">Personne n'a répondu.</li>}>

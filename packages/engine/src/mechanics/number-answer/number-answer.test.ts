@@ -24,7 +24,7 @@ mechanicContractSuite({
 });
 
 const num = (pid: string, value: number) => [actor("player", pid), { type: "answer.submit", participantId: pid, answer: { kind: "number", value } }] as const;
-const OPEN = [ctl({ type: "game.start" }), ctl({ type: "round.start" }), ...addPlayers(3), ctl({ type: "question.present" }), ctl({ type: "question.open" })];
+const OPEN = [ctl({ type: "game.start" }), ctl({ type: "round.start" }), ...addPlayers(3), ctl({ type: "question.present" })];
 const tolerance: GameDocument = { ...DEMO_NUMBER_GAME, format: { ...DEMO_NUMBER_GAME.format, rounds: DEMO_NUMBER_GAME.format.rounds.map((r) => ({ ...r, mechanicConfig: { mode: "tolerance" } })) } };
 
 describe("number-answer", () => {
@@ -37,7 +37,7 @@ describe("number-answer", () => {
   });
 
   it("tolerance mode: right within the tolerance only", () => {
-    const steps = [...OPEN, ctl({ type: "question.lock" }), ctl({ type: "question.reveal" }), ctl({ type: "question.next" }), ctl({ type: "question.present" }), ctl({ type: "question.open" }), num("p_1", 321), num("p_2", 345)];
+    const steps = [...OPEN, ctl({ type: "question.lock" }), ctl({ type: "question.reveal" }), ctl({ type: "question.next" }), ctl({ type: "question.present" }), num("p_1", 321), num("p_2", 345)];
     const g = run(reg, [...steps, ctl({ type: "question.lock" }), ctl({ type: "question.reveal" })], createGame(makeSession(tolerance)));
     expect(participantTotal(g.state, "p_1")).toBeGreaterThan(0);
     expect(participantTotal(g.state, "p_2")).toBe(0);

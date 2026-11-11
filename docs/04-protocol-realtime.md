@@ -45,7 +45,8 @@ même après redémarrage du serveur, renvoie le même `ack` sans réappliquer.
 
 - Horodatage de référence = **réception serveur**, heure murale en ms (l'ordre est donné par `eventSeq`).
 - Synchro d'horloge façon NTP via ping/pong : offset et RTT par client, glissants.
-- `question.open` diffuse `startsAt` (heure serveur) : les tablettes affichent le chrono à partir de là.
+- `question.open` — ou `question.present` dans une manche qui ouvre les réponses à la présentation (défaut,
+  `Round.openOnPresent`) — diffuse `startsAt` (heure serveur) : les tablettes affichent le chrono à partir de là.
 - Buzzers : ordre de réception serveur ; compensation par RTT seulement si l'écart de latence entre
   clients dépasse un seuil configurable (désactivée par défaut sur LAN, à mesurer).
 - Chat : fenêtre de réponse décalée du retard de flux (réglage `streamDelayMs`, mesuré en répétition).

@@ -228,3 +228,46 @@ label:has(> input[type="checkbox"]), label:has(> input[type="radio"]) { min-heig
   *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; scroll-behavior: auto !important; }
 }
 .q-crowd-team { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; margin: 6px 0 0; }
+
+/* « La chaîne » (ChainPanel): keys at fixed places, the chain as chips, the figures of the round, the vote. */
+.q-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+.q-chain { display: grid; gap: 10px; }
+.q-chain-head { display: flex; flex-wrap: wrap; gap: 6px 18px; align-items: baseline; }
+.q-chain-fig b { font-size: 18px; }
+.q-chain-turn { display: flex; flex-wrap: wrap; gap: 6px 12px; align-items: baseline; }
+.q-chain-who { font-size: 24px; }
+.q-chain-verdict { font-weight: 800; padding: 1px 8px; border-radius: var(--ui-radius); }
+.q-chain-verdict[data-verdict="right"] { background: var(--ui-ok-bg); color: var(--ui-ok); }
+.q-chain-verdict[data-verdict="wrong"] { background: var(--ui-danger); color: var(--ui-danger-ink); }
+.q-chain-keys { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 8px; }
+.q-chain-keys .q-btn { min-height: 44px; }
+.q-chain-steps { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 4px; }
+.q-chain-steps li { font-family: var(--ui-mono); font-variant-numeric: tabular-nums; padding: 3px 8px; border: 1px solid var(--ui-border); border-radius: var(--ui-radius); color: var(--ui-muted); }
+.q-chain-steps li[data-state="climbed"] { color: var(--ui-text); border-color: var(--ui-border-strong); }
+.q-chain-steps li[data-state="current"] { background: var(--ui-accent); color: var(--ui-accent-ink); border-color: var(--ui-accent); font-weight: 800; }
+.q-chain-steps li[data-state="next"] { border-color: var(--ui-accent); color: var(--ui-text); }
+.q-chain-at { margin: 0; }
+.q-chain-stats { border-collapse: collapse; width: 100%; font-size: 14px; }
+.q-chain-stats th, .q-chain-stats td { text-align: left; padding: 4px 6px; border-bottom: 1px solid var(--ui-border); }
+.q-chain-stats thead th { color: var(--ui-muted); font-weight: 600; font-size: 12px; }
+.q-chain-stats tr[data-turn="true"] { background: var(--ui-surface-2); }
+.q-chain-tag { display: inline-block; font-size: 11px; padding: 1px 6px; margin-right: 4px; border-radius: var(--ui-radius); border: 1px solid var(--ui-border-strong); }
+.q-chain-tag[data-tone="ok"] { background: var(--ui-ok-bg); color: var(--ui-ok); border-color: var(--ui-ok); }
+.q-chain-tag[data-tone="no"] { color: var(--ui-danger); border-color: var(--ui-danger); }
+.q-chain-vote { display: grid; gap: 8px; padding-top: 8px; border-top: 1px solid var(--ui-border); }
+.q-chain-vote p { margin: 0; }
+.q-chain-ballots, .q-chain-tally, .q-chain-duel { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+.q-chain-ballots li, .q-chain-tally li, .q-chain-duel li { display: flex; gap: 10px; align-items: baseline; padding: 4px 8px; border-radius: var(--ui-radius); background: var(--ui-surface-2); }
+.q-chain-ballots li[data-voted="true"] { border-left: 4px solid var(--ui-ok); }
+.q-chain-ballots li[data-voted="false"] { border-left: 4px solid var(--ui-border); }
+.q-chain-tally li[data-eliminated="true"] { background: var(--ui-danger); color: var(--ui-danger-ink); }
+.q-chain-tally li[data-eliminated="true"] .muted { color: inherit; }
+.q-chain-duel li[data-winner="true"] { background: var(--ui-ok-bg); color: var(--ui-ok); }
+.q-chain-name { flex: 1; min-width: 0; overflow-wrap: anywhere; font-weight: 600; }
+.q-chain-proxy summary { cursor: pointer; color: var(--ui-muted); }
+
+/* Several-answers QCM: how it is counted (control room, on air and past questions). */
+.q-multi-scoring { display: grid; gap: 6px; margin: 10px 0; padding: 10px 12px; border: 1px solid var(--ui-border); border-radius: 8px; }
+.q-multi-scoring legend { padding: 0 4px; }
+.q-multi-mode { display: flex; gap: 8px; align-items: baseline; line-height: 1.35; }
+.q-multi-mode[data-on="true"] strong { text-decoration: underline; }

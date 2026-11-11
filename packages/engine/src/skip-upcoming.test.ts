@@ -38,7 +38,7 @@ describe("question.skip (pass the upcoming question between two questions)", () 
     if (r0 === undefined) throw new Error("fixture");
     doc.questions.push({ id: "q_poll_bad", prompt: { text: "Sondage dans une manche QCM ?" }, answerSpec: { kind: "text", accepted: ["x"] }, hints: [], tags: [] });
     r0.questions = [r0.questions[0] ?? "", "q_poll_bad"];
-    const g = run(reg, [ctl({ type: "game.start" }), ctl({ type: "round.start" }), ...addPlayers(1), ctl({ type: "question.present" }), ctl({ type: "question.open" }), ctl({ type: "question.lock" }), ctl({ type: "question.reveal" }), ctl({ type: "question.next" })], createGame(makeSession(doc)));
+    const g = run(reg, [ctl({ type: "game.start" }), ctl({ type: "round.start" }), ...addPlayers(1), ctl({ type: "question.present" }), ctl({ type: "question.lock" }), ctl({ type: "question.reveal" }), ctl({ type: "question.next" })], createGame(makeSession(doc)));
     expect(() => run(reg, [ctl({ type: "question.present" })], g)).toThrow(/ne peut pas jouer/);
     expect(["round.end", "game.end"]).toContain(run(reg, [skip(1)], g).state.phase);
   });

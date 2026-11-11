@@ -1,12 +1,13 @@
 import { For, Match, Show, Switch, createEffect, createMemo, createSignal, onCleanup } from "solid-js";
 import { render } from "solid-js/web";
-import { asChoice, asLadder, asPollBoard, nameOf, optionLetter, optionState, secondsLeft, sideName } from "@quiz/renderer";
+import { asChain, asChoice, asLadder, asPollBoard, nameOf, optionLetter, optionState, secondsLeft, sideName } from "@quiz/renderer";
 import type { AnswerValue, PlayerView, Viewer } from "@quiz/schema";
 import { StatusPill, createQuizConnection, tokenFromUrl, stakesLabel } from "@quiz/ui";
 import "@quiz/ui/ui.css";
 import "./player.css";
 import { createKeepAwake, enterFullscreen } from "./keep-awake.ts";
 import { MechanicInput } from "./MechanicInputs.tsx";
+import { ChainScreen } from "./Chain.tsx";
 
 const PLAYER_TOKEN_KEY = "quiz.playerToken";
 
@@ -182,6 +183,10 @@ function Game(props: { token: string }) {
         <Match when={view()?.me === null}>
           <ClaimSeat seat={seatOf(conn.viewer())} />
         </Match>
+        {/* « La chaîne »: its own screen on air AND between turns / rounds (turn, bank, vote, duel). */}
+        <Match when={(() => { const v = view(); const m = asChain(v?.mechanic); return v !== null && m !== null ? { v, m } : null; })()}>
+          {(c) => <ChainScreen view={c().v} m={c().m} submit={conn.submit} />}
+        </Match>
         <Match when={view()?.question === null || view()?.mechanic === null}>
           <div class="p-center">
             <p class="p-big">{view()?.phase === "game.end" ? "Partie terminée !" : view()?.mechanic?.mechanic === "board" ? "La régie choisit une case…" : "Prochaine question dans un instant…"}</p>
@@ -270,7 +275,10 @@ function Game(props: { token: string }) {
                       );
                     })()}
                     <For each={m().slots}>{(s) => <div class="p-slot" data-found={String(s.found)}><span>{s.index + 1}</span><span>{s.revealed ? s.label : "…"}</span><b>{s.revealed ? s.value : ""}</b></div>}</For>
-                    <p class="p-strikes">{"✗".repeat(m().strikes)}<span class="muted">{"✗".repeat(Math.max(0, m().maxStrikes - m().strikes))}</span></p>
+                    {/* The strikes shown are those of the side holding the hand (each side has its own): said whose. */}
+                    <Show when={m().controllingTeamId !== null}>
+                      <p class="p-strikes"><span class="p-strikes-who">{(() => { const me = v().me; const side = m().controllingTeamId; return me !== null && (side === me.participantId || side === me.teamId) ? "Vos erreurs" : `Erreurs de ${sideName(v(), side)}`; })()}</span>{"✗".repeat(m().strikes)}<span class="muted">{"✗".repeat(Math.max(0, m().maxStrikes - m().strikes))}</span></p>
+                    </Show>
                     <p class="muted">Réponse à l'oral : l'animateur valide.</p>
                   </div>
                 )}
