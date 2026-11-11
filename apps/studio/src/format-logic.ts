@@ -1,5 +1,5 @@
 import { createRng, playedBy, type Registry } from "@quiz/engine";
-import { PER_KIND_MECHANICS, type GameDocument, type Question, type Round, type ScoringComponent } from "@quiz/schema";
+import { mechanicLabel as frenchMechanicLabel, type GameDocument, type Question, type Round, type ScoringComponent } from "@quiz/schema";
 import { pruneRound } from "./flow-logic.ts";
 
 /**
@@ -37,7 +37,7 @@ const progressive: ConfigField[] = [
   { key: "allowChange", kind: "boolean", label: "Le joueur peut répondre à nouveau (pour moins de points)" },
 ];
 
-/** French catalogue of the registered mechanics (ids from packages/engine). */
+/** French catalogue of the round types offered (ids from packages/engine): « Mixte » and the round-level formats. */
 export const MECHANICS: Readonly<Record<string, MechanicInfo>> = {
   mixed: {
     label: "Mixte (tous types)",
@@ -47,48 +47,17 @@ export const MECHANICS: Readonly<Record<string, MechanicInfo>> = {
       { key: "shuffleOptions", kind: "boolean", label: "QCM : mélanger l'ordre des réponses" },
       allowChange,
       { key: "pollMaxStrikes", kind: "number", label: "Sondage : erreurs avant de passer la main", min: 1, max: 10 },
+      { key: "pollMultiplier", kind: "number", label: "Sondage : multiplicateur (manche double, triple…)", min: 0.5, max: 100, step: 0.5 },
+      { key: "allocationKeepOneEmpty", kind: "boolean", label: "Répartition : laisser au moins une réponse vide" },
       { key: "numberMode", kind: "enum", label: "Nombre : qui gagne", options: [{ value: "tolerance", label: "toute réponse dans la tolérance" }, { value: "closest", label: "le ou les plus proches" }] },
       { key: "buzzerLockout", kind: "boolean", label: "Réponse orale (buzzer) : qui se trompe ne peut plus buzzer" },
     ],
   },
-  choice: {
-    label: "QCM",
-    explain: "Chacun répond sur sa tablette (QCM, vrai / faux, plusieurs réponses) ; le barème donne les points.",
-    usesScoring: true,
-    fields: [{ key: "shuffleOptions", kind: "boolean", label: "Mélanger l'ordre des réponses" }, allowChange],
-  },
-  "text-answer": {
-    label: "Réponse libre",
-    explain: "Chacun tape sa réponse ; accents, majuscules et petites fautes de frappe tolérés, la régie peut corriger.",
-    usesScoring: true,
-    fields: [allowChange],
-  },
-  "number-answer": {
-    label: "Estimation (nombre)",
-    explain: "Chacun donne un nombre : juste dans la tolérance de la question, ou seuls les plus proches gagnent.",
-    usesScoring: true,
-    fields: [
-      { key: "mode", kind: "enum", label: "Qui gagne", options: [{ value: "tolerance", label: "toute réponse dans la tolérance" }, { value: "closest", label: "le ou les plus proches" }] },
-      allowChange,
-    ],
-  },
-  order: { label: "Remettre dans l'ordre", explain: "Les éléments sont mélangés : il faut les classer dans le bon ordre.", usesScoring: true, fields: [allowChange] },
-  pairs: { label: "Associations", explain: "Relier chaque élément de gauche à celui de droite.", usesScoring: true, fields: [allowChange] },
-  pin: { label: "Pin sur image", explain: "Chacun pose un point sur l'image ; juste s'il tombe dans la zone cible.", usesScoring: true, fields: [allowChange] },
   buzzer: {
     label: "Buzzer",
     explain: "Le premier qui buzze répond à l'oral, la régie valide ; une erreur passe la main au suivant.",
     usesScoring: true,
     fields: [{ key: "lockoutOnWrong", kind: "boolean", label: "Qui se trompe ne peut plus buzzer sur cette question" }],
-  },
-  "poll-board": {
-    label: "Sondage à slots",
-    explain: "Deux équipes retrouvent les réponses d'un sondage ; au bout de N erreurs la main passe. Points = % trouvés.",
-    usesScoring: false,
-    fields: [
-      { key: "maxStrikes", kind: "number", label: "Erreurs avant de passer la main", min: 1, max: 10 },
-      { key: "multiplier", kind: "number", label: "Multiplicateur (manche double, triple…)", min: 0.5, max: 100, step: 0.5 },
-    ],
   },
   ladder: {
     label: "Paliers",
@@ -100,12 +69,6 @@ export const MECHANICS: Readonly<Record<string, MechanicInfo>> = {
       { key: "jokers", kind: "flags", label: "Jokers", options: [{ value: "fifty", label: "50 / 50" }, { value: "audience", label: "Vote du public" }] },
     ],
     seed: { steps: [100, 200, 500, 1000, 5000], safeSteps: [2], jokers: ["fifty", "audience"] },
-  },
-  allocation: {
-    label: "Répartition de mise",
-    explain: "Chacun répartit une mise entre les réponses ; on garde ce qui est posé sur la bonne.",
-    usesScoring: false,
-    fields: [allowChange, { key: "keepOneEmpty", kind: "boolean", label: "Obligation de laisser au moins une réponse vide" }],
   },
   board: {
     label: "Plateau catégories × valeurs",
@@ -141,16 +104,14 @@ export const MECHANICS: Readonly<Record<string, MechanicInfo>> = {
   },
 };
 
-export const mechanicLabel = (id: string): string => MECHANICS[id]?.label ?? id;
+/** Offered types: the catalogue label; older ones (parties launched before « Mixte »): their French name. */
+export const mechanicLabel = (id: string): string => MECHANICS[id]?.label ?? frenchMechanicLabel(id);
 
-export { PER_KIND_MECHANICS } from "@quiz/schema";
-
-/** Round types offered: « Mixte » then the real game formats; `current` stays listed (older games). */
-export function mechanicOptions(registry: Registry, current?: string): { id: string; label: string; special: boolean }[] {
+/** Round types offered: « Mixte » first, then the formats that set the rule of the whole round. */
+export function mechanicOptions(registry: Registry): { id: string; label: string; special: boolean }[] {
   const ids = registry.ids();
-  const known = Object.keys(MECHANICS).filter((id) => ids.includes(id));
-  return [...known, ...ids.filter((id) => !known.includes(id))]
-    .filter((id) => !PER_KIND_MECHANICS.has(id) || id === current)
+  return Object.keys(MECHANICS)
+    .filter((id) => ids.includes(id))
     .map((id) => ({ id, label: mechanicLabel(id), special: id !== "mixed" }));
 }
 

@@ -11,7 +11,7 @@ const controlToken = (): string => path("control").split("t=")[1] ?? "";
 
 /** Each test starts its own game (tests share one server): the built-in QCM template. */
 test.beforeEach(async ({ request }) => {
-  expect((await request.post(`/api/games/g_modele_qcm/launch?t=${controlToken()}`)).status()).toBe(200);
+  expect((await request.post(`/api/games/g_e2e_qcm/launch?t=${controlToken()}`)).status()).toBe(200);
 });
 
 /** Fails the test on any console error / uncaught exception (e.g. an HTTPS-only API over plain HTTP). */

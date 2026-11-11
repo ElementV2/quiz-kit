@@ -52,7 +52,7 @@ const TABLET = { width: 800, height: 1280 };
 
 test("control room at 1366×768 and 1920×1080, host and tablets on a QCM", async ({ browser, request }) => {
   const errors: string[] = [];
-  const { control, next } = await setup(browser, request, "g_modele_qcm", "Ana;1;Rouges\nBo;2;Bleus\nChloé;3;Rouges\nDidier;4;Bleus", errors);
+  const { control, next } = await setup(browser, request, "g_e2e_qcm", "Ana;1;Rouges\nBo;2;Bleus\nChloé;3;Rouges\nDidier;4;Bleus", errors);
   const output = await open(browser, path("out-program"), { width: 1920, height: 1080 }, errors);
   const phone = await seat(browser, 1, PHONE, errors);
   const tablet = await seat(browser, 2, TABLET, errors);
@@ -105,7 +105,7 @@ test("buzzer: host judges the hand, tablets show the states", async ({ browser, 
 
 test("text answer: host overrules from the tablet", async ({ browser, request }) => {
   const errors: string[] = [];
-  const { next } = await setup(browser, request, "g_modele_texte", "Ana;1\nBo;2", errors);
+  const { next } = await setup(browser, request, "g_e2e_texte", "Ana;1\nBo;2", errors);
   const host = await open(browser, path("host"), { width: 1280, height: 800 }, errors);
   const ana = await seat(browser, 1, PHONE, errors);
   const bo = await seat(browser, 2, PHONE, errors);
@@ -120,7 +120,7 @@ test("text answer: host overrules from the tablet", async ({ browser, request })
   expect(errors).toEqual([]);
 });
 
-for (const [template, name] of [["g_modele_estimation", "number"], ["g_modele_ordre", "order"], ["g_modele_paires", "pairs"], ["g_modele_repartition", "allocation"], ["g_modele_indices", "hints"], ["g_modele_sondage", "poll"]] as const) {
+for (const [template, name] of [["g_e2e_estimation", "number"], ["g_e2e_ordre", "order"], ["g_e2e_paires", "pairs"], ["g_e2e_repartition", "allocation"], ["g_modele_indices", "hints"], ["g_modele_sondage", "poll"]] as const) {
   test(`tablet input: ${name}`, async ({ browser, request }) => {
     const errors: string[] = [];
     const { next } = await setup(browser, request, template, "Ana;1;Rouges\nBo;2;Bleus", errors);
@@ -141,7 +141,7 @@ for (const [template, name] of [["g_modele_estimation", "number"], ["g_modele_or
 
 test("responsive: host on a portrait tablet and a phone, tablets in landscape, home page on a phone — nothing overflows", async ({ browser, request }) => {
   const errors: string[] = [];
-  const { control, next } = await setup(browser, request, "g_modele_qcm", "Ana;1;Rouges\nBo;2;Bleus", errors);
+  const { control, next } = await setup(browser, request, "g_e2e_qcm", "Ana;1;Rouges\nBo;2;Bleus", errors);
   await control.getByRole("switch", { name: "L'animateur pilote" }).click();
   const sizes = { "host-tablet-portrait": { width: 800, height: 1280 }, "host-phone": { width: 390, height: 844 } } as const;
   const hosts = await Promise.all(Object.values(sizes).map((vp) => open(browser, path("host"), vp, errors)));

@@ -16,8 +16,10 @@ test("studio: content, scene simulation, generated theme, save, then the output 
   studio.on("console", (m) => { if (m.type() === "error") errors.push(m.text()); });
   await studio.goto(path("studio"));
 
-  await studio.getByRole("button", { name: "+ Nouvelle" }).click();
-  await studio.getByRole("menuitem", { name: "QCM rapide (Kahoot-like)" }).click(); // the demo questions
+  // The demo questions: a copy of the 3-question e2e game (duplicated and opened).
+  await studio.getByRole("button", { name: "Actions pour « E2E — QCM (3 questions) »", exact: true }).click();
+  await studio.getByRole("menuitem", { name: "Dupliquer" }).click();
+  await expect(studio.locator(".s-title")).toHaveValue("E2E — QCM (3 questions) (copie)");
   await studio.locator(".s-title").fill("Soirée e2e");
   await studio.getByRole("button", { name: "+ QCM" }).click();
   await expect(studio.locator(".s-table tbody tr")).toHaveCount(4);
@@ -152,8 +154,10 @@ test("studio theme: material, logo palette, sound pack — exported with the gam
   studio.on("pageerror", (e) => errors.push(e.message));
   studio.on("console", (m) => { if (m.type() === "error") errors.push(m.text()); });
   await studio.goto(path("studio"));
-  await studio.getByRole("button", { name: "+ Nouvelle" }).click();
-  await studio.getByRole("menuitem", { name: "QCM rapide (Kahoot-like)" }).click(); // the demo questions
+  // The demo questions: a copy of the 3-question e2e game (duplicated and opened).
+  await studio.getByRole("button", { name: "Actions pour « E2E — QCM (3 questions) »", exact: true }).click();
+  await studio.getByRole("menuitem", { name: "Dupliquer" }).click();
+  await expect(studio.locator(".s-title")).toHaveValue("E2E — QCM (3 questions) (copie)");
   await studio.locator(".s-title").fill("Thème e2e");
   await studio.getByRole("button", { name: "+ QCM" }).click();
   await studio.getByRole("button", { name: "Thème" }).click();

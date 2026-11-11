@@ -9,7 +9,7 @@ const path = (id: string): string => links().entries.find((e) => e.id === id)?.p
 const controlToken = (): string => path("control").split("t=")[1] ?? "";
 
 test("studio « Envoyer au direct »: a question added to the live game reaches the control room without relaunching", async ({ browser, request }) => {
-  expect((await request.post(`/api/games/g_modele_qcm/launch?t=${controlToken()}`)).status()).toBe(200);
+  expect((await request.post(`/api/games/g_e2e_live/launch?t=${controlToken()}`)).status()).toBe(200);
   const ctx = await browser.newContext({ viewport: { width: 1600, height: 1000 } });
   const control = await ctx.newPage();
   await control.goto(path("control"));
@@ -24,7 +24,7 @@ test("studio « Envoyer au direct »: a question added to the live game reaches 
     void d.dismiss();
   });
   await studio.goto(path("studio"));
-  await studio.locator(".s-games li").filter({ hasText: "Modèle — QCM rapide (Kahoot-like)" }).locator(".s-game-open").click();
+  await studio.locator(".s-game-open").filter({ hasText: /^E2E — édité en direct$/ }).click();
   await expect(studio.locator(".s-live-tag")).toHaveText("En direct", { timeout: 8000 });
   await expect(studio.getByRole("button", { name: "Direct à jour ✓" })).toBeDisabled();
 

@@ -4,7 +4,7 @@ import { GameDocument, type Round, type ScoringComponent } from "@quiz/schema";
 import { Button, Panel, confirmDialog } from "@quiz/ui";
 import { JsonField, NumField } from "./fields.tsx";
 import { FlowEditor } from "./flow-editor.tsx";
-import { MECHANICS, PER_KIND_MECHANICS, SCORING_LABEL, addToRound, configValues, deleteRound, duplicateRound, mechanicOptions, moveItem, newRound, newScoring, parseNumberList, removeFromRound, roundIssues, setConfigField, setMechanic, swapList, type ConfigField, type RoundIssue, type RoundList } from "./format-logic.ts";
+import { MECHANICS, SCORING_LABEL, mechanicLabel, addToRound, configValues, deleteRound, duplicateRound, mechanicOptions, moveItem, newRound, newScoring, parseNumberList, removeFromRound, roundIssues, setConfigField, setMechanic, swapList, type ConfigField, type RoundIssue, type RoundList } from "./format-logic.ts";
 import { kindLabel } from "./question-factories.ts";
 import { hex, snapshot, type Update } from "./util.ts";
 
@@ -104,9 +104,13 @@ function RoundCard(p: { doc: GameDocument; round: Round; ri: number; count: numb
         <div class="s-round-col">
           <label class="s-field"><span class="s-label">Type de manche</span>
             <select value={p.round.mechanic} onChange={(e) => { const v = e.currentTarget.value; p.update((d) => setMechanic(d, p.ri, v, defaultRegistry)); }}>
-              <For each={mechanicOptions(defaultRegistry, p.round.mechanic).filter((m) => !m.special)}>{(m) => <option value={m.id}>{m.label}</option>}</For>
+              {/* A partie launched before « Mixte » existed (live edit): its round type stays visible. */}
+              <Show when={!mechanicOptions(defaultRegistry).some((m) => m.id === p.round.mechanic)}>
+                <option value={p.round.mechanic} disabled>{mechanicLabel(p.round.mechanic)} (partie lancée avant « Mixte »)</option>
+              </Show>
+              <For each={mechanicOptions(defaultRegistry).filter((m) => !m.special)}>{(m) => <option value={m.id}>{m.label}</option>}</For>
               <optgroup label="Formats spéciaux (règle de toute la manche)">
-                <For each={mechanicOptions(defaultRegistry, p.round.mechanic).filter((m) => m.special)}>{(m) => <option value={m.id}>{m.label}{PER_KIND_MECHANICS.has(m.id) ? " (ancien type : préférer Mixte)" : ""}</option>}</For>
+                <For each={mechanicOptions(defaultRegistry).filter((m) => m.special)}>{(m) => <option value={m.id}>{m.label}</option>}</For>
               </optgroup>
             </select>
           </label>

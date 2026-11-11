@@ -37,7 +37,13 @@ export class GameLibrary {
     if (!GameLibrary.isId(id)) return null;
     const p = join(this.dir, `${id}.json`);
     if (!existsSync(p)) return null;
-    const r = loadGameDocument(JSON.parse(readFileSync(p, "utf8")));
+    let raw: unknown;
+    try {
+      raw = JSON.parse(readFileSync(p, "utf8"));
+    } catch {
+      return null; // truncated / hand-broken file: unreadable, never a crash
+    }
+    const r = loadGameDocument(raw);
     return r.ok ? r.value : null;
   }
 

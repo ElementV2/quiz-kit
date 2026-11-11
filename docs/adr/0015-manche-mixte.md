@@ -37,5 +37,9 @@ gardent leurs types (toujours exécutés par le moteur, toujours listés pour la
 - Réglages non repris en mixte : le multiplicateur du sondage (utiliser la mise ×2 / ×3 en régie) et « laisser une
   réponse vide » de la répartition (valeur par défaut de la mécanique).
 - Le sondage routé (`poll-board`) est un jeu d'équipes : le studio le signale dans une partie solo ou public.
-- Les modèles déjà copiés dans une bibliothèque ne sont pas convertis : seules les nouvelles copies sont en mixte.
+- Chargement d'une partie (bibliothèque, import) : ses manches « un seul type » deviennent « Mixte »
+  (`toMixedRounds`, pur et idempotent). Jamais pour une session journalisée (le rejeu reste exact), ni pour un
+  « Envoyer au direct » sur une session lancée avant (`upgradeRounds: false` : une manche commencée ne change pas de type).
+- Les modèles retirés (`RETIRED_TEMPLATES`) sont effacés de la bibliothèque au démarrage s'ils n'ont jamais été
+  modifiés (ou remplacés par le modèle actuel du même id) ; une copie modifiée est gardée.
 - Un état « mixed » à l'antenne est invalide (`stateSchema: z.never()`) : un snapshot qui le prétendrait est ignoré.

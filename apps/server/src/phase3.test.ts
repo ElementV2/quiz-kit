@@ -231,7 +231,7 @@ describe("built-in templates seeding", () => {
       const body: { games: { id: string }[] } = (await s.http.inject({ method: "GET", url: `/api/games?t=${t}` })).json();
       return body.games.map((g) => g.id);
     };
-    expect(await ids()).toEqual(expect.arrayContaining(["g_modele_qcm", "g_modele_soiree", "g_modele_plateau"]));
+    expect(await ids()).toEqual(expect.arrayContaining(["g_modele_mixte", "g_modele_soiree", "g_modele_plateau"]));
     await s.http.inject({ method: "DELETE", url: `/api/games/g_modele_plateau?t=${t}` });
     await s.close();
     s = await startServer(cfg);
@@ -250,9 +250,9 @@ describe("review 6: names and studio launch", () => {
     // A journal holding such a name reads back after a restart (tolerant schema on read).
     expect(s.runtime.current.events.length).toBeGreaterThan(0);
     const studio = tokenOf(s, "Studio");
-    const refused = await s.http.inject({ method: "POST", url: `/api/games/g_modele_qcm/launch?t=${studio}` });
+    const refused = await s.http.inject({ method: "POST", url: `/api/games/g_modele_mixte/launch?t=${studio}` });
     expect(refused.statusCode).toBe(409); // a player is in: the control room decides
-    expect((await s.http.inject({ method: "POST", url: `/api/games/g_modele_qcm/launch?t=${tokenOf(s, "Régie")}` })).statusCode).toBe(200);
+    expect((await s.http.inject({ method: "POST", url: `/api/games/g_modele_mixte/launch?t=${tokenOf(s, "Régie")}` })).statusCode).toBe(200);
     expect((await s.http.inject({ method: "POST", url: `/api/games/g_modele_buzzer/launch?t=${studio}` })).statusCode).toBe(200); // fresh lobby
   });
 });

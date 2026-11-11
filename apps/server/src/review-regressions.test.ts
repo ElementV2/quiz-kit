@@ -1,10 +1,10 @@
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { WebSocket } from "ws";
 import { createRegistry, defaultRegistry, defineMechanic, choice, type Mechanic, type ChoiceConfig, type ChoiceState } from "@quiz/engine";
-import { DEMO_GAME, type Action, type Session } from "@quiz/schema";
+import { DEMO_GAME, RETIRED_TEMPLATES, type Action, type Session } from "@quiz/schema";
 import { Config } from "./config.ts";
 import { buildHttpApp, loggerOptions } from "./http/app.ts";
 import { SessionRuntime } from "./runtime/session-runtime.ts";
@@ -410,6 +410,37 @@ describe("review #8 — « Envoyer au direct » and names", () => {
     await wait(120);
     expect(c.messages.find((m) => m["t"] === "ack" && m["key"] === "k_rev_name_1")).toMatchObject({ ok: false, code: "invalid" });
     c.ws.close();
+  });
+});
+
+const old = (id: string) => RETIRED_TEMPLATES.find((t) => t.id === id)?.game;
+
+describe("cleanup of older templates (ADR-0015)", () => {
+  it("an untouched copy of a retired template is removed, an edited one is kept, a replaced one is updated", async () => {
+    const dataDir = mkdtempSync(join(tmpdir(), "quiz-rev-"));
+    dirs.push(dataDir);
+    mkdirSync(join(dataDir, "games"), { recursive: true });
+    writeFileSync(join(dataDir, "games", "g_modele_texte.json"), JSON.stringify(old("g_modele_texte")));
+    writeFileSync(join(dataDir, "games", "g_modele_ordre.json"), JSON.stringify({ ...old("g_modele_ordre"), title: "Mon ordre à moi" }));
+    writeFileSync(join(dataDir, "games", "g_modele_sondage.json"), JSON.stringify(old("g_modele_sondage")));
+    const s = await startServer({ ...Config.parse({ dataDir, host: "127.0.0.1", logLevel: "fatal" }), port: 0 });
+    servers.push(s);
+    expect(existsSync(join(dataDir, "games", "g_modele_texte.json"))).toBe(false);
+    expect(existsSync(join(dataDir, "games", "g_modele_ordre.json"))).toBe(true);
+    const lib = new GameLibrary(dataDir);
+    expect(lib.get("g_modele_ordre")?.format.rounds[0]?.mechanic).toBe("mixed"); // kept, read as « Mixte »
+    expect(lib.get("g_modele_sondage")?.title).toMatch(/famille en or/i);
+  });
+
+  it("a truncated library file never stops the server from starting", async () => {
+    const dataDir = mkdtempSync(join(tmpdir(), "quiz-rev-"));
+    dirs.push(dataDir);
+    mkdirSync(join(dataDir, "games"), { recursive: true });
+    writeFileSync(join(dataDir, "games", "g_modele_qcm.json"), '{"schemaVersion":1,"title":"cou');
+    const s = await startServer({ ...Config.parse({ dataDir, host: "127.0.0.1", logLevel: "fatal" }), port: 0 });
+    servers.push(s);
+    expect(new GameLibrary(dataDir).get("g_modele_qcm")).toBeNull();
+    expect(existsSync(join(dataDir, "games", "g_modele_qcm.json"))).toBe(true); // left as is
   });
 });
 

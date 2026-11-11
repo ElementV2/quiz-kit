@@ -1,4 +1,5 @@
 import { GameDocument } from "./session.ts";
+import { toMixedRounds } from "./upgrade.ts";
 
 export const CURRENT_SCHEMA_VERSION = 1;
 
@@ -21,8 +22,12 @@ function isRecord(v: unknown): v is Record<string, unknown> {
   return typeof v === "object" && v !== null && !Array.isArray(v);
 }
 
-/** Migrates any known older version up to CURRENT_SCHEMA_VERSION, then validates (boundary: imported files, DB). */
-export function loadGameDocument(raw: unknown, migrations: readonly Migration[] = MIGRATIONS): LoadResult {
+/**
+ * Migrates any known older version up to CURRENT_SCHEMA_VERSION, then validates (boundary: imported files, DB).
+ * One-kind rounds become « Mixte » (`toMixedRounds`, ADR-0015) unless `upgradeRounds: false` (a live edit of a
+ * session launched before must keep its round types).
+ */
+export function loadGameDocument(raw: unknown, migrations: readonly Migration[] = MIGRATIONS, opts: { readonly upgradeRounds?: boolean } = {}): LoadResult {
   if (!isRecord(raw)) return { ok: false, error: { code: "not-an-object" } };
   let doc = raw;
   const declared = doc["schemaVersion"];
@@ -40,5 +45,5 @@ export function loadGameDocument(raw: unknown, migrations: readonly Migration[] 
   if (!parsed.success) {
     return { ok: false, error: { code: "invalid", issues: parsed.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`) } };
   }
-  return { ok: true, value: parsed.data };
+  return { ok: true, value: opts.upgradeRounds === false ? parsed.data : toMixedRounds(parsed.data) };
 }

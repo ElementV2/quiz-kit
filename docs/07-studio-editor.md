@@ -57,7 +57,13 @@ Contrôles à l'import : dimensions, alpha, licence de police déclarée, échan
 
 « Mixte » (par défaut) accepte tous les types de question : chacune se joue selon son type (ADR-0015). Les formats
 spéciaux changent la règle de toute la manche : paliers, plateau, buzzer, indices, image dévoilée, vote du chat.
-Les anciens types « un seul type de question » restent lisibles dans les parties existantes.
+Les anciens types « un seul type de question » (QCM, réponse libre, sondage…) ne sont plus des types de manche :
+une partie qui en contient est convertie en « Mixte » à l'ouverture (mêmes réglages, même jeu à l'antenne).
+
+Modèles livrés : Quiz mixte (tous les types), Une famille en or (sondages, équipes), Paliers, Buzzer, Plateau,
+Indices, Vote du chat, Soirée multi-manches. Les copies jamais modifiées des anciens modèles (QCM rapide, Réponse
+libre, Estimation, Ordre, Associations, Répartition) sont retirées de la bibliothèque au démarrage du serveur ; une
+copie modifiée est gardée.
 
 ## Modifier une partie en direct (« Envoyer au direct »)
 

@@ -17,6 +17,10 @@ export const MixedConfig = z.strictObject({
   allowChange: z.boolean().default(true),
   /** Survey: wrong answers before the hand passes (Family-Feud-like). */
   pollMaxStrikes: z.number().int().min(1).max(10).default(3),
+  /** Survey: bank multiplier (double / triple round). */
+  pollMultiplier: z.number().positive().max(100).default(1),
+  /** Allocation: at least one answer must be left empty. */
+  allocationKeepOneEmpty: z.boolean().default(true),
   /** Number: right within the question's tolerance, or only the closest win. */
   numberMode: z.enum(["tolerance", "closest"]).default("tolerance"),
   /** Spoken answer (buzzer): a player who was wrong cannot buzz again on the same question. */
@@ -47,14 +51,15 @@ function routedConfig(id: string, c: MixedConfig): Record<string, unknown> {
     case "number-answer":
       return { allowChange: c.allowChange, mode: c.numberMode };
     case "poll-board":
-      return { maxStrikes: c.pollMaxStrikes };
+      return { maxStrikes: c.pollMaxStrikes, multiplier: c.pollMultiplier };
+    case "allocation":
+      return { allowChange: c.allowChange, keepOneEmpty: c.allocationKeepOneEmpty };
     case "buzzer":
       return { lockoutOnWrong: c.buzzerLockout };
     case "text-answer":
     case "order":
     case "pairs":
     case "pin":
-    case "allocation":
       return { allowChange: c.allowChange };
     default:
       return {};

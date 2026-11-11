@@ -62,7 +62,7 @@ const pair = <T,>(xs: readonly T[]): [T, T] => {
 
 test("text-answer: typed answers, fuzzy match, control overrules, answer on air at reveal only", async ({ browser, request }) => {
   const errors: string[] = [];
-  const { control, output, tablets, next } = await setup(browser, request, "g_modele_texte", "Ana;1\nBo;2", 2, errors);
+  const { control, output, tablets, next } = await setup(browser, request, "g_e2e_texte", "Ana;1\nBo;2", 2, errors);
   const [ana, bo] = pair(tablets);
   await next(4); // start, round, present, open
   await ana.page.locator(".p-input").fill("van gogh");
@@ -100,7 +100,7 @@ const ORDER = ["Invention de l'imprimerie", "Découverte de l'Amérique", "Révo
 
 test("order: up / down buttons build the ordering, the right order goes on air at reveal", async ({ browser, request }) => {
   const errors: string[] = [];
-  const { output, tablets, next } = await setup(browser, request, "g_modele_ordre", "Ana;1\nBo;2", 2, errors);
+  const { output, tablets, next } = await setup(browser, request, "g_e2e_ordre", "Ana;1\nBo;2", 2, errors);
   const [ana, bo] = pair(tablets);
   await next(4);
   await expect(output.locator(".q-order")).toHaveAttribute("data-revealed", "false");

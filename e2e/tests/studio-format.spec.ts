@@ -22,8 +22,10 @@ test("studio Format: a ladder round + a mixed round (free text + order) built fr
   const studio = await ctx.newPage();
   const errors = watch(studio);
   await studio.goto(path("studio"));
-  await studio.getByRole("button", { name: "+ Nouvelle" }).click();
-  await studio.getByRole("menuitem", { name: "QCM rapide (Kahoot-like)" }).click(); // the demo questions
+  // The demo questions: a copy of the 3-question e2e game (duplicated and opened).
+  await studio.getByRole("button", { name: "Actions pour « E2E — QCM (3 questions) »", exact: true }).click();
+  await studio.getByRole("menuitem", { name: "Dupliquer" }).click();
+  await expect(studio.locator(".s-title")).toHaveValue("E2E — QCM (3 questions) (copie)");
   await studio.locator(".s-title").fill("Format e2e");
 
   // Round 1 becomes "Paliers" (single-answer QCM only): the boolean and multi questions are flagged by the engine's own init.
@@ -156,7 +158,7 @@ for (const vp of [{ width: 1366, height: 768 }, { width: 1920, height: 1080 }]) 
 test("studio Replay: the journal of the current session replays step by step without error", async ({ browser, request }) => {
   const ctx = await browser.newContext({ viewport: { width: 1600, height: 1000 } });
   // A fresh session with a few journaled events: launch a template, then drive it from the control room.
-  expect((await request.post(`/api/games/g_modele_qcm/launch?t=${token("control")}`)).status()).toBe(200);
+  expect((await request.post(`/api/games/g_e2e_qcm/launch?t=${token("control")}`)).status()).toBe(200);
   const control = await ctx.newPage();
   await control.goto(path("control"));
   await expect(control.getByText("connecté").first()).toBeVisible();

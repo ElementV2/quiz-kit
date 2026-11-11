@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { defaultRegistry } from "@quiz/engine";
-import { DEMO_EVENING_GAME, DEMO_GAME, DEMO_POLL_GAME, GameDocument, TEMPLATES, type Question } from "@quiz/schema";
-import { MECHANICS, PER_KIND_MECHANICS, addToRound, configValues, defaultConfig, deleteQuestion, deleteRound, duplicateRound, mechanicOptions, moveItem, newRound, newScoring, parseNumberList, removeFromRound, roundIssues, roundsOf, setConfigField, setMechanic, swapList } from "./format-logic.ts";
+import { DEMO_EVENING_GAME, DEMO_GAME, DEMO_POLL_GAME, GameDocument, PER_KIND_MECHANICS, TEMPLATES, type Question } from "@quiz/schema";
+import { MECHANICS, addToRound, configValues, defaultConfig, deleteQuestion, deleteRound, duplicateRound, mechanicOptions, moveItem, newRound, newScoring, parseNumberList, removeFromRound, roundIssues, roundsOf, setConfigField, setMechanic, swapList } from "./format-logic.ts";
 import { QUESTION_TYPES, newQuestion } from "./question-factories.ts";
 
 /** Keys of a mechanic config schema (zod object shape). */
@@ -13,15 +13,14 @@ const configKeys = (id: string): string[] => {
 const copy = (g: GameDocument): GameDocument => structuredClone(g);
 
 describe("mechanic catalogue", () => {
-  it("labels every registered mechanic in French and offers them all", () => {
-    expect(defaultRegistry.ids().filter((id) => MECHANICS[id] === undefined)).toEqual([]);
-    // New rounds: « Mixte » + the round-level formats; a per-kind type stays offered only where already used.
+  it("labels every offered round type in French: « Mixte » first, then the round-level formats", () => {
+    expect(defaultRegistry.ids().filter((id) => !PER_KIND_MECHANICS.has(id) && MECHANICS[id] === undefined)).toEqual([]);
+    // « Mixte » + the round-level formats only: one-kind types are played inside « Mixte », never offered.
     expect(mechanicOptions(defaultRegistry).map((m) => m.id)[0]).toBe("mixed");
     expect(mechanicOptions(defaultRegistry).map((m) => m.id).toSorted()).toEqual([...defaultRegistry.ids()].filter((id) => !PER_KIND_MECHANICS.has(id)).toSorted());
-    expect(mechanicOptions(defaultRegistry, "choice").map((m) => m.id)).toContain("choice");
   });
   it("form fields match the keys of each mechanic config schema", () => {
-    const ids = defaultRegistry.ids();
+    const ids = Object.keys(MECHANICS);
     expect(ids.map((id) => [id, MECHANICS[id]?.fields.map((f) => f.key).toSorted()])).toEqual(ids.map((id) => [id, configKeys(id)]));
   });
   it("default configs are valid for every mechanic (ladder included)", () => {
@@ -29,7 +28,7 @@ describe("mechanic catalogue", () => {
     expect(defaultConfig(defaultRegistry, "board")).toMatchObject({ values: [100, 200, 300, 400, 500], penalty: true });
   });
   it("shows defaults filled for a partial config", () => {
-    expect(configValues(defaultRegistry, { mechanic: "number-answer", mechanicConfig: { mode: "closest" } })).toEqual({ mode: "closest", allowChange: true });
+    expect(configValues(defaultRegistry, { mechanic: "mixed", mechanicConfig: { numberMode: "closest" } })).toEqual({ numberMode: "closest", allowChange: true, shuffleOptions: false, pollMaxStrikes: 3, pollMultiplier: 1, allocationKeepOneEmpty: true, buzzerLockout: true });
   });
   it("an optional text field cleared is removed from the config", () => {
     const g = copy(DEMO_GAME);

@@ -36,8 +36,10 @@ test("studio Format « Enchaînement »: main → (tie) barrage loop → final �
   const studio = await ctx.newPage();
   const errors = watch(studio);
   await studio.goto(path("studio"));
-  await studio.getByRole("button", { name: "+ Nouvelle" }).click();
-  await studio.getByRole("menuitem", { name: "QCM rapide (Kahoot-like)" }).click(); // the demo questions
+  // The demo questions: a copy of the 3-question e2e game (duplicated and opened).
+  await studio.getByRole("button", { name: "Actions pour « E2E — QCM (3 questions) »", exact: true }).click();
+  await studio.getByRole("menuitem", { name: "Dupliquer" }).click();
+  await expect(studio.locator(".s-title")).toHaveValue("E2E — QCM (3 questions) (copie)");
   await studio.locator(".s-title").fill("Enchaînement e2e");
 
   // Three rounds in the list: main (the template's), final, barrage — each with a question of the bank.

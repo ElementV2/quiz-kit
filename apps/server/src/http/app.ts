@@ -7,7 +7,7 @@ import Fastify, { type FastifyInstance, type FastifyRequest, type FastifyServerO
 import { z } from "zod";
 import type { Links } from "../links.ts";
 import type { SessionRuntime } from "../runtime/session-runtime.ts";
-import { loadGameDocument, type GameDocument } from "@quiz/schema";
+import { loadGameDocument, type GameDocument, MIGRATIONS } from "@quiz/schema";
 import type { MediaStore } from "../media/media-store.ts";
 import { GameLibrary, exportQuiz, importQuiz } from "../media/library.ts";
 import { verifyToken } from "../tokens.ts";
@@ -462,7 +462,8 @@ export function buildHttpApp(deps: HttpDeps, options: FastifyServerOptions): Fas
     if (deps.liveGameId() !== req.params.id) return reply.code(409).send({ error: "cette partie n'est pas celle en direct : la lancer d'abord (régie, onglet Parties)" });
     const body = z.strictObject({ game: z.unknown(), baseVersion: z.number().int().min(0) }).safeParse(req.body);
     if (!body.success) return reply.code(400).send({ error: "version de base manquante : recharger la partie en direct" });
-    const doc = loadGameDocument(body.data.game);
+    // Round types kept as sent: a session launched before keeps its rounds (a started round never changes type).
+    const doc = loadGameDocument(body.data.game, MIGRATIONS, { upgradeRounds: false });
     if (!doc.ok) return reply.code(400).send({ error: "partie invalide : corriger les problèmes signalés dans le studio" });
     const ack = await new Promise<{ ok: true; seq: number } | { ok: false; reason: string }>((resolve) => {
       deps.runtime().enqueue({ type: "game.patch", game: doc.value, baseVersion: body.data.baseVersion }, { role: "control", id: "studio" }, null, (a) => resolve(a.ok ? { ok: true, seq: a.eventSeq } : { ok: false, reason: a.reason }));

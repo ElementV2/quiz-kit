@@ -3,7 +3,7 @@ import { closeSync, existsSync, fsyncSync, mkdirSync, openSync, readFileSync, re
 import { join, resolve } from "node:path";
 import type { FastifyInstance } from "fastify";
 import { defaultRegistry } from "@quiz/engine";
-import { DEMO_GAME, TEMPLATES, loadGameDocument, type GameDocument, type Session } from "@quiz/schema";
+import { DEMO_GAME, TEMPLATES, loadGameDocument, toMixedRounds, type GameDocument, type Session, RETIRED_TEMPLATES } from "@quiz/schema";
 import type { Config } from "./config.ts";
 import { buildHttpApp, loggerOptions } from "./http/app.ts";
 import { newId } from "./ids.ts";
@@ -46,7 +46,7 @@ export type RunningServer = {
 };
 
 function loadGame(path: string | undefined): GameDocument {
-  if (path === undefined) return DEMO_GAME;
+  if (path === undefined) return toMixedRounds(DEMO_GAME);
   const r = loadGameDocument(JSON.parse(readFileSync(path, "utf8")));
   if (!r.ok) throw new Error(`jeu invalide (${path}) : ${JSON.stringify(r.error)}`);
   return r.value;
@@ -116,6 +116,20 @@ async function boot(config: Config, opts: { timers?: Timers; broadcastIntervalMs
     store.setMeta(key, "1");
   }
   store.setMeta("templates-seeded", "1");
+  // Templates of older versions never edited: removed (or replaced by today's template of the same id).
+  // Best effort: never blocks the start of a show.
+  for (const old of RETIRED_TEMPLATES) {
+    try {
+      const copy = library.get(old.id);
+      const original = loadGameDocument(old.game);
+      if (copy === null || !original.ok || JSON.stringify(copy) !== JSON.stringify(original.value)) continue;
+      const current = TEMPLATES.find((t) => t.id === old.id);
+      if (current === undefined) library.delete(old.id);
+      else library.put(old.id, current.game);
+    } catch {
+      // unreadable copy: left as is
+    }
+  }
   const media = new MediaStore(dataDir, { ffmpeg: process.env["QUIZ_FFMPEG"] ?? "ffmpeg", ffprobe: process.env["QUIZ_FFPROBE"] ?? "ffprobe" });
   const preloads = new PreloadCache(media);
 
