@@ -72,7 +72,8 @@ describe("QuizClient ⇄ server", () => {
     expect(seat.queued).toHaveLength(0);
     const answers = s.store.events(s.runtime.session.id).filter((e) => e.action.type === "answer.submit");
     expect(answers).toHaveLength(1);
-    expect(seat.view).toMatchObject({ myAnswer: ["b"] });
+    // The ack is sent at commit; the view follows within the 25 ms broadcast coalescing window.
+    await until(() => seat.view?.role === "player" && seat.view.myAnswer?.[0] === "b");
     ctl.stop();
     seat.stop();
   });
