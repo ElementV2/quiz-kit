@@ -49,7 +49,7 @@ Règle : une phase n'est terminée que quand ses critères de sortie passent. Co
 - [ ] Import de design reçu (calque de référence, tracé de zones, découpe, 9-slice, états dérivés)
 - [ ] Export gabarit (PNG/SVG + fiche PDF/CSV) + réimport par nommage
 - [ ] Médias : stockage par hash, transcodage ffmpeg, contrôles à l'import
-- [ ] Export / import de jeu `.quiz`
+- [x] Export / import de jeu `.quiz` (zip : game.json + médias adressés par hash, vérifiés à l'import)
 
 ## Phase 3 — Formats libres
 

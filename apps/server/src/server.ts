@@ -10,6 +10,7 @@ import { newId } from "./ids.ts";
 import { buildLinks, lanAddresses, linksFile, type Links } from "./links.ts";
 import { signToken } from "./tokens.ts";
 import { MediaStore, gameMediaHashes } from "./media/media-store.ts";
+import { GameLibrary } from "./media/library.ts";
 import { realTimers, SessionRuntime, type Clock, type Timers } from "./runtime/session-runtime.ts";
 import { SqliteEventStore } from "./store/sqlite-event-store.ts";
 import { WsTransport } from "./transport/ws-transport.ts";
@@ -148,6 +149,7 @@ async function boot(config: Config, opts: { timers?: Timers; broadcastIntervalMs
     joinCode: () => joinCodeOf(getRuntime().session.id),
     newSession: (game: GameDocument) => switchSession(game),
     media,
+    library: new GameLibrary(dataDir),
     join: joinPlayer,
     revoke,
     secret,

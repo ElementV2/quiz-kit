@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { Phase } from "./phase.ts";
 import { Media } from "./content.ts";
 import { OptionId, ParticipantId, QuestionId, SessionId, TeamId } from "./ids.ts";
 import { Participant, ParticipantStatus, ScoreEntry, Team } from "./session.ts";
@@ -8,8 +9,7 @@ import { Participant, ParticipantStatus, ScoreEntry, Team } from "./session.ts";
  * renderer / apps (consumers). Secrets live in fields that are `null` for player / output before reveal.
  */
 
-export const Phase = z.enum(["lobby", "idle", "presenting", "open", "locked", "judging", "revealed", "round.end", "game.end"]);
-export type Phase = z.infer<typeof Phase>;
+export { Phase } from "./phase.ts";
 
 export const ChoiceMechanicView = z.strictObject({
   mechanic: z.literal("choice"),

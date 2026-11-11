@@ -59,6 +59,7 @@ export function buildLinks(opts: {
     make("Régie", "control", "/control", { role: "control" }),
     make("Régie (lecture seule)", "control-readonly", "/control", { role: "control-readonly" }),
     make("Animateur", "host", "/host", { role: "host" }),
+    make("Studio", "studio", "/studio", { role: "studio" }),
     ...opts.outputs.map((scene) => make(`Sortie ${scene}`, `out-${scene}`, `/out/${scene}`, { role: "output", scene })),
     ...Array.from({ length: opts.seats }, (_, i) => make(`Siège ${i + 1}`, `seat-${i + 1}`, `/seat/${i + 1}`, { role: "seat", seat: i + 1 })),
   ];

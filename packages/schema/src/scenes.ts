@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { Phase } from "./views.ts";
+import { Phase } from "./phase.ts";
 
 /**
  * Scenes & themes (doc 02 "Scène et habillage", doc 06). A scene is a fixed-size canvas of layers of zones;

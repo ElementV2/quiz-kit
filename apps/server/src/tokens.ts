@@ -12,6 +12,7 @@ export const TokenClaims = z.discriminatedUnion("role", [
   z.strictObject({ v: z.literal(1), show: z.string(), jti: z.string(), exp: z.number().int().nullable(), role: z.literal("control-readonly") }),
   z.strictObject({ v: z.literal(1), show: z.string(), jti: z.string(), exp: z.number().int().nullable(), role: z.literal("scorer") }),
   z.strictObject({ v: z.literal(1), show: z.string(), jti: z.string(), exp: z.number().int().nullable(), role: z.literal("host") }),
+  z.strictObject({ v: z.literal(1), show: z.string(), jti: z.string(), exp: z.number().int().nullable(), role: z.literal("studio") }),
   z.strictObject({ v: z.literal(1), show: z.string(), jti: z.string(), exp: z.number().int().nullable(), role: z.literal("output"), scene: SceneName }),
   z.strictObject({ v: z.literal(1), show: z.string(), jti: z.string(), exp: z.number().int().nullable(), role: z.literal("seat"), seat: z.number().int().min(1).max(999) }),
   z.strictObject({ v: z.literal(1), show: z.string(), jti: z.string(), exp: z.number().int().nullable(), role: z.literal("player"), participantId: ParticipantId }),
@@ -68,6 +69,7 @@ export function viewerOf(c: TokenClaims): Viewer {
     case "control-readonly":
     case "scorer":
     case "host":
+    case "studio":
       return { role: c.role };
     default:
       return assertNever(c);

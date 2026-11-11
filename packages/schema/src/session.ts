@@ -3,6 +3,7 @@ import { Question } from "./content.ts";
 import { Format } from "./format.ts";
 import { ParticipantId, QuestionId, ScoreEntryId, SessionId, TeamId } from "./ids.ts";
 import { Actor } from "./roles.ts";
+import { Scene, Theme } from "./scenes.ts";
 
 export const ParticipantStatus = z.enum(["active", "eliminated", "waiting", "substitute", "disconnected"]);
 export type ParticipantStatus = z.infer<typeof ParticipantStatus>;
@@ -62,6 +63,9 @@ export const GameDocument = z
     title: z.string().min(1).max(200),
     questions: z.array(Question).min(1),
     format: Format,
+    /** Look (doc 06): theme + output scenes. Optional: built-in presets are used when absent. */
+    theme: Theme.optional(),
+    scenes: z.array(Scene).default([]),
   })
   .superRefine((g, ctx) => {
     const ids = new Set(g.questions.map((q) => q.id));

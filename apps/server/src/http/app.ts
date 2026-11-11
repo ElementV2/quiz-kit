@@ -8,6 +8,7 @@ import type { Links } from "../links.ts";
 import type { SessionRuntime } from "../runtime/session-runtime.ts";
 import { loadGameDocument, type GameDocument } from "@quiz/schema";
 import type { MediaStore } from "../media/media-store.ts";
+import { GameLibrary, exportQuiz, importQuiz } from "../media/library.ts";
 import { verifyToken } from "../tokens.ts";
 import { PREVIEW_CSS, PREVIEW_HTML, PREVIEW_JS } from "./preview-page.ts";
 
@@ -18,6 +19,7 @@ export type HttpDeps = {
   readonly joinCode: () => string;
   readonly newSession: (game: GameDocument) => { id: string };
   readonly media: MediaStore;
+  readonly library: GameLibrary;
   readonly join: (name: string) => { ok: true; token: string; participantId: string } | { ok: false; error: string };
   readonly secret: string;
   readonly show: string;
@@ -67,12 +69,18 @@ const page = (name: AppName) => async (_req: unknown, reply: { header(k: string,
   return reply.type("text/html; charset=utf-8").send(appIndex(name));
 };
 
-function controlToken(deps: HttpDeps, req: FastifyRequest<{ Querystring: { t?: string } }>): boolean {
+function roleOf(deps: HttpDeps, req: FastifyRequest<{ Querystring: { t?: string } }>): string | null {
   const bearer = req.headers.authorization?.replace(/^Bearer\s+/i, "");
   const token = req.query.t ?? bearer ?? "";
   const r = verifyToken(deps.secret, token, { now: deps.clock(), show: deps.show, isRevoked: deps.isRevoked });
-  return r.ok && r.claims.role === "control";
+  return r.ok ? r.claims.role : null;
 }
+const controlToken = (deps: HttpDeps, req: FastifyRequest<{ Querystring: { t?: string } }>): boolean => roleOf(deps, req) === "control";
+/** Content editing (library, media): control room or studio. */
+const staffToken = (deps: HttpDeps, req: FastifyRequest<{ Querystring: { t?: string } }>): boolean => {
+  const r = roleOf(deps, req);
+  return r === "control" || r === "studio";
+};
 
 const RevokeBody = z.strictObject({ link: z.string().regex(/^[0-9a-z-]+$/).max(64) });
 const JoinBody = z.strictObject({ code: z.string().regex(/^\d{6}$/), name: z.string().trim().min(1).max(40) });
@@ -105,6 +113,14 @@ export function buildHttpApp(deps: HttpDeps, options: FastifyServerOptions): Fas
     return { ...deps.links(), joinCode: deps.joinCode() };
   });
 
+  /** Look of the current game (theme + scenes): public data, any valid role token. Outputs refetch it on a game switch. */
+  app.get<{ Querystring: { t?: string } }>("/api/presentation", async (req, reply) => {
+    const r = verifyToken(deps.secret, req.query.t ?? "", { now: deps.clock(), show: deps.show, isRevoked: deps.isRevoked });
+    if (!r.ok) return reply.code(401).send({ error: "jeton requis" });
+    const s = deps.runtime().session;
+    return { sessionId: s.id, theme: s.game.theme ?? null, scenes: s.game.scenes };
+  });
+
   /** Live status for the control room: presence + journal health (polled every few seconds). */
   app.get<{ Querystring: { t?: string } }>("/api/status", async (req, reply) => {
     if (!controlToken(deps, req)) return reply.code(401).send({ error: "jeton régie requis" });
@@ -114,7 +130,7 @@ export function buildHttpApp(deps: HttpDeps, options: FastifyServerOptions): Fas
   // Media upload: raw body streamed to disk while hashed (no multipart, no buffering of big stingers).
   app.addContentTypeParser(/^(image|video|audio)\/.+$|^application\/octet-stream$/, (_req, payload, done) => done(null, payload));
   app.post<{ Querystring: { t?: string; name?: string } }>("/api/media", { bodyLimit: 1024 * 1024 * 1024 }, async (req, reply) => {
-    if (!controlToken(deps, req)) return reply.code(401).send({ error: "jeton régie requis" });
+    if (!staffToken(deps, req)) return reply.code(401).send({ error: "jeton régie ou studio requis" });
     const mime = (req.headers["content-type"] ?? "application/octet-stream").split(";")[0]?.trim() ?? "application/octet-stream";
     const body = req.body;
     if (typeof body !== "object" || body === null || !("pipe" in body)) return reply.code(400).send({ error: "corps binaire attendu" });
@@ -135,6 +151,53 @@ export function buildHttpApp(deps: HttpDeps, options: FastifyServerOptions): Fas
     reply.header("content-security-policy", "default-src 'none'; style-src 'unsafe-inline'; sandbox");
     reply.type(meta.mime);
     return reply.sendFile(req.params.hash, deps.media.dir);
+  });
+
+  // ── Game library (studio) ──────────────────────────────────────────────────
+  app.get<{ Querystring: { t?: string } }>("/api/games", async (req, reply) => {
+    if (!staffToken(deps, req)) return reply.code(401).send({ error: "jeton régie ou studio requis" });
+    return { games: deps.library.list() };
+  });
+  app.get<{ Querystring: { t?: string }; Params: { id: string } }>("/api/games/:id", async (req, reply) => {
+    if (!staffToken(deps, req)) return reply.code(401).send({ error: "jeton régie ou studio requis" });
+    const g = deps.library.get(req.params.id);
+    return g === null ? reply.code(404).send({ error: "partie inconnue" }) : { game: g };
+  });
+  app.put<{ Querystring: { t?: string }; Params: { id: string } }>("/api/games/:id", async (req, reply) => {
+    if (!staffToken(deps, req)) return reply.code(401).send({ error: "jeton régie ou studio requis" });
+    const body = z.strictObject({ game: z.unknown() }).safeParse(req.body);
+    const r = deps.library.put(req.params.id, body.success ? body.data.game : null);
+    return r.ok ? { ok: true } : reply.code(400).send({ error: "jeu invalide", detail: r.error });
+  });
+  app.delete<{ Querystring: { t?: string }; Params: { id: string } }>("/api/games/:id", async (req, reply) => {
+    if (!staffToken(deps, req)) return reply.code(401).send({ error: "jeton régie ou studio requis" });
+    return deps.library.delete(req.params.id) ? { ok: true } : reply.code(404).send({ error: "partie inconnue" });
+  });
+  /** Launches a library game live (control room only). */
+  app.post<{ Querystring: { t?: string }; Params: { id: string } }>("/api/games/:id/launch", async (req, reply) => {
+    if (!controlToken(deps, req)) return reply.code(401).send({ error: "jeton régie requis" });
+    const g = deps.library.get(req.params.id);
+    if (g === null) return reply.code(404).send({ error: "partie inconnue" });
+    const s = deps.newSession(g);
+    return { sessionId: s.id, title: g.title, joinCode: deps.joinCode() };
+  });
+  /** `.quiz` export: game + its media in one zip, to move a game to the show machine. */
+  app.get<{ Querystring: { t?: string }; Params: { id: string } }>("/api/games/:id/export", async (req, reply) => {
+    if (!staffToken(deps, req)) return reply.code(401).send({ error: "jeton régie ou studio requis" });
+    const g = deps.library.get(req.params.id);
+    if (g === null) return reply.code(404).send({ error: "partie inconnue" });
+    reply.header("content-disposition", `attachment; filename="${req.params.id}.quiz"`);
+    return reply.type("application/zip").send(Buffer.from(exportQuiz(g, deps.media)));
+  });
+  app.addContentTypeParser("application/zip", { parseAs: "buffer", bodyLimit: 2 * 1024 * 1024 * 1024 }, (_req, body, done) => done(null, body));
+  app.post<{ Querystring: { t?: string; id?: string } }>("/api/import", { bodyLimit: 2 * 1024 * 1024 * 1024 }, async (req, reply) => {
+    if (!staffToken(deps, req)) return reply.code(401).send({ error: "jeton régie ou studio requis" });
+    if (!(req.body instanceof Buffer)) return reply.code(400).send({ error: "archive .quiz attendue (application/zip)" });
+    const r = await importQuiz(new Uint8Array(req.body), deps.media);
+    if (!r.ok) return reply.code(400).send({ error: r.error });
+    const id = req.query.id !== undefined && GameLibrary.isId(req.query.id) ? req.query.id : `g_${Date.now().toString(36)}`;
+    const saved = deps.library.put(id, r.game);
+    return saved.ok ? { id, title: r.game.title, media: r.media } : reply.code(400).send({ error: "jeu invalide" });
   });
 
   /** Starts a new game from a game document (imported CSV, template). Control token only; journaled. */

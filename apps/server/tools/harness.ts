@@ -28,6 +28,7 @@ export function bigGame(n: number, maxPlayers = 1000): GameDocument {
   }));
   return {
     schemaVersion: 1,
+    scenes: [],
     title: "Charge",
     questions,
     format: {

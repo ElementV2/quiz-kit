@@ -9,6 +9,7 @@ import { Config } from "./config.ts";
 import { buildHttpApp, loggerOptions } from "./http/app.ts";
 import { SessionRuntime } from "./runtime/session-runtime.ts";
 import { MediaStore } from "./media/media-store.ts";
+import { GameLibrary } from "./media/library.ts";
 import { startServer, type RunningServer } from "./server.ts";
 import { MemoryEventStore } from "./store/event-store.ts";
 import { FakeTime, RecordingLog, silentLog } from "./testing/fakes.ts";
@@ -95,6 +96,7 @@ describe("review #2 — tokens never reach the logs", () => {
       joinCode: () => "123456",
       newSession: () => ({ id: "ses_x" }),
       media: new MediaStore(mkdtempSync(join(tmpdir(), "quiz-media-"))),
+      library: new GameLibrary(mkdtempSync(join(tmpdir(), "quiz-lib-"))),
       join: () => ({ ok: false as const, error: "unused" }),
       secret: "s",
       show: "main",

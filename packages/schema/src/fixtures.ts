@@ -7,6 +7,7 @@ import type { GameDocument } from "./session.ts";
 export const DEMO_GAME: GameDocument = {
   schemaVersion: 1,
   title: "Démo culture G",
+  scenes: [],
   questions: [
     {
       id: "q_capital_fr",
