@@ -35,7 +35,7 @@ test("a free seat tablet seats its player by name; the control room raises the s
 
   // Nobody on seat 1: the tablet says so and seats its player itself.
   await expect(seat.getByText("Siège libre")).toBeVisible();
-  await expect(seat.getByText("SIÈGE 1")).toBeVisible();
+  await expect(seat.locator(".p-claim-seat")).toHaveText("SIÈGE 1");
   await seat.getByLabel("Votre prénom ou pseudo").fill("Zoé");
   await seat.getByRole("button", { name: "Je m'installe" }).click();
   await expect(seat.getByText("Siège libre")).toBeHidden();

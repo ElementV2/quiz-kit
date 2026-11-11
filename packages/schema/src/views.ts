@@ -13,7 +13,7 @@ export { Phase } from "./phase.ts";
 
 export const ChoiceMechanicView = z.strictObject({
   mechanic: z.literal("choice"),
-  kind: z.enum(["single", "multi", "boolean"]),
+  kind: z.enum(["single", "multi", "boolean", "vote"]),
   options: z.array(z.strictObject({ id: OptionId, label: z.string(), media: Media.optional() })),
   minPick: z.number().int(),
   maxPick: z.number().int(),

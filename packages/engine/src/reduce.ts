@@ -196,7 +196,13 @@ function reduceAllowed(s: GameState, a: Action, ctx: Ctx, registry: Registry): R
       if ((a.teamId === undefined) === (a.participantId === undefined)) return err("invalid", "désigner une équipe ou un joueur");
       if (a.teamId !== undefined && !s.teams.some((t) => t.id === a.teamId)) return err("not-found", "équipe inconnue");
       if (a.participantId !== undefined && !s.participants.some((p) => p.id === a.participantId)) return err("not-found", "joueur inconnu");
-      return mechanicAction(s, a, ctx, registry);
+      {
+        const r = mechanicAction(s, a, ctx, registry);
+        // The hand (or the steal) goes to another side while the answers were closed: they reopen for it — its
+        // tablets must not stay on « Réponses fermées ». No timer: the play is oral, the control room judges.
+        if (!r.ok || (s.phase !== "locked" && s.phase !== "judging")) return r;
+        return ok({ ...r.value, phase: "open", lockedAt: null, timer: null });
+      }
 
     case "element.reveal":
     case "joker.use":
@@ -538,7 +544,14 @@ function forceVerdict(s: GameState, a: ActionOf<"answer.verdict">, ctx: Ctx, reg
   const mechanicId = onAir && s.mechanic !== null ? s.mechanic.id : record?.mechanicId;
   const m = mechanicId === undefined ? null : registry.get(mechanicId);
   if (m === null) return err("conflict", "question pas encore jouée");
-  if (a.correct === true && m.ownPoints === true) return err("unsupported", "ici la manche décide de ses points : compter faux, ou ajuster le score à la main");
+  // Points decided by the game (survey, allocation…): « right » only takes back a « wrong » forced earlier (its
+  // points return); forcing right someone the game did not reward cannot invent points.
+  const forcedBefore = [...(onAir ? s.verdicts : []), ...(record?.verdicts ?? [])].some((v) => v.participantId === a.participantId && !v.correct);
+  const state: unknown = onAir && s.mechanic !== null ? s.mechanic.state : record?.state;
+  const simpleVote = typeof state === "object" && state !== null && "kind" in state && state.kind === "vote" && "vote" in state && state.vote === "none";
+  if (a.correct === true && simpleVote && !forcedBefore) return err("unsupported", "simple vote sans points : rien à compter juste (régler « Points » de la catégorie Vote, ou ajuster le score)");
+  if (a.correct === true && m.ownPoints === true && !forcedBefore) return err("unsupported", "ici le jeu calcule ses points : impossible de compter juste en plus — ajuster le score à la main (onglet Joueurs)");
+  if (a.correct === true && m.ownPoints === true) return forceVerdict(s, { ...a, correct: null }, ctx, registry);
   if (onAir && s.phase !== "revealed") return ok({ ...s, verdicts: withVerdict(s.verdicts, a.participantId, a.correct) });
   if (record === undefined) return err("conflict", "question pas encore révélée");
   const round = s.game.format.rounds[record.roundIndex];

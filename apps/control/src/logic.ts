@@ -124,6 +124,7 @@ export function regradeSpec(spec: Spec, draft: { readonly picked?: readonly stri
       return { ...spec, correct, tolerance };
     }
     case "poll":
+    case "vote":
     case "oral":
     case "order":
     case "pairs":

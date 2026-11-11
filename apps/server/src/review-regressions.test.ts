@@ -495,3 +495,35 @@ describe("relaunching a game keeps the players (no one is kicked)", () => {
   });
 });
 
+describe("one device per seat / per player", () => {
+  it("the newest device opening a seat takes it; the older one is told and stops (no fight, no double player)", async () => {
+    const s = await boot();
+    const first = await rawSocket(s);
+    hello(first.ws, tokenOf(s, "seat-1"));
+    await wait(100);
+    const second = await rawSocket(s);
+    hello(second.ws, tokenOf(s, "seat-1"));
+    expect(await first.closed).toBe(4001);
+    expect(first.messages.some((m) => m["t"] === "error" && m["code"] === "taken-over")).toBe(true);
+    await wait(80);
+    expect(second.messages.some((m) => m["t"] === "error")).toBe(false);
+    second.ws.close();
+  });
+
+  it("same for a /play player opened on a second device", async () => {
+    const s = await boot();
+    const t = tokenOf(s, "control");
+    const base = `http://127.0.0.1:${s.port}`;
+    const code = ((await (await fetch(`${base}/api/links?t=${t}`)).json()) as { joinCode: string }).joinCode; // oxlint-disable-line typescript/no-unsafe-type-assertion -- own endpoint
+    const joined = (await (await fetch(`${base}/api/join`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ code, name: "Léo" }) })).json()) as { token: string }; // oxlint-disable-line typescript/no-unsafe-type-assertion -- own endpoint
+    const a = await rawSocket(s);
+    hello(a.ws, joined.token);
+    await wait(100);
+    const b = await rawSocket(s);
+    hello(b.ws, joined.token);
+    expect(await a.closed).toBe(4001);
+    expect(a.messages.some((m) => m["code"] === "taken-over")).toBe(true);
+    b.ws.close();
+  });
+});
+

@@ -272,6 +272,30 @@ export class WsTransport {
     conn.unsubscribe = runtime.subscribe(stream);
     const hashes = this.deps.preload?.(viewer) ?? [];
     if (hashes.length > 0) this.send(conn, { t: "preload", hashes });
+    this.evictOthers(conn, viewer);
+  }
+
+  /**
+   * One device per seat and per player: the newest opening takes it (a refresh, or the tablet replacing a broken
+   * one). The older one is told, stops at once (no more views, its intents refused) and is closed hard shortly
+   * after — never two screens answering for the same player. Called once the new one is welcomed.
+   */
+  private evictOthers(conn: Conn, viewer: Viewer): void {
+    if (viewer.role !== "seat" && viewer.role !== "player") return;
+    const same = (other: Viewer | null): boolean =>
+      other !== null && ((viewer.role === "seat" && other.role === "seat" && other.seat === viewer.seat) || (viewer.role === "player" && other.role === "player" && other.participantId === viewer.participantId));
+    for (const c of this.conns) {
+      if (c === conn || !same(c.viewer)) continue;
+      this.send(c, { t: "error", code: "taken-over", message: viewer.role === "seat" ? `Le siège ${viewer.seat} est maintenant ouvert sur un autre appareil.` : "Ce joueur est maintenant ouvert sur un autre appareil (ou un autre onglet)." });
+      c.unsubscribe?.();
+      c.unsubscribe = null;
+      c.viewer = null; // any further intent is refused (« hello attendu »)
+      c.ws.close(4001, "taken-over");
+      const ws = c.ws;
+      setTimeout(() => {
+        if (ws.readyState !== ws.CLOSED) ws.terminate();
+      }, 1500).unref();
+    }
   }
 
   /** The server stamps the actor from the token, never from the message (non-negotiable #2). */

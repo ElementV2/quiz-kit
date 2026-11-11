@@ -109,5 +109,47 @@ describe("category settings change the game", () => {
     expect(pointsFor([{ type: "base", points: 100 }, { type: "multiplier", factor: 2 }], partial, { openedAt: 1000, durationMs: null })).toBe(100);
     expect(applyVerdicts([partial], [{ participantId: "p_1", correct: true }], 1000)).toEqual([{ kind: "rule", participantId: "p_1", outcome: "correct", answeredAt: 1000 }]);
   });
+
+  it("vote: no right answer — no points, or the majority / the minority score; the most voted stands out at the reveal", () => {
+    const vote: Question = { id: "q_vote", prompt: { text: "Pizza ou burger ?" }, answerSpec: { kind: "vote", options: [{ id: "a", label: "Pizza" }, { id: "b", label: "Burger" }] }, hints: [], tags: [] };
+    const votes: [string, AnswerValue][] = [["p_1", { kind: "choice", optionIds: ["a"] }], ["p_2", { kind: "choice", optionIds: ["a"] }], ["p_3", { kind: "choice", optionIds: ["b"] }]];
+    expect(play(choice, {}, vote, votes)).toEqual([]);
+    const maj = play(choice, { vote: "majority" }, vote, votes);
+    expect([of(maj, "p_1"), of(maj, "p_3")].map((j) => j?.kind === "rule" && j.outcome)).toEqual(["correct", "wrong"]);
+    const min = play(choice, { vote: "minority" }, vote, votes);
+    expect([of(min, "p_1"), of(min, "p_3")].map((j) => j?.kind === "rule" && j.outcome)).toEqual(["wrong", "correct"]);
+    const cfg = choice.configSchema.parse({});
+    let st = choice.init(cfg, vote, env, ctx(vote));
+    if (!st.ok) throw new Error("vote");
+    for (const [pid, a] of votes) {
+      const r = choice.submit(st.value, pid, a, env);
+      if (!r.ok) throw new Error("submit");
+      st = r;
+    }
+    expect(choice.project(st.value, { audience: "public", phase: "revealed", participantId: null })).toMatchObject({ kind: "vote", correct: ["a"], counts: { a: 2, b: 1 } });
+    expect(choice.project(st.value, { audience: "player", phase: "open", participantId: "p_1" })).toMatchObject({ correct: null });
+  });
+
+  it("race: only the N fastest right answers score", () => {
+    const capital = q(DEMO_GAME, "q_capital_fr");
+    const right = capital.answerSpec.kind === "single" ? capital.answerSpec.correct : "";
+    const cfg = choice.configSchema.parse({ race: 1 });
+    let st = choice.init(cfg, capital, env, ctx(capital));
+    if (!st.ok) throw new Error("init");
+    for (const [pid, at] of [["p_1", 2000], ["p_2", 1500]] as const) {
+      const r = choice.submit(st.value, pid, { kind: "choice", optionIds: [right] }, { ...env, at });
+      if (!r.ok) throw new Error("submit");
+      st = r;
+    }
+    const js = choice.judge(st.value);
+    expect(points(of(js, "p_2"))).toBe(100); // fastest
+    expect(points(of(js, "p_1"))).toBe(0); // right, but second
+  });
+
+  it("vote: a tie has no minority (nobody scores); the reveal shows the mode's winners", () => {
+    const vote: Question = { id: "q_vote2", prompt: { text: "A ou B ?" }, answerSpec: { kind: "vote", options: [{ id: "a", label: "A" }, { id: "b", label: "B" }] }, hints: [], tags: [] };
+    const tie: [string, AnswerValue][] = [["p_1", { kind: "choice", optionIds: ["a"] }], ["p_2", { kind: "choice", optionIds: ["b"] }]];
+    expect(play(choice, { vote: "minority" }, vote, tie).every((j) => j.outcome === "wrong")).toBe(true);
+  });
 });
 

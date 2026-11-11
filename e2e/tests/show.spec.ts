@@ -102,9 +102,9 @@ test("a player joins with the game code over plain HTTP", async ({ browser }) =>
   await page.getByLabel("Ton pseudo").fill("Zoé");
   await page.getByRole("button", { name: "C'est parti" }).click();
   await page.getByText("Touchez l'écran pour commencer").click();
-  await expect(page.locator(".p-name")).toHaveText("Zoé");
+  await expect(page.locator(".p-name")).toHaveText("Zoé · ce téléphone"); // same player, and it says where
   await page.reload(); // token kept in localStorage: same player after a reload
   await page.getByText("Touchez l'écran pour commencer").click();
-  await expect(page.locator(".p-name")).toHaveText("Zoé");
+  await expect(page.locator(".p-name")).toHaveText("Zoé · ce téléphone"); // same player, and it says where
   expect(errors).toEqual([]);
 });

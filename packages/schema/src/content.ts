@@ -51,6 +51,9 @@ export const PollAnswer = z.strictObject({
   options: options(1, 12),
 });
 
+/** Vote (opinion poll, Kahoot-like): no right answer; the tablets vote, the screen shows the shares. */
+export const VoteAnswer = z.strictObject({ kind: z.literal("vote"), options: options(2, 8) });
+
 export const OralAnswer = z.strictObject({
   kind: z.literal("oral"),
   /** Shown to host / control only. */
@@ -105,7 +108,7 @@ export const AllocationAnswer = z
   .strictObject({ kind: z.literal("allocation"), options: options(2, 6), correct: OptionId, budget: z.number().int().min(1).max(10_000_000) })
   .refine((a) => a.options.some((o) => o.id === a.correct), "la bonne réponse doit être une des options");
 
-export const AnswerSpec = z.discriminatedUnion("kind", [SingleAnswer, MultiAnswer, BooleanAnswer, PollAnswer, OralAnswer, TextAnswer, NumberAnswer, OrderAnswer, PairsAnswer, PinAnswer, AllocationAnswer]);
+export const AnswerSpec = z.discriminatedUnion("kind", [SingleAnswer, MultiAnswer, BooleanAnswer, VoteAnswer, PollAnswer, OralAnswer, TextAnswer, NumberAnswer, OrderAnswer, PairsAnswer, PinAnswer, AllocationAnswer]);
 export type AnswerSpec = z.infer<typeof AnswerSpec>;
 export type AnswerKind = AnswerSpec["kind"];
 

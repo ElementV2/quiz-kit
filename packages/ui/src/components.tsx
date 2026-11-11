@@ -1,4 +1,4 @@
-import { Show, createSignal, onCleanup, type JSX, type ParentProps } from "solid-js";
+import { Show, createEffect, createMemo, createSignal, onCleanup, type JSX, type ParentProps } from "solid-js";
 import type { ClientStatus } from "@quiz/protocol";
 import type { Phase } from "@quiz/schema";
 
@@ -28,14 +28,29 @@ const STATUS_LABEL: Record<ClientStatus, string> = {
   open: "connecté",
   reconnecting: "reconnexion…",
   rejected: "accès refusé",
+  taken: "ouvert ailleurs",
   stopped: "arrêté",
 };
 
+/**
+ * Connection state. Every action waits a few ms for its ack: showing « 1 en attente » for that would make the whole
+ * bar jump at each step. The count shows only when the queue lasts (a real backlog: network cut, server busy).
+ */
 export function StatusPill(p: { status: ClientStatus; queued?: number; detail?: string | undefined }): JSX.Element {
+  const [lasting, setLasting] = createSignal(false);
+  const waiting = createMemo(() => (p.queued ?? 0) > 0); // 1 → 2 → 3 does not restart the delay
+  createEffect(() => {
+    if (!waiting()) {
+      setLasting(false);
+      return;
+    }
+    const t = setTimeout(() => setLasting(true), 1200);
+    onCleanup(() => clearTimeout(t));
+  });
   return (
-    <span class={`q-status q-status-${p.status}`} title={p.detail}>
+    <span class={`q-status q-status-${p.status}`} title={(p.queued ?? 0) > 0 ? `${p.queued} action(s) en attente de confirmation${p.detail === undefined ? "" : ` · ${p.detail}`}` : p.detail}>
       {STATUS_LABEL[p.status]}
-      <Show when={(p.queued ?? 0) > 0}> · {p.queued} en attente</Show>
+      <Show when={lasting() && (p.queued ?? 0) > 0}> · {p.queued} en attente</Show>
     </span>
   );
 }

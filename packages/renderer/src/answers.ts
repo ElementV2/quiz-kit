@@ -45,6 +45,7 @@ export function correctText(m: MechanicView | null): string | null {
   if (m === null) return null;
   switch (m.mechanic) {
     case "choice":
+      if (m.kind === "vote") return m.correct === null || m.correct.length === 0 ? null : `En tête : ${m.correct.map((id) => labelIn(m.options, id)).join(" + ")}`;
       return m.correct === null ? null : m.correct.map((id) => labelIn(m.options, id)).join(" + ");
     case "ladder":
       return m.correct === null ? null : labelIn(m.options, m.correct);

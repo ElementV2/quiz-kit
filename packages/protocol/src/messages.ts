@@ -50,7 +50,8 @@ export const Ping = z.strictObject({ t: z.literal("ping"), serverTime: z.number(
 export const Preload = z.strictObject({ t: z.literal("preload"), hashes: z.array(z.string()) });
 export const ErrorMessage = z.strictObject({
   t: z.literal("error"),
-  code: z.enum(["bad-message", "too-large", "unsupported-version", "unauthorized", "rate-limited", "not-ready", "server-error"]),
+  /** `taken-over`: the same seat / player was opened on another device (or tab): this one stops (no reconnect). */
+  code: z.enum(["bad-message", "too-large", "unsupported-version", "unauthorized", "rate-limited", "not-ready", "server-error", "taken-over"]),
   message: z.string(),
 });
 

@@ -111,12 +111,18 @@ function computeCancelled(events: readonly Event[]): Map<number, number> {
 }
 
 function fold(session: Session, events: readonly Event[], cancelledBy: ReadonlyMap<number, number>, registry: Registry, from: GameState = initialState(session)): { state: GameState; skipped: Skipped[] } {
+  const bySeq = new Map(events.map((x) => [x.seq, x]));
   let state = from;
   const skipped: Skipped[] = [];
   for (const e of events) {
     if (e.action.type === "undo") {
       if (e.action.targetSeq === undefined || e.action.targetSeq >= e.seq) skipped.push({ seq: e.seq, type: "undo", reason: "undo sans cible valide" });
-      state = { ...state, lastSeq: e.seq };
+      // An undo that reopens answers whose timer already ran out reopens them WITHOUT a timer: else the expired
+      // timer closes them again at once and the control room can never go back (« +10 s » restarts one).
+      const target = e.action.targetSeq === undefined ? undefined : bySeq.get(e.action.targetSeq);
+      const reopening = !cancelledBy.has(e.seq) && (target?.action.type === "question.lock" || target?.action.type === "timer.expired");
+      const expired = reopening && state.timer !== null && state.timer.endsAt <= e.at && state.phase === "open";
+      state = { ...state, lastSeq: e.seq, ...(expired ? { timer: null } : {}) };
       continue;
     }
     if (cancelledBy.has(e.seq)) continue;

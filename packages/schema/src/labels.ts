@@ -36,6 +36,7 @@ export const ANSWER_KIND_LABEL_FR: Readonly<Record<AnswerKind, string>> = {
   single: "QCM (une réponse)",
   multi: "QCM (plusieurs réponses)",
   boolean: "vrai / faux",
+  vote: "vote (sans bonne réponse)",
   poll: "sondage",
   oral: "réponse orale",
   text: "réponse libre",
@@ -130,6 +131,7 @@ export const POINTS_SOURCE_FR: Readonly<Record<PointsSource, string>> = {
 /** Question categories of a « Mixte » round, in words. */
 export const CATEGORY_LABEL_FR: Readonly<Record<string, string>> = {
   choice: "QCM et vrai / faux",
+  vote: "vote",
   poll: "sondage",
   oral: "réponse orale",
   text: "réponse libre",

@@ -62,7 +62,17 @@ function App() {
   const onKey = (e: KeyboardEvent) => {
     if (isDialogOpen()) return; // our dialog owns the keyboard (Entrée / Échap)
     const t = e.target;
-    if (t instanceof HTMLInputElement || t instanceof HTMLTextAreaElement || t instanceof HTMLSelectElement) return;
+    // Only real text entry keeps the keys (typing a name, a score…): a list, a checkbox or a button just chosen
+    // must not swallow Space / Ctrl+Z (a survey's team list used to block the undo).
+    const typing = t instanceof HTMLTextAreaElement || (t instanceof HTMLInputElement && !["checkbox", "radio", "button", "submit", "range", "color"].includes(t.type));
+    if (typing) return;
+    const undoKey = (e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "z";
+    const choiceField = t instanceof HTMLSelectElement || (t instanceof HTMLInputElement && (t.type === "checkbox" || t.type === "radio"));
+    if (choiceField && !undoKey) {
+      // A list keeps its letters / arrows / Enter, a check box its Space; Space on a list = next step.
+      if (!(t instanceof HTMLSelectElement && e.code === "Space")) return;
+      t.blur();
+    }
     const v = view();
     if (v === null || readonly()) return;
     if (kb.handle(e)) return;

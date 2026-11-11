@@ -19,7 +19,8 @@ const scoring = ScoringRule.optional();
  * round's). Survey and allocation decide their own points (no rule).
  */
 export const MixedKinds = z.strictObject({
-  choice: z.strictObject({ shuffleOptions: z.boolean().optional(), allowChange, partialMulti: z.boolean().optional(), scoring }).optional(),
+  choice: z.strictObject({ shuffleOptions: z.boolean().optional(), allowChange, partialMulti: z.boolean().optional(), race: z.number().int().min(0).max(1000).optional(), scoring }).optional(),
+  vote: z.strictObject({ mode: z.enum(["none", "majority", "minority"]).optional(), shuffleOptions: z.boolean().optional(), allowChange, scoring }).optional(),
   poll: z.strictObject({ mode: z.enum(["per-answer", "bank"]).optional(), maxStrikes: z.number().int().min(1).max(10).optional(), multiplier: z.number().positive().max(100).optional(), steal: z.boolean().optional(), revealAll: z.boolean().optional() }).optional(),
   oral: z.strictObject({ lockoutOnWrong: z.boolean().optional(), scoring }).optional(),
   text: z.strictObject({ allowChange, typos: z.enum(["auto", "0", "1", "2", "3"]).optional(), scoring }).optional(),
@@ -37,6 +38,7 @@ export const MIXED_CATEGORY: Readonly<Record<AnswerKind, MixedCategory>> = {
   single: "choice",
   multi: "choice",
   boolean: "choice",
+  vote: "vote",
   poll: "poll",
   oral: "oral",
   text: "text",
@@ -74,6 +76,7 @@ export const MIXED_ROUTES: Readonly<Record<AnswerKind, string>> = {
   single: "choice",
   multi: "choice",
   boolean: "choice",
+  vote: "choice",
   poll: "poll-board",
   oral: "buzzer",
   text: "text-answer",
@@ -89,7 +92,14 @@ function routedConfig(cat: MixedCategory, c: MixedConfig): Record<string, unknow
   const k = c.kinds ?? {};
   switch (cat) {
     case "choice":
-      return { shuffleOptions: k.choice?.shuffleOptions ?? c.shuffleOptions, allowChange: k.choice?.allowChange ?? c.allowChange, ...(k.choice?.partialMulti === undefined ? {} : { partialMulti: k.choice.partialMulti }) };
+      return {
+        shuffleOptions: k.choice?.shuffleOptions ?? c.shuffleOptions,
+        allowChange: k.choice?.allowChange ?? c.allowChange,
+        ...(k.choice?.partialMulti === undefined ? {} : { partialMulti: k.choice.partialMulti }),
+        ...(k.choice?.race === undefined ? {} : { race: k.choice.race }),
+      };
+    case "vote":
+      return { shuffleOptions: k.vote?.shuffleOptions ?? c.shuffleOptions, allowChange: k.vote?.allowChange ?? c.allowChange, vote: k.vote?.mode ?? "none" };
     case "number":
       return {
         allowChange: k.number?.allowChange ?? c.allowChange,

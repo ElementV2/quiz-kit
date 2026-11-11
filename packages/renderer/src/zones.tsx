@@ -247,6 +247,9 @@ const PollBoardZone: Component<ZoneProps> = (p) => (
             </For>
           </div>
           <div style={{ display: "flex", "align-items": "center", gap: "18px", "font-size": "40px" }}>
+            <Show when={p.view.phase !== "revealed" && m().stage !== "done" && (m().stage === "steal" ? m().stealingTeamId : m().controllingTeamId)}>
+              {(side) => <span class="q-poll-hand" style={{ "font-size": "28px", color: "var(--q-color-accent)", "margin-right": "12px" }}>{m().stage === "steal" ? "Vol" : "Main"} : {sideName(p.view, side())}</span>}
+            </Show>
             <For each={Array.from({ length: m().maxStrikes }, (_, i) => i)}>
               {(i) => <span style={{ color: i < m().strikes ? "var(--q-color-wrong)" : "rgba(255,255,255,.18)", "font-weight": 900 }}>✗</span>}
             </For>

@@ -119,6 +119,8 @@ export function formatAnswer(spec: AnswerSpec): AnswerDisplay {
       const items = spec.options.map((o) => ({ text: o.label, right: o.id === spec.correct, value: null }));
       return { headline: items.find((i) => i.right)?.text ?? "—", items, ordered: false, note: `Mise de départ : ${formatNumber(spec.budget)}` };
     }
+    case "vote":
+      return { headline: "Pas de bonne réponse : vote", items: spec.options.map((o) => ({ text: o.label, right: false, value: null })), ordered: false, note: "Les % s'affichent à la révélation" };
     case "poll": {
       const sorted = spec.options.toSorted((a, b) => (b.value ?? 0) - (a.value ?? 0));
       return {

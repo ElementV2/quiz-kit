@@ -258,6 +258,8 @@ describe("every category setting reaches the mechanic that plays the question", 
     expect(routeOf({ text: { typos: "2" } }, "text")?.config).toMatchObject({ typos: "2" });
     expect(routeOf({ order: { partial: true } }, "order")?.config).toMatchObject({ partial: true });
     expect(routeOf({ poll: { steal: false, revealAll: false } }, "poll")?.config).toMatchObject({ steal: false, revealAll: false });
+    expect(routeOf({ vote: { mode: "majority" } }, "single")?.id).toBe("choice");
+    expect(routeOf({ choice: { race: 3 } }, "single")?.config).toMatchObject({ race: 3 });
   });
 
   it("and they change the game: no answer change on a QCM, the steal after 2 strikes on a survey", () => {
@@ -305,6 +307,26 @@ describe("what a question is worth, in words (studio, control room, host)", () =
     const q = ladder.questions[0];
     if (round === undefined || q === undefined) throw new Error("fixture");
     expect(pointsInfo(round, q, reg)).toMatchObject({ source: "own", summary: "gain du palier atteint" });
+  });
+});
+
+const v = (pid: string, correct: boolean | null) => ctl({ type: "answer.verdict", roundIndex: 0, questionIndex: 1, participantId: pid, correct });
+
+describe("verdict on a survey (points decided by the game)", () => {
+  it("« wrong » takes the points away, « right » afterwards gives them back; « right » on nothing is refused", () => {
+    const poll = pick("q_poll_breakfast");
+    const top = poll.answerSpec.kind === "poll" ? (poll.answerSpec.options[0]?.id ?? "") : "";
+    const g = run(reg, [
+      ...START, ctl({ type: "question.skip", roundIndex: 0, questionIndex: 0 }), ctl({ type: "question.present" }),
+      ctl({ type: "poll.control", participantId: "p_2" }), ctl({ type: "question.open" }), ctl({ type: "answer.judge", correct: true, optionId: top }),
+      ctl({ type: "question.lock" }), ctl({ type: "question.reveal" }),
+    ], createGame(makeSession(MIXED)));
+    const won = total(g, "p_2");
+    expect(won).toBeGreaterThan(0);
+    const off = run(reg, [v("p_2", false)], g);
+    expect(total(off, "p_2")).toBe(0);
+    expect(total(run(reg, [v("p_2", true)], off), "p_2")).toBe(won);
+    expect(() => run(reg, [v("p_1", true)], g)).toThrow(/ajuster le score/);
   });
 });
 

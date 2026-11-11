@@ -195,3 +195,33 @@ describe("replay from a snapshot", () => {
     expect(participantTotal(g.state, "p_1")).toBe(0);
   });
 });
+
+describe("undo after a timer ran out", () => {
+  it("undoing the automatic lock reopens the answers without the expired timer (they do not close again at once)", () => {
+    let g = run(reg, OPEN_Q1);
+    const t = g.state.timer;
+    if (t === null) throw new Error("the demo round has a timer");
+    // The timer runs out: the server locks (system), much later than its end.
+    const late = t.endsAt + 5000;
+    const exp = decide(g, { action: { type: "timer.expired", timerId: t.id }, actor: { role: "system" }, idempotencyKey: null }, late, reg);
+    if (!exp.ok) throw new Error(exp.error.message);
+    g = exp.value.game;
+    expect(g.state.phase).toBe("locked");
+    const u = decide(g, { action: { type: "undo" }, actor: CONTROL, idempotencyKey: null }, late + 2000, reg);
+    if (!u.ok) throw new Error(u.error.message);
+    expect(u.value.game.state).toMatchObject({ phase: "open", timer: null });
+    expect(replay(u.value.game.session, u.value.game.events, reg).state).toEqual(u.value.game.state);
+  });
+});
+
+describe("undo of something else keeps the timer", () => {
+  it("an undo that does not reopen the answers leaves an expired timer alone (the auto-lock still comes)", () => {
+    const g = run(reg, [...OPEN_Q1, ctl({ type: "score.adjust", target: { participantId: "p_1" }, delta: 5, reason: "manual" })]);
+    const t = g.state.timer;
+    if (t === null) throw new Error("timer");
+    const u = decide(g, { action: { type: "undo" }, actor: CONTROL, idempotencyKey: null }, t.endsAt + 5000, reg);
+    if (!u.ok) throw new Error(u.error.message);
+    expect(u.value.game.state.timer).not.toBeNull();
+  });
+});
+

@@ -50,6 +50,7 @@ export const buzzer = defineMechanic<BuzzerConfig, BuzzerState>({
       case "multi":
       case "boolean":
       case "poll":
+      case "vote":
       case "number":
       case "order":
       case "pairs":

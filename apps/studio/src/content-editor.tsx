@@ -280,6 +280,23 @@ function AnswerEditor(p: { q: Question; edit: EditQ }): JSX.Element {
           </label>
         )}
       </Match>
+      <Match when={as("vote")}>
+        {(vo) => (
+          <div class="s-opts">
+            <span class="s-label">Choix proposés (pas de bonne réponse)</span>
+            <For each={vo().options}>
+              {(opt, oi) => (
+                <div class="s-opt">
+                  <input value={opt.label} onInput={(e) => { const v = e.currentTarget.value; spec("vote", (x) => { const it = x.options[oi()]; if (it !== undefined) it.label = v; }, `o${oi()}`); }} />
+                  <Button kind="ghost" title="Retirer" disabled={vo().options.length <= 2} onClick={() => spec("vote", (x) => { x.options.splice(oi(), 1); })}>✕</Button>
+                </div>
+              )}
+            </For>
+            <Show when={vo().options.length < 8}><Button kind="ghost" onClick={() => spec("vote", (x) => { x.options.push({ id: freeOptionId(x.options.map((y) => y.id)), label: `Choix ${x.options.length + 1}` }); })}>+ choix</Button></Show>
+            <p class="muted s-hint">Les points (aucun, majorité, minorité) se règlent dans Format, catégorie « Vote ».</p>
+          </div>
+        )}
+      </Match>
       <Match when={as("poll")}>
         {(po) => {
           const total = () => po().options.reduce((t, o) => t + (o.value ?? 0), 0);

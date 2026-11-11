@@ -1,6 +1,6 @@
 import { For, Match, Show, Switch, createEffect, createMemo, createSignal, onCleanup } from "solid-js";
 import { render } from "solid-js/web";
-import { asChoice, asLadder, asPollBoard, nameOf, optionLetter, optionState, secondsLeft } from "@quiz/renderer";
+import { asChoice, asLadder, asPollBoard, nameOf, optionLetter, optionState, secondsLeft, sideName } from "@quiz/renderer";
 import type { AnswerValue, PlayerView, Viewer } from "@quiz/schema";
 import { StatusPill, createQuizConnection, tokenFromUrl, stakesLabel } from "@quiz/ui";
 import "@quiz/ui/ui.css";
@@ -140,11 +140,23 @@ function Game(props: { token: string }) {
   return (
     <div class="p-app" onClick={() => (started() ? undefined : void start())}>
       <header class="p-top">
-        <span class="p-name">{view()?.me?.displayName ?? "…"}</span>
+        <span class="p-name">
+          {/* Where am I: a fixed seat, or this phone's own player. */}
+          <Show when={seatOf(conn.viewer())} fallback={<>{view()?.me?.displayName ?? "…"}<Show when={view()?.me}><span class="p-where"> · ce téléphone</span></Show></>}>
+            {(n) => <>Siège {n()}<Show when={view()?.me}>{(me) => <> · {me().displayName}</>}</Show></>}
+          </Show>
+        </span>
         <Show when={view()?.me}>{(me) => <span class="p-score">{me().total} pts · {me().rank}ᵉ</span>}</Show>
         <StatusPill status={conn.status()} queued={conn.queued()} detail={conn.statusDetail()} />
       </header>
       <Switch>
+        <Match when={conn.status() === "taken"}>
+          <div class="p-center">
+            <p class="p-big">Ouvert sur un autre appareil</p>
+            <p>{conn.statusDetail() ?? "Ce siège est maintenant utilisé ailleurs."} Cet écran ne joue plus, pour que personne ne prenne la place d'un autre.</p>
+            <button class="q-btn" type="button" onClick={() => location.reload()}>Reprendre sur cet appareil</button>
+          </div>
+        </Match>
         <Match when={conn.status() === "rejected"}>
           <div class="p-center">
             <p>Ce lien n'est plus valable.</p>
@@ -193,7 +205,8 @@ function Game(props: { token: string }) {
                       <For each={m().options}>
                         {(o, i) => {
                           const mine = () => v().myAnswer?.includes(o.id) === true;
-                          const state = () => (m().correct !== null ? (m().correct?.includes(o.id) === true ? "correct" : mine() ? "wrong" : "idle") : mine() ? "selected" : sending() === o.id ? "sending" : "idle");
+                          // A vote: no wrong answer — my choice stays « selected », the winning one(s) « correct ».
+                          const state = () => (m().correct !== null ? (m().correct?.includes(o.id) === true ? "correct" : mine() ? (m().kind === "vote" ? "selected" : "wrong") : "idle") : mine() ? "selected" : sending() === o.id ? "sending" : "idle");
                           return (
                             <button type="button" class="p-option" data-state={state()} disabled={!v().canAnswer || (sending() !== null && sending() !== o.id)} onClick={() => void answer(o.id)}>
                               <span class="p-letter">{optionLetter(i())}</span>
@@ -234,6 +247,22 @@ function Game(props: { token: string }) {
               <Show when={asPollBoard(v().mechanic)}>
                 {(m) => (
                   <div class="p-poll">
+                    {/* Who answers now: this player / team, or someone else (survey played orally). */}
+                    {(() => {
+                      const me = v().me;
+                      const mine = (side: string | null) => side !== null && me !== null && (side === me.participantId || side === me.teamId);
+                      const other = (side: string | null) => { const n = sideName(v(), side); return n === "—" ? "un autre joueur" : n; };
+                      return (
+                        <Show when={m().stage !== "done" && v().phase !== "revealed" && (m().controllingTeamId !== null || m().stealingTeamId !== null)}>
+                          <Show
+                            when={m().stage === "steal" ? mine(m().stealingTeamId) : mine(m().controllingTeamId)}
+                            fallback={<p class="p-hand-other">{m().stage === "steal" && m().stealingTeamId !== null ? `Tentative de vol : ${other(m().stealingTeamId)}` : `La main est à ${other(m().controllingTeamId)}`}</p>}
+                          >
+                            <p class="p-hand-mine">{m().stage === "steal" ? "Vol : à vous ! Une seule réponse" : "À vous ! Vous avez la main"}</p>
+                          </Show>
+                        </Show>
+                      );
+                    })()}
                     <For each={m().slots}>{(s) => <div class="p-slot" data-found={String(s.found)}><span>{s.index + 1}</span><span>{s.revealed ? s.label : "…"}</span><b>{s.revealed ? s.value : ""}</b></div>}</For>
                     <p class="p-strikes">{"✗".repeat(m().strikes)}<span class="muted">{"✗".repeat(Math.max(0, m().maxStrikes - m().strikes))}</span></p>
                     <p class="muted">Réponse à l'oral : l'animateur valide.</p>
@@ -245,6 +274,7 @@ function Game(props: { token: string }) {
                   <Match when={v().myResult === "correct"}>✓ Bonne réponse !</Match>
                   <Match when={v().myResult === "partial"}>◐ En partie juste</Match>
                   <Match when={v().myResult === "wrong"}>✗ Raté…</Match>
+                  <Match when={v().myResult === "none" && v().phase === "revealed" && asChoice(v().mechanic)?.kind === "vote" && v().myAnswer !== null}>Merci pour ton vote !</Match>
                   <Match when={v().myResult === "none" && v().phase === "revealed"}>Pas de réponse</Match>
                   <Match when={sending() !== null}>Envoi…</Match>
                   <Match when={lastError()}>{lastError()}</Match>

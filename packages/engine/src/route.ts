@@ -42,7 +42,8 @@ export type PointsInfo = { readonly summary: string; readonly source: PointsSour
 export function pointsInfo(round: Round, question: Question, registry: Registry): PointsInfo {
   const p = playedBy(round, question, registry);
   if (!p.ok) return { summary: "—", source: "round", why: p.error.message };
-  const { mechanic, scoring, source } = p.value;
+  const { mechanic, scoring, source, config } = p.value;
+  if (question.answerSpec.kind === "vote" && typeof config === "object" && config !== null && "vote" in config && config.vote === "none") return { summary: "aucun point (simple vote)", source: "own", why: "réglage de la catégorie Vote" };
   if (source === "own") return { summary: OWN_POINTS_FR[mechanic.id] ?? "points du jeu", source, why: POINTS_SOURCE_FR.own };
   const cat = round.mechanic === "mixed" ? CATEGORY_LABEL_FR[MIXED_CATEGORY[question.answerSpec.kind]] : undefined;
   const why = source === "category" && cat !== undefined ? `${POINTS_SOURCE_FR.category} (${cat})` : POINTS_SOURCE_FR[source];

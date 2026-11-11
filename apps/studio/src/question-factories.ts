@@ -14,6 +14,7 @@ export const QUESTION_TYPES: readonly { readonly kind: AnswerKind; readonly labe
   { kind: "allocation", label: "Répartition", help: "répartir une mise entre les réponses" },
   { kind: "oral", label: "Oral (buzzer / plateau)", help: "réponse dite à voix haute, validée par la régie" },
   { kind: "poll", label: "Sondage %", help: "réponses d'un sondage avec leur pourcentage" },
+  { kind: "vote", label: "Vote", help: "sans bonne réponse : chacun vote, l'écran montre les %" },
 ];
 
 export const kindLabel = (k: AnswerKind): string => QUESTION_TYPES.find((t) => t.kind === k)?.label ?? k;
@@ -32,6 +33,7 @@ const SPECS: { readonly [K in AnswerKind]: () => Extract<AnswerSpec, { kind: K }
   allocation: () => ({ kind: "allocation", correct: "a", budget: 1000, options: [opt("a", "Réponse A"), opt("b", "Réponse B"), opt("c", "Réponse C")] }),
   oral: () => ({ kind: "oral", expected: "Réponse attendue" }),
   poll: () => ({ kind: "poll", options: [opt("a", "Réponse 1", 40), opt("b", "Réponse 2", 30), opt("c", "Réponse 3", 20)] }),
+  vote: () => ({ kind: "vote", options: [opt("a", "Choix 1"), opt("b", "Choix 2"), opt("c", "Choix 3")] }),
 };
 
 export const newAnswerSpec = (kind: AnswerKind): AnswerSpec => SPECS[kind]();
@@ -40,6 +42,7 @@ const PROMPT: Record<AnswerKind, string> = {
   single: "Nouvelle question ?",
   multi: "Lesquelles sont justes ?",
   boolean: "Affirmation ?",
+  vote: "Votre préférence ?",
   text: "Nouvelle question ?",
   number: "Combien… ?",
   order: "Remettez dans l'ordre :",

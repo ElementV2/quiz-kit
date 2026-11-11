@@ -77,6 +77,7 @@ function spoken(q: Question): Pick<BoardState, "kind" | "options" | "correct"> |
     case "multi":
     case "boolean":
     case "poll":
+    case "vote":
     case "number":
     case "order":
     case "pairs":

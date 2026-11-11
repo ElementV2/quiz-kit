@@ -200,7 +200,7 @@ function mark(map: Map<string, Mark>, id: string, outcome: Mark): void {
   const cur = map.get(id);
   if (cur === undefined || RANK[outcome] > RANK[cur]) map.set(id, outcome);
 }
-const markOf = (j: Judgement): Mark => (j.outcome === "wrong" ? "wrong" : j.kind === "rule" && j.share !== undefined && j.share < 1 ? "partial" : "correct");
+const markOf = (j: Judgement): Mark => (j.outcome === "wrong" ? "wrong" : j.kind === "rule" && j.share !== undefined && j.share > 0 && j.share < 1 ? "partial" : "correct");
 
 type Results = { of(participantId: string, teamId: string | null): PlayerView["myResult"] };
 /** judge() once per mechanic state, then an O(1) lookup per player (500 tablets: no O(n²) per broadcast). */

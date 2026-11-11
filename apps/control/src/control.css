@@ -214,3 +214,4 @@ a.q-btn { text-decoration: none; text-align: center; display: inline-flex; align
 .c-worth { margin: 2px 0 0; font-size: 13px; }
 .c-worth .q-label { margin-right: 6px; }
 .c-worth-staked { color: var(--ui-accent); }
+.c-top > .q-tally { min-width: 8.5em; justify-content: center; text-align: center; } /* Antenne / Hors antenne: same width, the bar never jumps */

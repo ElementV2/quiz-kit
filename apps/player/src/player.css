@@ -145,3 +145,6 @@ body { overscroll-behavior: none; user-select: none; -webkit-user-select: none; 
   z-index: 2;
   box-shadow: 0 -10px 18px var(--ui-bg);
 }
+.p-where { color: var(--ui-muted); font-weight: 400; text-transform: none; letter-spacing: 0; }
+.p-hand-mine { margin: 0 0 6px; padding: 14px 16px; border-radius: var(--ui-radius); background: var(--ui-ok-bg); border: 2px solid var(--ui-ok); color: var(--ui-ok); font-size: clamp(22px, 5vw, 32px); font-weight: 800; text-align: center; }
+.p-hand-other { margin: 0 0 6px; padding: 8px 12px; border-radius: var(--ui-radius); background: var(--ui-surface); color: var(--ui-muted); text-align: center; font-size: 18px; }

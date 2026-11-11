@@ -69,6 +69,8 @@ export const asCrowdVote = (m: MechanicView | null | undefined): CrowdVoteView |
 export function optionState(m: MechanicView, optionId: string, myAnswer: readonly string[] | null, phase?: Phase): ZoneState {
   switch (m.mechanic) {
     case "choice":
+      // A vote has no wrong answer: the winning choice(s) stand out, the others stay neutral.
+      if (m.kind === "vote" && m.correct !== null && m.counts !== null) return m.correct.includes(optionId) ? "correct" : "idle";
       if (m.correct !== null && m.counts !== null) return m.correct.includes(optionId) ? "correct" : "wrong";
       return myAnswer?.includes(optionId) === true ? "selected" : "idle";
     case "ladder":

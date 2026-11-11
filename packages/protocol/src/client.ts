@@ -30,7 +30,8 @@ export const memoryIntentStore = (): IntentStore => {
   return { load: () => [...items], save: (p) => (items = [...p]) };
 };
 
-export type ClientStatus = "connecting" | "open" | "reconnecting" | "rejected" | "stopped";
+/** `taken`: this seat / player was opened on another device: no reconnect (the two would fight for it). */
+export type ClientStatus = "connecting" | "open" | "reconnecting" | "rejected" | "taken" | "stopped";
 
 export type ClientOptions = {
   readonly url: string;
@@ -177,7 +178,7 @@ export class QuizClient {
     ws.addEventListener("close", () => {
       if (this.ws !== ws) return;
       this.ws = null;
-      if (this.status !== "stopped" && this.status !== "rejected") this.scheduleReconnect();
+      if (this.status !== "stopped" && this.status !== "rejected" && this.status !== "taken") this.scheduleReconnect();
     });
     // "error" is always followed by "close", which drives reconnection.
   }
@@ -249,6 +250,9 @@ export class QuizClient {
         if (m.code === "unauthorized" || m.code === "unsupported-version") {
           this.setStatus("rejected", m.message); // retrying would never help
           this.ws?.close(1000, "rejected");
+        } else if (m.code === "taken-over") {
+          this.setStatus("taken", m.message);
+          this.ws?.close(1000, "taken");
         }
         return;
     }

@@ -317,6 +317,18 @@ export const MIXED_CATEGORIES: readonly MixedCategoryInfo[] = [
       { key: "shuffleOptions", kind: "boolean", label: "Mélanger l'ordre des réponses (même ordre pour tout le monde)" },
       change,
       { key: "partialMulti", kind: "boolean", label: "Plusieurs bonnes réponses : points partiels (bonnes cochées − mauvaises cochées), sinon tout ou rien" },
+      { key: "race", kind: "number", label: "Course : seuls les N plus rapides à répondre juste marquent (0 = tous)", min: 0, max: 1000 },
+    ],
+  },
+  {
+    id: "vote",
+    label: "Vote (sans bonne réponse)",
+    kinds: ["vote"],
+    explain: "Chacun vote sur sa tablette ; l'écran montre les % à la révélation, le choix le plus voté en avant.",
+    fields: [
+      { key: "mode", kind: "enum", label: "Points", options: [{ value: "none", label: "aucun (simple vote)" }, { value: "majority", label: "à ceux qui votent comme la majorité" }, { value: "minority", label: "à ceux qui votent comme la minorité" }] },
+      { key: "shuffleOptions", kind: "boolean", label: "Mélanger l'ordre des choix" },
+      change,
     ],
   },
   {
@@ -363,6 +375,7 @@ export const MIXED_CATEGORIES: readonly MixedCategoryInfo[] = [
 /** Older flat keys of the mixed config (still read when the category says nothing). */
 const FLAT: Readonly<Record<string, string>> = {
   "choice.shuffleOptions": "shuffleOptions",
+  "vote.shuffleOptions": "shuffleOptions",
   "poll.mode": "pollScoring",
   "poll.maxStrikes": "pollMaxStrikes",
   "poll.multiplier": "pollMultiplier",

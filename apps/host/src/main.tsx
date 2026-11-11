@@ -135,7 +135,7 @@ function App() {
                       </div>
                       <div class="h-keys-grid">
                         <button type="button" class="h-key" disabled={v().phase !== "open"} onClick={() => void run([{ type: "question.lock" }, { type: "question.reveal" }])}>Révéler</button>
-                        <button type="button" class="h-key" disabled={v().phase !== "open" || v().timer === null} onClick={() => { const t = v().timer; if (t !== null) void act({ type: "timer.set", remainingMs: Math.max(0, t.endsAt - now()) + 10_000 }); }}>+10 s</button>
+                        <button type="button" class="h-key" disabled={v().phase !== "open"} onClick={() => { const t = v().timer; void act({ type: "timer.set", remainingMs: Math.max(0, (t?.endsAt ?? now()) - now()) + 10_000 }); }}>+10 s</button>
                         <Show
                           when={!inQuestion() && v().phase === "idle" && v().round !== null ? nextTarget(v()) : null}
                           fallback={<ConfirmKey class="h-key h-key-wide" label="Passer la question" confirmLabel="Confirmer : passer sans révéler ?" disabled={!inQuestion()} onConfirm={() => void act({ type: "question.next" })} />}

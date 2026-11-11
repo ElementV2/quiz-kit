@@ -311,3 +311,12 @@ describe("poll-board — steal and final board settings", () => {
   });
 });
 
+describe("poll-board — passing the hand after the answers were closed", () => {
+  it("reopens the answers for the side taking over (its tablets do not stay on « closed »)", () => {
+    const g = play([...OPEN, good("a"), ctl({ type: "question.lock" }), ctl({ type: "poll.control", teamId: "t_b" })]);
+    expect(g.state.phase).toBe("open");
+    expect(viewOf(g, { role: "control" })).toMatchObject({ controllingTeamId: "t_b", strikes: 0 });
+    expect(run(reg, [good("b")], g).state.phase).toBe("open");
+  });
+});
+
