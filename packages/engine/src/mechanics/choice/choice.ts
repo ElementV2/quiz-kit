@@ -83,6 +83,11 @@ export const choice = defineMechanic<ChoiceConfig, ChoiceState>({
   configSchema: ChoiceConfig,
   stateSchema: ChoiceState,
 
+  reconfigure(s, cfg) {
+    // Not the option order (already shown); everything that only decides how the answers will be scored.
+    return { ...s, allowChange: cfg.allowChange, partialMulti: cfg.partialMulti, race: cfg.race, vote: cfg.vote };
+  },
+
   init(cfg, question, env) {
     const spec = question.answerSpec;
     let base: Omit<ChoiceState, "allowChange" | "answers" | "partialMulti" | "race" | "vote">;

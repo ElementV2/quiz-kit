@@ -38,6 +38,10 @@ export const pairs = defineMechanic<PairsConfig, PairsState>({
   configSchema: PairsConfig,
   stateSchema: PairsState,
 
+  reconfigure(s, cfg) {
+    return { ...s, allowChange: cfg.allowChange, partial: cfg.partial };
+  },
+
   init(cfg, question, env) {
     const a = question.answerSpec;
     if (a.kind !== "pairs") return err("unsupported", unsupportedQuestion("pairs", a.kind));

@@ -36,6 +36,10 @@ export const buzzer = defineMechanic<BuzzerConfig, BuzzerState>({
   configSchema: BuzzerConfig,
   stateSchema: BuzzerState,
 
+  reconfigure(s, cfg) {
+    return { ...s, lockoutOnWrong: cfg.lockoutOnWrong };
+  },
+
   init(cfg, question) {
     const spec = question.answerSpec;
     const common = { lockoutOnWrong: cfg.lockoutOnWrong, buzzes: [] };

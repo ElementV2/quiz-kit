@@ -100,6 +100,10 @@ export const numberAnswer = defineMechanic<NumberAnswerConfig, NumberAnswerState
   configSchema: NumberAnswerConfig,
   stateSchema: NumberAnswerState,
 
+  reconfigure(s, cfg) {
+    return { ...s, mode: cfg.mode, allowChange: cfg.allowChange, tolerancePercent: cfg.tolerancePercent, winners: cfg.winners, graded: cfg.graded };
+  },
+
   init(cfg, question) {
     const a = question.answerSpec;
     if (a.kind !== "number") return err("unsupported", unsupportedQuestion("number-answer", a.kind));

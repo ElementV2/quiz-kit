@@ -59,6 +59,11 @@ export const allocation = defineMechanic<AllocationConfig, AllocationState>({
   stateSchema: AllocationState,
   ownPoints: true,
 
+  reconfigure(s, cfg) {
+    // « Keep one box empty » is a rule of the answers: once someone answered, it stays (same rule for all).
+    return { ...s, allowChange: cfg.allowChange, keepOneEmpty: s.answers.length === 0 ? cfg.keepOneEmpty : s.keepOneEmpty };
+  },
+
   init(cfg, question) {
     const a = question.answerSpec;
     if (a.kind !== "allocation") return err("unsupported", unsupportedQuestion("allocation", a.kind));

@@ -92,3 +92,7 @@ Règle : une question vérifiée devient un ADR ou une ligne dans le doc concern
 - [ ] `QUIZ_APPS_DIR` lu hors de `config.ts` (module `http/app.ts`) — à rapatrier dans la config validée (revue 4, m8).
 - [ ] `game.patch` journalise le document complet à chaque envoi : taille du journal et durée du rejeu à mesurer
       sur un show avec beaucoup d'envois ; un diff (JSON Patch) serait plus léger (revue 7, m4).
+- [ ] Rejeu d'un journal ancien : depuis que la question à l'antenne (non révélée) prend les réglages envoyés au
+      direct (`reconfigure`), un journal enregistré avant ce changement avec un `game.patch` pendant une question
+      peut donner d'autres points au rejeu. Sans effet en show (même version au redémarrage) ; à trancher si les
+      journaux doivent rester rejouables d'une version à l'autre (versionner le réducteur ?) (revue 9, m3).

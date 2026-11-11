@@ -36,6 +36,10 @@ export const order = defineMechanic<OrderConfig, OrderState>({
   configSchema: OrderConfig,
   stateSchema: OrderState,
 
+  reconfigure(s, cfg) {
+    return { ...s, allowChange: cfg.allowChange, partial: cfg.partial };
+  },
+
   init(cfg, question, env) {
     const a = question.answerSpec;
     if (a.kind !== "order") return err("unsupported", unsupportedQuestion("order", a.kind));

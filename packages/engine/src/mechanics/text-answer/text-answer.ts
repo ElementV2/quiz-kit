@@ -38,6 +38,13 @@ export const textAnswer = defineMechanic<TextAnswerConfig, TextAnswerState>({
   configSchema: TextAnswerConfig,
   stateSchema: TextAnswerState,
 
+  reconfigure(s, cfg, question) {
+    const defaultDistance = cfg.typos === "auto" ? null : Number(cfg.typos);
+    // The question's own typos setting stays; without one, the category's new setting applies.
+    const own = question.answerSpec.kind === "text" ? question.answerSpec.maxDistance : undefined;
+    return { ...s, allowChange: cfg.allowChange, defaultDistance, maxDistance: own ?? defaultDistance };
+  },
+
   init(cfg, question) {
     const a = question.answerSpec;
     const defaultDistance = cfg.typos === "auto" ? null : Number(cfg.typos);

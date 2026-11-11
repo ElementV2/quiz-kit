@@ -352,3 +352,60 @@ describe("live settings change on the survey on air", () => {
   });
 });
 
+
+const num = (pid: string, value: number): Step => [actor("player", pid), { type: "answer.submit", participantId: pid, answer: { kind: "number", value } }];
+const skipTo = (n: number): Step[] => Array.from({ length: n }, (_, i) => ctl({ type: "question.skip", roundIndex: 0, questionIndex: i }));
+const withKinds = (game: GameDocument, kinds: Record<string, unknown>): GameDocument => {
+  const patched = structuredClone(game);
+  const r0 = patched.format.rounds[0];
+  if (r0 === undefined) throw new Error("fixture");
+  r0.mechanicConfig = { kinds };
+  return patched;
+};
+const won = (g: ReturnType<typeof run>, pid: string): boolean => g.state.ledger.some((e) => !e.voided && "participantId" in e.target && e.target.participantId === pid && e.delta > 0);
+const LOCK_REVEAL = [ctl({ type: "question.lock" }), ctl({ type: "question.reveal" })];
+
+describe("live settings change on any question on air, before its reveal", () => {
+  it("a number: a tolerance given while answers are open counts at the reveal; replay identical", () => {
+    const g = run(reg, [...START, ...skipTo(4), ctl({ type: "question.present" }), ctl({ type: "question.open" }), num("p_1", 200)], createGame(makeSession(MIXED)));
+    expect(won(run(reg, LOCK_REVEAL, g), "p_1")).toBe(false);
+    const after = run(reg, [ctl({ type: "game.patch", baseVersion: g.state.gameVersion, game: withKinds(g.state.game, { number: { tolerancePercent: 5 } }) }), ...LOCK_REVEAL], g);
+    expect(won(after, "p_1")).toBe(true);
+    expect(replay(after.session, after.events, reg).state).toEqual(after.state);
+  });
+
+  it("a free text: « no typo » given live refuses a misspelt answer at the reveal", () => {
+    const g = run(reg, [...START, ...skipTo(3), ctl({ type: "question.present" }), ctl({ type: "question.open" }), text("p_1", "van gog")], createGame(makeSession(MIXED)));
+    expect(won(run(reg, LOCK_REVEAL, g), "p_1")).toBe(true);
+    const after = run(reg, [ctl({ type: "game.patch", baseVersion: g.state.gameVersion, game: withKinds(g.state.game, { text: { typos: "0" } }) }), ...LOCK_REVEAL], g);
+    expect(won(after, "p_1")).toBe(false);
+  });
+
+  it("a free text with its own typos setting keeps it, even when it equals the category's", () => {
+    const game = structuredClone(withKinds(MIXED, { text: { typos: "1" } }));
+    const t = game.questions.find((q) => q.id === "q_txt_1");
+    if (t?.answerSpec.kind !== "text") throw new Error("fixture");
+    t.answerSpec.maxDistance = 1;
+    const g = run(reg, [...START, ...skipTo(3), ctl({ type: "question.present" }), ctl({ type: "question.open" }), text("p_1", "van gog")], createGame(makeSession(game)));
+    const after = run(reg, [ctl({ type: "game.patch", baseVersion: g.state.gameVersion, game: withKinds(g.state.game, { text: { typos: "0" } }) }), ...LOCK_REVEAL], g);
+    expect(won(after, "p_1")).toBe(true);
+    expect(replay(after.session, after.events, reg).state).toEqual(after.state);
+  });
+
+  it("a QCM: « answers cannot change » given live is applied to the next answer", () => {
+    const qcm = pick("q_capital_fr");
+    if (qcm.answerSpec.kind !== "single") throw new Error("fixture");
+    const g = run(reg, [...START, ctl({ type: "question.present" }), ctl({ type: "question.open" }), answer("p_1", qcm.answerSpec.correct)], createGame(makeSession(MIXED)));
+    const after = run(reg, [ctl({ type: "game.patch", baseVersion: g.state.gameVersion, game: withKinds(g.state.game, { choice: { allowChange: false } }) })], g);
+    const right = qcm.answerSpec.correct;
+    const other = qcm.answerSpec.options.find((o) => o.id !== right)?.id ?? "";
+    expect(() => run(reg, [answer("p_1", other)], after)).toThrow(/déjà enregistrée/);
+  });
+
+  it("a question already revealed keeps the settings it was scored with", () => {
+    const g = run(reg, [...START, ...skipTo(4), ctl({ type: "question.present" }), ctl({ type: "question.open" }), num("p_1", 200), ...LOCK_REVEAL], createGame(makeSession(MIXED)));
+    const after = run(reg, [ctl({ type: "game.patch", baseVersion: g.state.gameVersion, game: withKinds(g.state.game, { number: { tolerancePercent: 5 } }) })], g);
+    expect(after.state.mechanic).toEqual(g.state.mechanic);
+    expect(won(after, "p_1")).toBe(false);
+  });
+});

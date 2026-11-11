@@ -55,6 +55,10 @@ export const pin = defineMechanic<PinConfig, PinState>({
   configSchema: PinConfig,
   stateSchema: PinState,
 
+  reconfigure(s, cfg) {
+    return { ...s, allowChange: cfg.allowChange, margin: cfg.margin };
+  },
+
   init(cfg, question) {
     const a = question.answerSpec;
     if (a.kind !== "pin") return err("unsupported", unsupportedQuestion("pin", a.kind));

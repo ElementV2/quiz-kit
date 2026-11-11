@@ -78,14 +78,15 @@ function reduceAllowed(s: GameState, a: Action, ctx: Ctx, registry: Registry): R
       // Stakes set ahead belong to a question: dropped if another question now sits at that place.
       const st = s.stakes;
       const keepStakes = st === null || s.game.format.rounds[st.roundIndex]?.questions[st.questionIndex] === a.game.format.rounds[st.roundIndex]?.questions[st.questionIndex];
-      // The question on air takes at once the settings that are safe for it (mechanic `reconfigure`).
+      // The question on air, not revealed yet, takes the new settings of its category at once (`reconfigure`).
       let mechanic = s.mechanic;
       const round = s.roundIndex === null ? undefined : a.game.format.rounds[s.roundIndex];
       const qOnAir = round === undefined || s.questionIndex === null ? undefined : a.game.questions.find((q) => q.id === round.questions[s.questionIndex ?? -1]);
-      if (mechanic !== null && round !== undefined && qOnAir !== undefined) {
+      // Only before the reveal (a revealed question keeps the settings it was scored with); the survey board only changes what it shows.
+      if (mechanic !== null && round !== undefined && qOnAir !== undefined && (s.phase !== "revealed" || mechanic.id === "poll-board")) {
         const played = playedBy(round, qOnAir, registry);
         const pm = played.ok && played.value.mechanic.id === mechanic.id ? played.value.mechanic : null;
-        if (played.ok && pm?.reconfigure !== undefined) mechanic = { id: mechanic.id, state: pm.reconfigure(mechanic.state, played.value.config) };
+        if (played.ok && pm?.reconfigure !== undefined) mechanic = { id: mechanic.id, state: pm.reconfigure(mechanic.state, played.value.config, qOnAir) };
       }
       return ok({ ...s, game: a.game, gameVersion: ctx.seq, studioPatchedAt: ctx.at, stakes: keepStakes ? st : null, mechanic });
     }

@@ -86,7 +86,7 @@ export interface Mechanic<C, S> {
    * already decided (what is shown at the reveal, steal allowed, strikes allowed…) apply to it at once. Absent:
    * the question keeps the settings it was presented with (they apply from the next one).
    */
-  reconfigure?(state: S, config: C): S;
+  reconfigure?(state: S, config: C, question: Question): S;
   /** Called on `question.present`. Rejects question kinds it cannot run. */
   init(config: C, question: Question, env: MechanicEnv, round: RoundContext<S>): Result<S, Rejection>;
   /** `answer.submit` while phase = open. */
