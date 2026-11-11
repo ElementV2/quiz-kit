@@ -99,3 +99,25 @@ describe("QuizClient ⇄ server", () => {
     out.stop();
   });
 });
+
+describe("clock (NTP-style round trip)", () => {
+  it("answers the pong of the last ping with its measured round trip; a stale or forged pong gets nothing", async () => {
+    const s = await boot();
+    const ws = new WebSocket(`ws://127.0.0.1:${s.port}/ws`);
+    const got: { t: string; serverTime?: number; rttMs?: number }[] = [];
+    ws.addEventListener("message", (ev) => { if (typeof ev.data === "string") got.push(JSON.parse(ev.data) as { t: string }); }); // oxlint-disable-line typescript/no-unsafe-type-assertion -- test reads raw frames
+    await new Promise<void>((r) => ws.addEventListener("open", () => r()));
+    ws.send(JSON.stringify({ t: "hello", v: 1, token: tokenOf(s, "Sortie program"), clientId: "c_clock" }));
+    await until(() => got.some((m) => m.t === "ping"), 5000);
+    const ping = got.find((m) => m.t === "ping");
+    ws.send(JSON.stringify({ t: "pong", clientTime: 0, serverTime: (ping?.serverTime ?? 0) + 1 })); // forged
+    ws.send(JSON.stringify({ t: "pong", clientTime: 0, serverTime: ping?.serverTime ?? 0 }));
+    await until(() => got.some((m) => m.t === "clock"));
+    const clocks = got.filter((m) => m.t === "clock");
+    expect(clocks).toHaveLength(1);
+    expect(clocks[0]?.serverTime).toBe(ping?.serverTime);
+    expect(clocks[0]?.rttMs).toBeGreaterThanOrEqual(0);
+    ws.close();
+  }, 10_000);
+});
+

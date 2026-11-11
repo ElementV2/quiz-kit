@@ -11,13 +11,13 @@ export function backoffDelay(attempt: number, random: number, baseMs = 100, capM
 export type ClockSample = { readonly offsetMs: number; readonly rttMs: number };
 
 /**
- * NTP-style sample from a ping/pong round trip: the server stamped `serverTime` at ping,
- * the client sent the ping reply... here we use the classic 3-timestamp form:
- * client sends at t0 (clientTime), server time ts, client receives at t1.
- * offset = ts - (t0 + t1) / 2, rtt = t1 - t0. `serverNow ≈ clientNow + offset`.
+ * Sample from a server ping received at `clientNow`: the server stamped `serverTime` when sending it and measured
+ * that very ping's round trip from our pong (`rttMs`, the « clock » message; null: not measured, ranked last). The
+ * ping travelled about half of it, so `serverNow ≈ serverTime + rtt / 2` at reception. `serverNow ≈ clientNow + offset`.
  */
-export function clockSample(t0: number, serverTime: number, t1: number): ClockSample {
-  return { offsetMs: serverTime - (t0 + t1) / 2, rttMs: Math.max(0, t1 - t0) };
+export function pingSample(serverTime: number, rttMs: number | null, clientNow: number): ClockSample {
+  const rtt = Math.max(0, rttMs ?? 0);
+  return { offsetMs: serverTime + rtt / 2 - clientNow, rttMs: rttMs === null ? Number.POSITIVE_INFINITY : rtt };
 }
 
 /** Sliding estimator: keeps the last `size` samples and trusts the ones with the lowest RTT. */
@@ -38,8 +38,9 @@ export class ClockEstimator {
     const offsets = best.map((s) => s.offsetMs).toSorted((a, b) => a - b);
     return offsets[Math.floor(offsets.length / 2)] ?? 0;
   }
+  /** Median of the measured round trips (0 before any). */
   get rttMs(): number {
-    const rtts = this.samples.map((s) => s.rttMs).toSorted((a, b) => a - b);
+    const rtts = this.samples.map((s) => s.rttMs).filter(Number.isFinite).toSorted((a, b) => a - b);
     return rtts[Math.floor(rtts.length / 2)] ?? 0;
   }
 }

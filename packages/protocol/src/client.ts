@@ -2,7 +2,7 @@ import { View, type Action, type Viewer } from "@quiz/schema";
 import { decodeServerMessage, encode } from "./codec.ts";
 import { PROTOCOL_VERSION, type AckMessage, type ClientMessage } from "./messages.ts";
 import { applyPatch } from "./patch.ts";
-import { ClockEstimator, backoffDelay, checkViewSeq } from "./timing.ts";
+import { ClockEstimator, backoffDelay, checkViewSeq, pingSample } from "./timing.ts";
 
 /**
  * Shared real-time client (doc 04): used by every front app, the bots and the load tests.
@@ -96,6 +96,8 @@ export class QuizClient {
   private pending: PendingIntent[];
   private readonly waiters = new Map<string, (ack: AckMessage) => void>();
   private readonly clock = new ClockEstimator();
+  /** When each recent server ping arrived (client clock), keyed by its stamp: paired with its « clock » answer. */
+  private readonly pingsAt = new Map<number, number>();
   private seq = -1;
   private resendScheduled = false;
   private status: ClientStatus = "stopped";
@@ -200,7 +202,7 @@ export class QuizClient {
       case "welcome":
         this.attempt = 0;
         this.viewer = m.viewer;
-        this.clock.add({ offsetMs: m.serverTime - this.o.now(), rttMs: 0 });
+        this.clock.add(pingSample(m.serverTime, null, this.o.now())); // no round trip measured yet
         this.setView(m.view, m.viewSeq);
         this.setStatus("open");
         for (const p of this.pending) this.send({ t: "intent", key: p.key, action: p.action });
@@ -239,10 +241,21 @@ export class QuizClient {
         return;
       }
       case "ping":
-        // One-way sample: on a LAN the bias is half a millisecond-scale RTT.
-        this.clock.add({ offsetMs: m.serverTime - this.o.now(), rttMs: 0 });
-        this.send({ t: "pong", clientTime: this.o.now(), serverTime: m.serverTime });
+        {
+          // One-way sample at once (ranked last); the « clock » answer to our pong pairs it with its round trip.
+          const at = this.o.now();
+          this.clock.add(pingSample(m.serverTime, null, at));
+          this.pingsAt.set(m.serverTime, at);
+          if (this.pingsAt.size > 8) this.pingsAt.delete(this.pingsAt.keys().next().value ?? m.serverTime);
+          this.send({ t: "pong", clientTime: at, serverTime: m.serverTime });
+        }
         return;
+      case "clock": {
+        const at = this.pingsAt.get(m.serverTime);
+        this.pingsAt.delete(m.serverTime);
+        if (at !== undefined) this.clock.add(pingSample(m.serverTime, m.rttMs, at));
+        return;
+      }
       case "preload":
         this.o.onPreload?.(m.hashes);
         return;

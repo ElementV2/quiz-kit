@@ -47,6 +47,11 @@ export const Ack = z.discriminatedUnion("ok", [
   z.strictObject({ t: z.literal("ack"), key: IdempotencyKey, ok: z.literal(false), code: z.string(), reason: z.string() }),
 ]);
 export const Ping = z.strictObject({ t: z.literal("ping"), serverTime: z.number() });
+/**
+ * Round trip of the ping stamped `serverTime`, measured by the server (monotonic clock) when its pong came back: the
+ * client pairs it with the moment it received that very ping (NTP-style). A separate message: older clients ignore it.
+ */
+export const Clock = z.strictObject({ t: z.literal("clock"), serverTime: z.number(), rttMs: z.number().min(0) });
 export const Preload = z.strictObject({ t: z.literal("preload"), hashes: z.array(z.string()) });
 export const ErrorMessage = z.strictObject({
   t: z.literal("error"),
@@ -55,7 +60,7 @@ export const ErrorMessage = z.strictObject({
   message: z.string(),
 });
 
-export const ServerMessage = z.union([Welcome, Patch, Snapshot, Ack, Ping, Preload, ErrorMessage]);
+export const ServerMessage = z.union([Welcome, Patch, Snapshot, Ack, Ping, Clock, Preload, ErrorMessage]);
 export type ServerMessage = z.infer<typeof ServerMessage>;
 export type AckMessage = z.infer<typeof Ack>;
 export type ErrorCode = z.infer<typeof ErrorMessage>["code"];

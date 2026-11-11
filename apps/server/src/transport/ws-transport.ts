@@ -60,6 +60,8 @@ type Conn = {
   /** After a throttled intent, every intent is throttled until this instant: order is preserved (FIFO). */
   throttledUntil: number;
   missedPongs: number;
+  /** Last app-level ping sent: its stamp and the monotonic instant (its pong gives the round trip). */
+  lastPing: { readonly serverTime: number; readonly mono: number } | null;
   viewer: Viewer | null;
   jti: string | null;
   clientId: string | null;
@@ -172,7 +174,7 @@ export class WsTransport {
   }
 
   private onConnection(ws: WebSocket): void {
-    const conn: Conn = { ws, limiter: new RateLimiter(LIMITS.device.capacity, LIMITS.device.perSecond, this.monotonic()), missedPongs: 0, throttledUntil: 0, viewer: null, jti: null, clientId: null, stream: null, unsubscribe: null };
+    const conn: Conn = { ws, limiter: new RateLimiter(LIMITS.device.capacity, LIMITS.device.perSecond, this.monotonic()), missedPongs: 0, lastPing: null, throttledUntil: 0, viewer: null, jti: null, clientId: null, stream: null, unsubscribe: null };
     this.conns.add(conn);
     const helloTimer = setTimeout(() => {
       if (conn.viewer === null) this.fail(conn, "unauthorized", "hello attendu");
@@ -244,8 +246,15 @@ export class WsTransport {
         runtime.enqueue(action, actor, key, (ack) => this.send(conn, toAckMessage({ ...ack, key })));
         return;
       }
-      case "pong":
+      case "pong": {
+        // Only the answer to the last ping counts (a stale or forged stamp is ignored); monotonic clock, so a wall
+        // clock resync never fakes a round trip. The client pairs it with the moment it received that ping.
+        const last = conn.lastPing;
+        if (last === null || m.serverTime !== last.serverTime) return;
+        conn.lastPing = null;
+        this.send(conn, { t: "clock", serverTime: last.serverTime, rttMs: Math.max(0, this.monotonic() - last.mono) });
         return;
+      }
       case "resync":
         conn.stream?.resync(runtime.welcomeView(conn.viewer));
         return;
@@ -330,7 +339,10 @@ export class WsTransport {
       }
       c.missedPongs += 1;
       c.ws.ping();
-      if (c.viewer !== null) this.send(c, { t: "ping", serverTime: now });
+      if (c.viewer !== null) {
+        c.lastPing = { serverTime: now, mono: this.monotonic() };
+        this.send(c, { t: "ping", serverTime: now });
+      }
       c.stream?.flushIfCaughtUp();
     }
   }

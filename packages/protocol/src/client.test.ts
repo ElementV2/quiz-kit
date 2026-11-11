@@ -170,6 +170,18 @@ describe("QuizClient", () => {
     expect(last().ofType("pong")[0]).toMatchObject({ serverTime: 2000, clientTime: 1000 });
   });
 
+  it("pairs the server's measured round trip with the ping it belongs to (clock offset)", () => {
+    const { client, last, welcome } = setup();
+    client.start();
+    last().open();
+    welcome(last()); // one-way: +500
+    last().push({ t: "ping", serverTime: 1600 }); // received at 1000: one-way +600
+    last().push({ t: "clock", serverTime: 1600, rttMs: 40 }); // it took ~20 ms: +620, measured → trusted
+    expect(client.serverNow()).toBe(1620);
+    last().push({ t: "clock", serverTime: 9999, rttMs: 0 }); // no such ping: ignored
+    expect(client.serverNow()).toBe(1620);
+  });
+
   it("stop() closes for good", () => {
     const { client, last, timers } = setup();
     client.start();

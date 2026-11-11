@@ -6,7 +6,7 @@ import {
   applyPatch,
   backoffDelay,
   checkViewSeq,
-  clockSample,
+  pingSample,
   decodeClientMessage,
   decodeServerMessage,
   diff,
@@ -101,13 +101,18 @@ describe("timing", () => {
     expect(backoffDelay(10, 0.999)).toBeGreaterThan(1900);
   });
 
-  it("estimates clock offset from round trips, preferring low RTT", () => {
+  it("estimates clock offset from the server pings and their measured round trip, preferring low RTT", () => {
     const est = new ClockEstimator();
-    // True offset +500 ms; one noisy high-RTT sample.
-    est.add(clockSample(1000, 1510, 1020));
-    est.add(clockSample(2000, 2505, 2010));
-    est.add(clockSample(3000, 4500, 3900));
+    // True offset +500 ms: the server sends at server time S, the ping takes rtt/2, arrives at client S - 500 + rtt/2.
+    est.add(pingSample(1500, 20, 1010)); // rtt 20 ms
+    est.add(pingSample(2500, 10, 2005)); // rtt 10 ms
+    est.add(pingSample(4500, 1800, 4700)); // congested Wi-Fi: held 1.2 s one way, 0.6 s back → offset 700: not trusted
     expect(est.offsetMs).toBeCloseTo(500, -1);
+    expect(est.rttMs).toBe(20);
+    // A first ping without measure counts, but never before a measured one.
+    const first = new ClockEstimator();
+    first.add(pingSample(1000, null, 500));
+    expect(first.offsetMs).toBe(500);
   });
 
   it("detects view sequence gaps and duplicates", () => {
