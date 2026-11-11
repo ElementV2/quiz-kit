@@ -363,7 +363,7 @@
 /* « Mixte » round: one fold per question category; the used ones first and open. */
 .s-mixed { display: grid; gap: 6px; }
 .s-cat { border: 1px solid var(--ui-border); border-radius: var(--ui-radius); padding: 6px 10px; background: var(--ui-surface); }
-.s-cat[data-used="false"] { opacity: .75; }
+.s-cat[data-used="false"] { background: var(--ui-bg); } /* unused: quieter background, text keeps its contrast */
 .s-cat > summary { cursor: pointer; display: flex; gap: 8px; align-items: baseline; padding: 2px 0; }
 .s-cat-name { font-weight: 650; }
 .s-cat[open] > summary { margin-bottom: 6px; border-bottom: 1px solid var(--ui-border); padding-bottom: 6px; }
@@ -374,3 +374,5 @@
 .s-worth[data-source="category"] { color: var(--ui-text); }
 .s-worth-line { margin: 2px 0 0; font-size: 12px; }
 .s-priority { padding: 8px 10px; border-left: 3px solid var(--ui-accent); background: var(--ui-sunken); border-radius: var(--ui-radius); font-size: 12px; line-height: 1.45; }
+.s-link { min-height: 24px; padding: 3px 2px; }
+.s-opt input[type="checkbox"], .s-opt input[type="radio"] { width: 24px; height: 24px; } /* WCAG 2.5.8 target size */

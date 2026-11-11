@@ -37,7 +37,7 @@ export function MechanicPanel(p: {
                 <span>{m().teamPoints.length === 0 ? "Chacun marque ce qu'il trouve" : m().teamPoints.map((t) => `${teamName(t.teamId)} ${t.points}`).join(" · ")}{m().multiplier !== 1 ? ` (multiplicateur ×${m().multiplier} compris)` : ""}</span>
               </Show>
             </div>
-            <Show when={control() && m().stage !== "done" && p.view.phase !== "revealed"}>
+            <Show when={control() && (m().stage !== "done" || m().slots.some((x) => !x.found)) && p.view.phase !== "revealed"}>
               <div class="q-mech-row">
                 <select value={team()} onChange={(e) => setTeam(e.currentTarget.value)}>
                   <option value="">{teams().length > 0 ? "— équipe —" : "— joueur —"}</option>

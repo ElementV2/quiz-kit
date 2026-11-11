@@ -60,7 +60,7 @@ function PollBoard(p: { readonly view: HostView; readonly act: Act }): JSX.Eleme
               <span class="q-mono">{m().teamPoints.map((t) => `${teamName(t.teamId)} ${formatNumber(t.points)}`).join(" · ")}</span>
             </Show>
           </div>
-          <Show when={p.view.drive && m().stage !== "done" && p.view.phase !== "revealed"}>
+          <Show when={p.view.drive && (m().stage !== "done" || m().slots.some((x) => !x.found)) && p.view.phase !== "revealed"}>
             <div class="h-row">
               <select class="h-select" value={team()} onChange={(e) => setTeam(e.currentTarget.value)} aria-label={p.view.teamBoard.length > 0 ? "Équipe" : "Joueur"}>
                 <option value="">{p.view.teamBoard.length > 0 ? "Équipe…" : "Joueur…"}</option>

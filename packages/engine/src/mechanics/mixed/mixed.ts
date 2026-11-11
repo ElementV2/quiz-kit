@@ -21,7 +21,7 @@ const scoring = ScoringRule.optional();
 export const MixedKinds = z.strictObject({
   choice: z.strictObject({ shuffleOptions: z.boolean().optional(), allowChange, partialMulti: z.boolean().optional(), race: z.number().int().min(0).max(1000).optional(), scoring }).optional(),
   vote: z.strictObject({ mode: z.enum(["none", "majority", "minority"]).optional(), shuffleOptions: z.boolean().optional(), allowChange, scoring }).optional(),
-  poll: z.strictObject({ mode: z.enum(["per-answer", "bank"]).optional(), maxStrikes: z.number().int().min(1).max(10).optional(), multiplier: z.number().positive().max(100).optional(), steal: z.boolean().optional(), revealAll: z.boolean().optional() }).optional(),
+  poll: z.strictObject({ mode: z.enum(["per-answer", "bank"]).optional(), maxStrikes: z.number().int().min(1).max(10).optional(), multiplier: z.number().positive().max(100).optional(), steal: z.boolean().optional(), revealAll: z.boolean().optional(), strikesReset: z.boolean().optional() }).optional(),
   oral: z.strictObject({ lockoutOnWrong: z.boolean().optional(), scoring }).optional(),
   text: z.strictObject({ allowChange, typos: z.enum(["auto", "0", "1", "2", "3"]).optional(), scoring }).optional(),
   number: z.strictObject({ mode: z.enum(["tolerance", "closest"]).optional(), allowChange, tolerancePercent: z.number().min(0).max(100).optional(), winners: z.number().int().min(1).max(100).optional(), graded: z.boolean().optional(), scoring }).optional(),
@@ -115,6 +115,7 @@ function routedConfig(cat: MixedCategory, c: MixedConfig): Record<string, unknow
         scoring: k.poll?.mode ?? c.pollScoring,
         ...(k.poll?.steal === undefined ? {} : { steal: k.poll.steal }),
         ...(k.poll?.revealAll === undefined ? {} : { revealAll: k.poll.revealAll }),
+        ...(k.poll?.strikesReset === undefined ? {} : { strikesReset: k.poll.strikesReset }),
       };
     case "allocation":
       return { allowChange: k.allocation?.allowChange ?? c.allowChange, keepOneEmpty: k.allocation?.keepOneEmpty ?? c.allocationKeepOneEmpty };

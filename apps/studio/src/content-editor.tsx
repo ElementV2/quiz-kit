@@ -89,7 +89,7 @@ export function ContentEditor(p: { doc: GameDocument; update: Update }): JSX.Ele
                   <td class="q-mono">{i() + 1}</td>
                   <td class="s-col-q">
                     <span class="s-kind">{kindLabel(q.answerSpec.kind)}</span>
-                    <textarea rows={2} value={q.prompt.text} onInput={(e) => { const v = e.currentTarget.value; edit((x) => { x.prompt.text = v; }, "text"); }} />
+                    <textarea rows={2} aria-label={`Texte de la question ${i() + 1}`} value={q.prompt.text} onInput={(e) => { const v = e.currentTarget.value; edit((x) => { x.prompt.text = v; }, "text"); }} />
                     <p class="muted s-hint">{roundsOf(p.doc, q.id).join(" · ") || "dans aucune manche"}</p>
                     <For each={p.doc.format.rounds.filter((r) => r.questions.includes(q.id) || r.reserve.includes(q.id))}>
                       {(r) => { const w = () => pointsInfo(r, q, defaultRegistry); return <p class="s-worth-line" title="Priorité : points de la question, sinon barème de sa catégorie, sinon barème de la manche (onglet Format)">Vaut <b>{w().summary}</b> <span class="muted">· {w().why}{p.doc.format.rounds.length > 1 ? ` · ${r.title}` : ""}</span></p>; }}
@@ -116,7 +116,7 @@ export function ContentEditor(p: { doc: GameDocument; update: Update }): JSX.Ele
         </tbody>
       </table>
       <Panel title="Coller depuis Excel / Sheets / CSV (type ; question ; A … F ; réponse ; notes)">
-        <textarea class="s-paste" rows={4} value={paste()} onInput={(e) => setPaste(e.currentTarget.value)} />
+        <textarea class="s-paste" aria-label="Questions à coller" rows={4} value={paste()} onInput={(e) => setPaste(e.currentTarget.value)} />
         <div class="s-toolbar">
           <Button disabled={pasted().questions.length === 0} onClick={importPaste}>Ajouter {pasted().questions.length} question(s){targetTitle() === null ? "" : ` à « ${targetTitle() ?? ""} »`}</Button>
           <Show when={pasted().errors.length > 0}><span class="s-bad">{pasted().errors.slice(0, 3).join(" · ")}</span></Show>
@@ -174,7 +174,7 @@ function AnswerEditor(p: { q: Question; edit: EditQ }): JSX.Element {
               <For each={t().accepted}>
                 {(v, vi) => (
                   <div class="s-opt">
-                    <input value={v} onInput={(e) => { const val = e.currentTarget.value; spec("text", (x) => { x.accepted[vi()] = val; }, `acc${vi()}`); }} />
+                    <input aria-label={`Réponse acceptée ${vi() + 1}`} value={v} onInput={(e) => { const val = e.currentTarget.value; spec("text", (x) => { x.accepted[vi()] = val; }, `acc${vi()}`); }} />
                     <Button kind="ghost" title="Retirer" disabled={t().accepted.length <= 1} onClick={() => spec("text", (x) => { x.accepted.splice(vi(), 1); })}>✕</Button>
                   </div>
                 )}
@@ -216,7 +216,7 @@ function AnswerEditor(p: { q: Question; edit: EditQ }): JSX.Element {
                 {(opt, oi) => (
                   <div class="s-opt">
                     <span class="q-mono muted">{oi() + 1}</span>
-                    <input value={opt.label} onInput={(e) => { const v = e.currentTarget.value; spec("order", (x) => { const it = x.options[oi()]; if (it !== undefined) it.label = v; }, `o${oi()}`); }} />
+                    <input aria-label={`Proposition ${oi() + 1}`} value={opt.label} onInput={(e) => { const v = e.currentTarget.value; spec("order", (x) => { const it = x.options[oi()]; if (it !== undefined) it.label = v; }, `o${oi()}`); }} />
                     <Button kind="ghost" title="Monter" disabled={oi() === 0} onClick={() => spec("order", (x) => moveItem(x.options, oi(), oi() - 1))}>↑</Button>
                     <Button kind="ghost" title="Descendre" disabled={oi() === o().options.length - 1} onClick={() => spec("order", (x) => moveItem(x.options, oi(), oi() + 1))}>↓</Button>
                     <Button kind="ghost" title="Retirer" disabled={o().options.length <= 3} onClick={() => spec("order", (x) => { x.options.splice(oi(), 1); })}>✕</Button>
@@ -236,9 +236,9 @@ function AnswerEditor(p: { q: Question; edit: EditQ }): JSX.Element {
               <For each={pr().pairs}>
                 {(pair, pi) => (
                   <div class="s-opt">
-                    <input value={pair.left} onInput={(e) => { const v = e.currentTarget.value; spec("pairs", (x) => { const it = x.pairs[pi()]; if (it !== undefined) it.left = v; }, `l${pi()}`); }} />
+                    <input aria-label={`Paire ${pi() + 1}, gauche`} value={pair.left} onInput={(e) => { const v = e.currentTarget.value; spec("pairs", (x) => { const it = x.pairs[pi()]; if (it !== undefined) it.left = v; }, `l${pi()}`); }} />
                     <span class="muted">→</span>
-                    <input value={pair.right} onInput={(e) => { const v = e.currentTarget.value; spec("pairs", (x) => { const it = x.pairs[pi()]; if (it !== undefined) it.right = v; }, `r${pi()}`); }} />
+                    <input aria-label={`Paire ${pi() + 1}, droite`} value={pair.right} onInput={(e) => { const v = e.currentTarget.value; spec("pairs", (x) => { const it = x.pairs[pi()]; if (it !== undefined) it.right = v; }, `r${pi()}`); }} />
                     <Button kind="ghost" title="Retirer" disabled={pr().pairs.length <= 2} onClick={() => spec("pairs", (x) => { x.pairs.splice(pi(), 1); })}>✕</Button>
                   </div>
                 )}
@@ -263,7 +263,7 @@ function AnswerEditor(p: { q: Question; edit: EditQ }): JSX.Element {
                 {(opt, oi) => (
                   <div class="s-opt">
                     <input type="radio" name={`alloc-${p.q.id}`} title="bonne réponse" checked={al().correct === opt.id} onChange={() => spec("allocation", (x) => { x.correct = opt.id; })} />
-                    <input value={opt.label} onInput={(e) => { const v = e.currentTarget.value; spec("allocation", (x) => { const it = x.options[oi()]; if (it !== undefined) it.label = v; }, `o${oi()}`); }} />
+                    <input aria-label={`Proposition ${oi() + 1}`} value={opt.label} onInput={(e) => { const v = e.currentTarget.value; spec("allocation", (x) => { const it = x.options[oi()]; if (it !== undefined) it.label = v; }, `o${oi()}`); }} />
                     <Button kind="ghost" title="Retirer" disabled={al().options.length <= 2} onClick={() => spec("allocation", (x) => { const [gone] = x.options.splice(oi(), 1); if (gone?.id === x.correct) x.correct = x.options[0]?.id ?? x.correct; })}>✕</Button>
                   </div>
                 )}
@@ -276,7 +276,7 @@ function AnswerEditor(p: { q: Question; edit: EditQ }): JSX.Element {
       <Match when={as("oral")}>
         {(s) => (
           <label class="s-field"><span class="s-label">Réponse attendue (vue animateur et régie)</span>
-            <input value={s().expected} onInput={(e) => { const v = e.currentTarget.value; spec("oral", (x) => { x.expected = v; }, "expected"); }} />
+            <input aria-label="Réponse attendue (orale)" value={s().expected} onInput={(e) => { const v = e.currentTarget.value; spec("oral", (x) => { x.expected = v; }, "expected"); }} />
           </label>
         )}
       </Match>
@@ -287,7 +287,7 @@ function AnswerEditor(p: { q: Question; edit: EditQ }): JSX.Element {
             <For each={vo().options}>
               {(opt, oi) => (
                 <div class="s-opt">
-                  <input value={opt.label} onInput={(e) => { const v = e.currentTarget.value; spec("vote", (x) => { const it = x.options[oi()]; if (it !== undefined) it.label = v; }, `o${oi()}`); }} />
+                  <input aria-label={`Proposition ${oi() + 1}`} value={opt.label} onInput={(e) => { const v = e.currentTarget.value; spec("vote", (x) => { const it = x.options[oi()]; if (it !== undefined) it.label = v; }, `o${oi()}`); }} />
                   <Button kind="ghost" title="Retirer" disabled={vo().options.length <= 2} onClick={() => spec("vote", (x) => { x.options.splice(oi(), 1); })}>✕</Button>
                 </div>
               )}
@@ -306,7 +306,7 @@ function AnswerEditor(p: { q: Question; edit: EditQ }): JSX.Element {
               <For each={po().options}>
                 {(opt, oi) => (
                   <div class="s-opt">
-                    <input value={opt.label} onInput={(e) => { const v = e.currentTarget.value; spec("poll", (x) => { const it = x.options[oi()]; if (it !== undefined) it.label = v; }, `o${oi()}`); }} />
+                    <input aria-label={`Proposition ${oi() + 1}`} value={opt.label} onInput={(e) => { const v = e.currentTarget.value; spec("poll", (x) => { const it = x.options[oi()]; if (it !== undefined) it.label = v; }, `o${oi()}`); }} />
                     <NumField min={0} max={100} value={opt.value} title="%" onChange={(v) => spec("poll", (x) => { const it = x.options[oi()]; if (it !== undefined) it.value = v; })} />
                     <span class="muted">%</span>
                     <Button kind="ghost" title="Retirer" disabled={po().options.length <= 1} onClick={() => spec("poll", (x) => { x.options.splice(oi(), 1); })}>✕</Button>
@@ -345,7 +345,7 @@ function ChoiceEditor(p: { q: Question; edit: EditQ }): JSX.Element {
                 }
               });
             }} />
-            <input value={o.label} onInput={(e) => { const v = e.currentTarget.value; p.edit((x) => { const s = x.answerSpec; if (s.kind === "single" || s.kind === "multi") { const it = s.options[oi()]; if (it !== undefined) it.label = v; } }, `o${oi()}`); }} />
+            <input aria-label={`Proposition ${oi() + 1}`} value={o.label} onInput={(e) => { const v = e.currentTarget.value; p.edit((x) => { const s = x.answerSpec; if (s.kind === "single" || s.kind === "multi") { const it = s.options[oi()]; if (it !== undefined) it.label = v; } }, `o${oi()}`); }} />
             <Button kind="ghost" title="Retirer" disabled={opts().length <= 2} onClick={() => p.edit((x) => {
               const s = x.answerSpec;
               if (s.kind !== "single" && s.kind !== "multi") return;
@@ -458,7 +458,7 @@ function QuestionPointsField(p: { q: Question; edit: (f: (x: Question) => void, 
   return (
     <div class="s-field s-points">
       <span class="s-label" title="Les points de la question passent avant le barème de sa catégorie et celui de la manche (onglet Format). La mise en direct de la régie s'applique par-dessus.">Points de cette question</span>
-      <select value={cur().mode} onChange={(e) => {
+      <select aria-label="Points de cette question" value={cur().mode} onChange={(e) => {
         const m = e.currentTarget.value;
         if (m === "round") set({ mode: "round" });
         else if (m === "fixed") set({ mode: "fixed", points: 100 });

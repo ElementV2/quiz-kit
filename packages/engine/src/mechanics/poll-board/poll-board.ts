@@ -32,6 +32,8 @@ export const PollBoardConfig = z.strictObject({
   steal: z.boolean().default(true),
   /** At the reveal, show the answers nobody found. Off: only the found ones stay on the board. */
   revealAll: z.boolean().default(true),
+  /** Strikes back to zero when the hand passes. Off: they are kept (shared by every side of the question). */
+  strikesReset: z.boolean().default(true),
 });
 export type PollBoardConfig = z.infer<typeof PollBoardConfig>;
 
@@ -58,6 +60,7 @@ export const PollBoardState = z.strictObject({
   scoring: z.enum(["per-answer", "bank"]).default("bank"),
   steal: z.boolean().default(true),
   revealAll: z.boolean().default(true),
+  strikesReset: z.boolean().default(true),
   strikes: z.number().int().min(0),
   stage: z.enum(["play", "steal", "done"]),
   controllingTeamId: Side.nullable(),
@@ -85,10 +88,13 @@ const sideOf = (a: { readonly teamId?: string | undefined; readonly participantI
 
 function giveHand(s: S, a: ActionOf<"poll.control">, env: MechanicEnv): R {
   if (!SHOWN.has(env.phase) || env.phase === "revealed") return err("wrong-phase", "la main se donne pendant la question (avant la révélation)");
-  if (s.stage === "done") return err("conflict", "le jeu est terminé pour cette question");
+  // Over (strikes used, no steal) while answers remain: another side may still be given the hand.
+  if (s.stage === "done" && s.slots.every((x) => x.found)) return err("conflict", "toutes les réponses sont trouvées");
   const side = sideOf(a);
-  if (s.controllingTeamId === side) return err("conflict", "a déjà la main");
-  return ok({ ...s, controllingTeamId: side, strikes: 0, stage: "play", stealingTeamId: null });
+  if (s.controllingTeamId === side && s.stage !== "done") return err("conflict", "a déjà la main");
+  const strikes = flag(s.strikesReset, true) ? 0 : s.strikes;
+  // Strikes kept and all used: the new side gets one more try (else giving the hand would be pointless).
+  return ok({ ...s, controllingTeamId: side, strikes: strikes >= s.maxStrikes ? s.maxStrikes - 1 : strikes, stage: "play", stealingTeamId: null, winnerTeamId: null });
 }
 
 function handSteal(s: S, a: ActionOf<"poll.steal">, env: MechanicEnv): R {
@@ -167,7 +173,7 @@ export const pollBoard = defineMechanic<PollBoardConfig, PollBoardState>({
 
   reconfigure(s, cfg) {
     // Display and flow settings: safe mid-question (the bank / the found answers do not move).
-    return { ...s, steal: cfg.steal, revealAll: cfg.revealAll, maxStrikes: Math.max(cfg.maxStrikes, s.strikes) };
+    return { ...s, steal: cfg.steal, revealAll: cfg.revealAll, strikesReset: cfg.strikesReset, maxStrikes: Math.max(cfg.maxStrikes, s.strikes) };
   },
 
   init(cfg, question) {
@@ -185,6 +191,7 @@ export const pollBoard = defineMechanic<PollBoardConfig, PollBoardState>({
       scoring: cfg.scoring,
       steal: cfg.steal,
       revealAll: cfg.revealAll,
+      strikesReset: cfg.strikesReset,
       strikes: 0,
       stage: "play",
       controllingTeamId: null,

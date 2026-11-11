@@ -16,7 +16,7 @@
   --ui-border-strong: #4d4942;
   --ui-text: #ece7dc;
   --ui-muted: #9a9387;
-  --ui-faint: #6b665d;
+  --ui-faint: #8f897e; /* ≥ 4.5:1 on --ui-bg / --ui-surface (WCAG 1.4.3) */
   /* Primary action = lit key: paper white on graphite. */
   --ui-primary: #ece7dc;
   --ui-primary-ink: #121110;
@@ -98,7 +98,7 @@ input, select, textarea {
   border: 1px solid var(--ui-border); border-radius: var(--ui-radius); padding: 6px 9px; min-width: 0;
 }
 input:hover, select:hover, textarea:hover { border-color: var(--ui-border-strong); }
-input:focus, select:focus, textarea:focus { outline: none; border-color: var(--ui-focus); }
+input:focus, select:focus, textarea:focus { border-color: var(--ui-focus); outline: 2px solid var(--ui-focus); outline-offset: 0; } /* visible focus on fields too (WCAG 2.4.7) */
 input[type="number"] { font-family: var(--ui-mono); }
 input[type="checkbox"], input[type="radio"] { accent-color: var(--ui-accent); width: 15px; height: 15px; padding: 0; }
 input[type="color"] { width: 44px; height: 32px; padding: 2px; cursor: pointer; } input[type="color"]::-webkit-color-swatch-wrapper { padding: 0; } input[type="color"]::-webkit-color-swatch { border: 0; border-radius: 2px; }
@@ -160,7 +160,7 @@ kbd { font: 11px var(--ui-mono); padding: 1px 5px; border: 1px solid var(--ui-bo
 .q-homelink:hover { color: var(--ui-text); border-bottom-color: var(--ui-border-strong); }
 /* Tally tag: red = on air, amber = armed / next, outline = off. */
 .q-tally { display: inline-flex; align-items: center; gap: 6px; font: 600 11px var(--ui-mono); letter-spacing: .1em; text-transform: uppercase; padding: 3px 8px; border-radius: var(--ui-radius); border: 1px solid var(--ui-border); color: var(--ui-muted); white-space: nowrap; }
-.q-tally[data-on="air"] { background: var(--ui-onair); border-color: var(--ui-onair); color: var(--ui-danger-ink); }
+.q-tally[data-on="air"] { background: #d23a2a; border-color: #d23a2a; color: #ffffff; } /* 4.8:1 */
 .q-tally[data-on="armed"] { background: var(--ui-accent); border-color: var(--ui-accent); color: var(--ui-accent-ink); }
 .q-tally[data-on="next"] { border-color: var(--ui-accent); color: var(--ui-accent); }
 .q-tally[data-on="ok"] { border-color: var(--ui-ok); color: var(--ui-ok); }
@@ -219,3 +219,11 @@ kbd { font: 11px var(--ui-mono); padding: 1px 5px; border: 1px solid var(--ui-bo
 .q-stakes-form { display: inline-flex; gap: 4px; }
 .q-stakes-form input { width: 92px; min-height: 28px; padding: 2px 8px; }
 .q-stakes-badge { display: inline-block; padding: 1px 8px; border-radius: var(--ui-radius); background: var(--ui-accent); color: var(--ui-accent-ink); font: 700 12px var(--ui-mono); letter-spacing: .04em; }
+
+/* Targets (WCAG 2.5.8): check boxes and radios at least 20 px, inside labels at least 24 px high. */
+input[type="checkbox"], input[type="radio"] { width: 20px; height: 20px; flex-shrink: 0; }
+label:has(> input[type="checkbox"]), label:has(> input[type="radio"]) { min-height: 24px; }
+/* Moving things calm down for who asked (WCAG 2.3.3). */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; scroll-behavior: auto !important; }
+}

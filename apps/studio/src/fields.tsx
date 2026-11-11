@@ -23,9 +23,10 @@ export function JsonField(p: { label: string; value: unknown; onChange: (v: Reco
 }
 
 /** Number input applied on change; empty → `onEmpty` when given (optional fields), else ignored. */
-export function NumField(p: { value: number | undefined; onChange: (v: number) => void; onEmpty?: () => void; min?: number | undefined; max?: number | undefined; step?: number | undefined; title?: string | undefined; class?: string; placeholder?: string | undefined }): JSX.Element {
+export function NumField(p: { value: number | undefined; onChange: (v: number) => void; onEmpty?: () => void; min?: number | undefined; max?: number | undefined; step?: number | undefined; title?: string | undefined; class?: string; placeholder?: string | undefined; label?: string | undefined }): JSX.Element {
   return (
     <input
+      aria-label={p.label ?? p.title ?? "Valeur"}
       class={`s-num ${p.class ?? ""}`}
       type="number"
       min={p.min}

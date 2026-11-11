@@ -344,6 +344,7 @@ export const MIXED_CATEGORIES: readonly MixedCategoryInfo[] = [
       { key: "multiplier", kind: "number", label: "Multiplicateur (manche double, triple…)", min: 0.5, max: 100, step: 0.5 },
       { key: "steal", kind: "boolean", label: "Vol possible après la dernière erreur (une seule réponse pour l'autre camp)" },
       { key: "revealAll", kind: "boolean", label: "À la révélation, montrer aussi les réponses non trouvées" },
+      { key: "strikesReset", kind: "boolean", label: "Erreurs remises à zéro quand la main passe (sinon elles restent pour tout le monde)" },
     ],
   },
   { id: "oral", label: "Réponse orale (buzzer)", kinds: ["oral"], explain: "Le premier qui buzze répond à voix haute ; l'animateur ou la régie juge.", fields: [{ key: "lockoutOnWrong", kind: "boolean", label: "Qui se trompe ne peut plus buzzer sur la question" }] },

@@ -58,7 +58,7 @@ export function Prompter(p: {
   const why = () => (p.offer !== null && !p.offer.ok ? p.offer.reason : null);
 
   return (
-    <section class="h-prompter" data-mode={r().mode}>
+    <section class="h-prompter" data-mode={r().mode} tabindex="0" aria-label="Question à lire">
       <div class="h-strip">
         <span class="q-tally" data-on={MODE_TALLY[r().mode]}>{MODE_LABEL[r().mode]}</span>
         <span class="h-pos">{r().round.title} · <span class="q-mono">Q{r().question.index + 1}/{r().round.questions.length}</span></span>

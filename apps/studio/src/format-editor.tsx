@@ -243,7 +243,7 @@ function RuleEditor(p: { title: string; rule: readonly ScoringComponent[]; editR
           {(c, ci) => (
             <div class="s-score-row">
               <span>{SCORING_LABEL[c.type]}</span>
-              <NumField step={c.type === "multiplier" ? 0.5 : 10} value={scoreValue(c)} onChange={(v) => setValue(ci(), v)} />
+              <NumField label={`${SCORING_LABEL[c.type]} (${unit[c.type]})`} step={c.type === "multiplier" ? 0.5 : 10} value={scoreValue(c)} onChange={(v) => setValue(ci(), v)} />
               <span class="muted">{unit[c.type]}</span>
               <Button kind="ghost" title="Retirer la règle" disabled={p.rule.length <= 1} onClick={() => p.editRule((rule) => { rule.splice(ci(), 1); })}>✕</Button>
             </div>

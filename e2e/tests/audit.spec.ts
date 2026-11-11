@@ -43,6 +43,9 @@ async function measure(page: Page, screen: string, size: Size): Promise<void> {
       const st = getComputedStyle(el);
       if (st.visibility === "hidden" || st.display === "none") continue;
       const inline = el.tagName === "A" && st.display === "inline";
+      // WCAG 2.5.8: a small check box / radio is fine when its label (the click target) is at least 24 px high.
+      const lab = el instanceof HTMLInputElement && (el.type === "checkbox" || el.type === "radio") ? el.closest("label") : null;
+      if (lab !== null && lab.getBoundingClientRect().height >= 24) continue;
       if (!inline && (r.width < 24 || r.height < 24)) small.push(`${el.tagName.toLowerCase()}${el.className ? "." + el.className.split(" ").filter(Boolean).slice(0, 2).join(".") : ""} ${Math.round(r.width)}×${Math.round(r.height)} « ${(el.textContent ?? el.getAttribute("aria-label") ?? "").trim().slice(0, 24)} »`);
     }
     return { overflowX, small, lang: document.documentElement.getAttribute("lang"), title: document.title };

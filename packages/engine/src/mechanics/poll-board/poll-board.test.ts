@@ -320,3 +320,16 @@ describe("poll-board — passing the hand after the answers were closed", () => 
   });
 });
 
+describe("poll-board — hand after the last strike, strikes kept or reset", () => {
+  it("steal off: after the last strike the hand can still go to a side that has not played; strikes reset by default", () => {
+    const g = play([...OPEN, good("a"), bad, bad, bad], withCfg({ steal: false }));
+    expect(viewOf(g, { role: "control" })).toMatchObject({ stage: "done" });
+    const passed = run(reg, [ctl({ type: "poll.control", teamId: "t_b" })], g);
+    expect(viewOf(passed, { role: "control" })).toMatchObject({ stage: "play", controllingTeamId: "t_b", strikes: 0, winnerTeamId: null });
+  });
+  it("strikes kept: the new side starts with the strikes already given (one try left at least)", () => {
+    const g = play([...OPEN, bad, ctl({ type: "poll.control", teamId: "t_b" })], withCfg({ strikesReset: false }));
+    expect(viewOf(g, { role: "control" })).toMatchObject({ controllingTeamId: "t_b", strikes: 1 });
+  });
+});
+
