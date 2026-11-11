@@ -6,6 +6,7 @@ import {
   DEMO_GAME,
   DEMO_POLL_GAME,
   DEMO_BUZZER_GAME,
+  DEMO_LADDER_GAME,
   Event,
   GameDocument,
   QuestionId,
@@ -60,6 +61,7 @@ describe("GameDocument", () => {
     ["choice", DEMO_GAME],
     ["poll-board", DEMO_POLL_GAME],
     ["buzzer", DEMO_BUZZER_GAME],
+    ["ladder", DEMO_LADDER_GAME],
   ])("accepts the %s demo game", (_name, game) => {
     expect(GameDocument.safeParse(game).success).toBe(true);
   });

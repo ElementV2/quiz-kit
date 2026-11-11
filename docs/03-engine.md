@@ -45,7 +45,8 @@ Mécaniques de base (phase 0 → 3) : `choice` (QCM, vrai/faux, multi), `poll-bo
 `buzzer` (priorité + blocage), `ladder` (paliers), `oral` (validation animateur), `text-answer` (fuzzy),
 `number-answer`, `order`, `pairs`, `pin`, `board` (Jeopardy), `hints` (indices dégressifs), `reveal-image`,
 `allocation`, `crowd-vote` (majorité chat).
-`ladder` est une **mécanique de manche** (progression sur paliers) qui s'appuie sur une `ScoringRule` `ladder`.
+`ladder` est une **mécanique de manche** (progression sur paliers). Ses paliers sont dans sa config
+(`steps`, `safeSteps`), pas dans une `ScoringRule` : la règle de score de la manche est ignorée.
 
 Toute mécanique passe `mechanicContractSuite` : actions hors phase rejetées, projection sans fuite,
 rejeu déterministe, score cohérent avec le registre. La suite reçoit un générateur d'actions joueur
@@ -89,6 +90,22 @@ file (bloqué pour la question si `lockoutOnWrong`, défaut `true`), la main pas
 fermés. Le jugement reste possible réponses verrouillées. Points à `question.reveal` par la `ScoringRule`
 (base pour la bonne réponse, pénalité par mauvaise, dégressivité mesurée au buzz). Un `buzz` n'est jamais
 la cible d'un undo par défaut. Vue joueur légère : `me` (main, position, bloqué, peut buzzer), sans file.
+
+### `ladder` (QCM à paliers)
+
+Questions `single`. Config : `steps` (montants strictement croissants), `safeSteps` (index des paliers
+assurés, défaut `[]`), `jokers` (défaut `["fifty", "audience"]`). Le candidat est le premier joueur dont la
+réponse est acceptée dans la manche ; les autres sont refusés. Bonne réponse révélée → palier suivant ;
+mauvaise → retombe au dernier palier assuré atteint, fin ; `ladder.stop` (avant la réponse) garde le palier
+atteint, fin ; dernier palier ou dernière question de la manche → fin. À la fin, `question.next` termine la
+manche (`endsRound`). Le gain final est écrit **une fois** au registre, au `question.reveal` qui termine la
+partie ; les révélations intermédiaires n'écrivent rien. Une question passée sans révélation ne fait pas
+monter. Retirer le candidat remet la partie à zéro.
+Jokers (`joker.use`, avant la réponse et avant le verrouillage, une fois par partie chacun, visibles de
+tous) : `fifty` masque 2 mauvaises options tirées par `ctx.rng` ; `audience` : le moteur tire le sondage par
+`ctx.rng` (choix le plus simple, sans saisie régie) — 35 à 75 % pour la bonne réponse, le reste réparti au
+hasard entre les autres options visibles, total 100. Avant révélation, `status`, `level` et `gain` ne
+dépendent pas de la justesse de la réponse (testé).
 
 ## Actions (extrait)
 

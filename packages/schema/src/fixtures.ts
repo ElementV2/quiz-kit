@@ -197,3 +197,134 @@ export const DEMO_BUZZER_GAME: GameDocument = {
     ],
   },
 };
+
+/**
+ * "QCM à paliers" template (ladder, QVGDM-like): one candidate, increasing steps, safe step at index 2,
+ * 50:50 and audience jokers once per game. The round's ScoringRule is not used by ladder (the final gain
+ * is written to the ledger when the ladder ends).
+ */
+export const DEMO_LADDER_GAME: GameDocument = {
+  schemaVersion: 1,
+  title: "Démo QCM à paliers",
+  questions: [
+    {
+      id: "q_lad_1",
+      prompt: { text: "Combien de pattes a une araignée ?" },
+      answerSpec: {
+        kind: "single",
+        correct: "b",
+        options: [
+          { id: "a", label: "6" },
+          { id: "b", label: "8" },
+          { id: "c", label: "10" },
+          { id: "d", label: "12" },
+        ],
+      },
+      hints: [],
+      tags: ["paliers"],
+      notes: "Les insectes en ont 6.",
+    },
+    {
+      id: "q_lad_2",
+      prompt: { text: "Quel océan borde la côte ouest de la France ?" },
+      answerSpec: {
+        kind: "single",
+        correct: "d",
+        options: [
+          { id: "a", label: "Pacifique" },
+          { id: "b", label: "Indien" },
+          { id: "c", label: "Arctique" },
+          { id: "d", label: "Atlantique" },
+        ],
+      },
+      hints: [],
+      tags: ["paliers"],
+      notes: "Golfe de Gascogne ; la Manche au nord.",
+    },
+    {
+      id: "q_lad_3",
+      prompt: { text: "Qui a peint « La Joconde » ?" },
+      answerSpec: {
+        kind: "single",
+        correct: "a",
+        options: [
+          { id: "a", label: "Léonard de Vinci" },
+          { id: "b", label: "Michel-Ange" },
+          { id: "c", label: "Raphaël" },
+          { id: "d", label: "Botticelli" },
+        ],
+      },
+      hints: [],
+      tags: ["paliers"],
+      notes: "Conservée au Louvre depuis 1797.",
+    },
+    {
+      id: "q_lad_4",
+      prompt: { text: "En quelle année l'homme a-t-il marché sur la Lune pour la première fois ?" },
+      answerSpec: {
+        kind: "single",
+        correct: "c",
+        options: [
+          { id: "a", label: "1965" },
+          { id: "b", label: "1967" },
+          { id: "c", label: "1969" },
+          { id: "d", label: "1972" },
+        ],
+      },
+      hints: [],
+      tags: ["paliers"],
+      notes: "Apollo 11, juillet 1969.",
+    },
+    {
+      id: "q_lad_5",
+      prompt: { text: "Quel élément chimique a pour symbole « W » ?" },
+      answerSpec: {
+        kind: "single",
+        correct: "a",
+        options: [
+          { id: "a", label: "Tungstène" },
+          { id: "b", label: "Vanadium" },
+          { id: "c", label: "Xénon" },
+          { id: "d", label: "Zinc" },
+        ],
+      },
+      hints: [],
+      tags: ["paliers"],
+      notes: "W pour wolfram, autre nom du tungstène.",
+    },
+    {
+      id: "q_lad_6",
+      prompt: { text: "Quelle est la capitale de l'Australie ?" },
+      answerSpec: {
+        kind: "single",
+        correct: "c",
+        options: [
+          { id: "a", label: "Sydney" },
+          { id: "b", label: "Melbourne" },
+          { id: "c", label: "Canberra" },
+          { id: "d", label: "Perth" },
+        ],
+      },
+      hints: [],
+      tags: ["paliers"],
+      notes: "Capitale fédérale depuis 1913.",
+    },
+  ],
+  format: {
+    id: "f_demo_ladder",
+    name: "QCM à paliers",
+    participants: { mode: "solo", min: 1, max: 1 },
+    tieBreak: "control",
+    rounds: [
+      {
+        id: "r_ladder",
+        title: "Paliers",
+        mechanic: "ladder",
+        mechanicConfig: { steps: [200, 500, 1000, 5000, 20000, 100000], safeSteps: [2], jokers: ["fifty", "audience"] },
+        questions: ["q_lad_1", "q_lad_2", "q_lad_3", "q_lad_4", "q_lad_5", "q_lad_6"],
+        reserve: [],
+        scoring: [{ type: "base", points: 0 }],
+      },
+    ],
+  },
+};

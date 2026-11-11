@@ -90,7 +90,41 @@ export const BuzzerMechanicView = z.strictObject({
 });
 export type BuzzerMechanicView = z.infer<typeof BuzzerMechanicView>;
 
-export const MechanicView = z.discriminatedUnion("mechanic", [ChoiceMechanicView, PollBoardMechanicView, BuzzerMechanicView]);
+export const LadderJokerState = z.enum(["available", "used", "disabled"]);
+export type LadderJokerState = z.infer<typeof LadderJokerState>;
+
+/** Ladder (QVGDM): one candidate climbs steps question after question; safe steps are kept on a fall. */
+export const LadderMechanicView = z.strictObject({
+  mechanic: z.literal("ladder"),
+  options: z.array(z.strictObject({ id: OptionId, label: z.string(), media: Media.optional() })),
+  /** Options removed by the 50:50 joker (never the correct one). Public. */
+  hidden: z.array(OptionId),
+  /** Audience poll joker result, % per option (sums to 100, hidden options at 0). Public; null if not used. */
+  audience: z.record(OptionId, z.number().int()).nullable(),
+  /** SECRET: null for player / output until `revealed`. */
+  correct: OptionId.nullable(),
+  /** Amount of each step, increasing (index 0 = first step). */
+  steps: z.array(z.number().int()),
+  /** Indices of safe steps (kept after a wrong answer). */
+  safeSteps: z.array(z.number().int()),
+  /** Steps won so far; includes this question's result once revealed. */
+  level: z.number().int().min(0),
+  /** Index of the step played on this question; null once the ladder is over. */
+  atStake: z.number().int().min(0).nullable(),
+  /** Amount won so far (after a wrong answer: the secured amount). */
+  gain: z.number().int(),
+  /** Amount guaranteed whatever happens (last safe step reached). */
+  secured: z.number().int(),
+  candidate: ParticipantId.nullable(),
+  /** The candidate's current answer (shown as the "final answer"). */
+  answer: OptionId.nullable(),
+  /** `lost` / `won` only once revealed; `stopped` as soon as control records `ladder.stop`. */
+  status: z.enum(["playing", "stopped", "won", "lost"]),
+  jokers: z.strictObject({ fifty: LadderJokerState, audience: LadderJokerState }),
+});
+export type LadderMechanicView = z.infer<typeof LadderMechanicView>;
+
+export const MechanicView = z.discriminatedUnion("mechanic", [ChoiceMechanicView, PollBoardMechanicView, BuzzerMechanicView, LadderMechanicView]);
 export type MechanicView = z.infer<typeof MechanicView>;
 
 export const LeaderboardRow = z.strictObject({
