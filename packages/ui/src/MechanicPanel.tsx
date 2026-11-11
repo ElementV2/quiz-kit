@@ -1,6 +1,6 @@
 import { confirmDialog } from "./Dialog.tsx";
 import { For, Show, createSignal, type JSX } from "solid-js";
-import { asBuzzer, asLadder, asPollBoard, nameOf } from "@quiz/renderer";
+import { asBuzzer, asLadder, asPollBoard, nameOf, pollSideAction, pollSides, sideName } from "@quiz/renderer";
 import type { Action, ControlView, HostView } from "@quiz/schema";
 import { Button } from "./components.tsx";
 import { Phase3Panel } from "./AnswerPanels.tsx";
@@ -19,7 +19,8 @@ export function MechanicPanel(p: {
 }): JSX.Element {
   const control = () => p.mode === "control";
   const teams = () => (p.view.role === "control" ? p.view.teams : []);
-  const teamName = (id: string | null) => p.view.teamBoard.find((t) => t.teamId === id)?.name ?? teams().find((t) => t.id === id)?.name ?? "—";
+  const teamName = (id: string | null) => (id !== null && id.startsWith("p_") ? sideName(p.view, id) : (p.view.teamBoard.find((t) => t.teamId === id)?.name ?? teams().find((t) => t.id === id)?.name ?? "—"));
+  const sides = () => pollSides(p.view);
   const [team, setTeam] = createSignal<string>("");
   const open = () => p.view.phase === "open" || p.view.phase === "locked";
 
@@ -33,18 +34,18 @@ export function MechanicPanel(p: {
               <span>Main : <b>{teamName(m().controllingTeamId)}</b></span>
               <span class="q-mech-strikes">{"✗".repeat(m().strikes)}<span class="muted">{"✗".repeat(Math.max(0, m().maxStrikes - m().strikes))}</span></span>
               <Show when={m().scoring === "per-answer"} fallback={<span>Banque <b>{m().bank}</b>{m().multiplier !== 1 ? ` ×${m().multiplier}` : ""}</span>}>
-                <span>{m().teamPoints.length === 0 ? "Chaque équipe marque ce qu'elle trouve" : m().teamPoints.map((t) => `${teamName(t.teamId)} ${t.points}`).join(" · ")}{m().multiplier !== 1 ? ` (multiplicateur ×${m().multiplier} compris)` : ""}</span>
+                <span>{m().teamPoints.length === 0 ? "Chacun marque ce qu'il trouve" : m().teamPoints.map((t) => `${teamName(t.teamId)} ${t.points}`).join(" · ")}{m().multiplier !== 1 ? ` (multiplicateur ×${m().multiplier} compris)` : ""}</span>
               </Show>
             </div>
             <Show when={control() && m().stage !== "done" && p.view.phase !== "revealed"}>
               <div class="q-mech-row">
                 <select value={team()} onChange={(e) => setTeam(e.currentTarget.value)}>
-                  <option value="">— équipe —</option>
-                  <For each={teams()}>{(t) => <option value={t.id}>{t.name}</option>}</For>
+                  <option value="">{teams().length > 0 ? "— équipe —" : "— joueur —"}</option>
+                  <For each={sides()}>{(t) => <option value={t.id}>{t.name}</option>}</For>
                 </select>
-                <Button kind={m().controllingTeamId === null ? "primary" : "secondary"} disabled={team() === "" || team() === m().controllingTeamId} onClick={() => void p.act({ type: "poll.control", teamId: team() })}>{m().controllingTeamId === null ? "Donner la main" : "Passer la main"}</Button>
+                <Button kind={m().controllingTeamId === null ? "primary" : "secondary"} disabled={team() === "" || team() === m().controllingTeamId} onClick={() => void p.act(pollSideAction("poll.control", team()))}>{m().controllingTeamId === null ? "Donner la main" : "Passer la main"}</Button>
                 <Show when={m().stage === "steal" && m().stealingTeamId === null}>
-                  <Button disabled={team() === ""} onClick={() => void p.act({ type: "poll.steal", teamId: team() })}>Tentative de vol</Button>
+                  <Button disabled={team() === ""} onClick={() => void p.act(pollSideAction("poll.steal", team()))}>Tentative de vol</Button>
                 </Show>
               </div>
             </Show>

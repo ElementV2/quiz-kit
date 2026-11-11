@@ -197,3 +197,24 @@ export function estimateFontSize(text: string, box: { w: number; h: number }, ma
 }
 
 export type AnyView = View;
+
+type SidesView = { readonly teamBoard: readonly { teamId: string; name: string }[]; readonly leaderboard: readonly { participantId: string; displayName: string; teamId?: string | null }[] };
+
+/** Survey sides: the teams, then the players without a team (all players in a game played individually). */
+export function pollSides(v: SidesView): { id: string; name: string }[] {
+  const teams = v.teamBoard.map((t) => ({ id: t.teamId, name: t.name }));
+  const solo = v.leaderboard.filter((r) => teams.length === 0 || r.teamId === null || r.teamId === undefined).map((r) => ({ id: r.participantId, name: r.displayName }));
+  return [...teams, ...solo];
+}
+
+/** Name of a survey side (team `t_…` or player `p_…`). */
+export function sideName(v: SidesView, id: string | null): string {
+  if (id === null) return "—";
+  return v.teamBoard.find((t) => t.teamId === id)?.name ?? v.leaderboard.find((r) => r.participantId === id)?.displayName ?? "—";
+}
+
+/** `poll.control` / `poll.steal` for a side (the id prefix tells a team from a player). */
+export function pollSideAction(type: "poll.control" | "poll.steal", id: string): { type: "poll.control" | "poll.steal"; teamId?: string; participantId?: string } {
+  return id.startsWith("p_") ? { type, participantId: id } : { type, teamId: id };
+}
+

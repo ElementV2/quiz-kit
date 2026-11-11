@@ -193,7 +193,9 @@ function reduceAllowed(s: GameState, a: Action, ctx: Ctx, registry: Registry): R
 
     case "poll.control":
     case "poll.steal":
-      if (!s.teams.some((t) => t.id === a.teamId)) return err("not-found", "équipe inconnue");
+      if ((a.teamId === undefined) === (a.participantId === undefined)) return err("invalid", "désigner une équipe ou un joueur");
+      if (a.teamId !== undefined && !s.teams.some((t) => t.id === a.teamId)) return err("not-found", "équipe inconnue");
+      if (a.participantId !== undefined && !s.participants.some((p) => p.id === a.participantId)) return err("not-found", "joueur inconnu");
       return mechanicAction(s, a, ctx, registry);
 
     case "element.reveal":

@@ -26,6 +26,9 @@ export const ChoiceMechanicView = z.strictObject({
 });
 export type ChoiceMechanicView = z.infer<typeof ChoiceMechanicView>;
 
+/** Who plays a survey: a team (`t_…`), or a player (`p_…`) in a game played individually. */
+export const PollSide = z.union([TeamId, ParticipantId]);
+
 export const PollBoardSlot = z.strictObject({
   index: z.number().int().min(0),
   /** Shown to everyone (found by a team, or revealed by control with `element.reveal`). */
@@ -39,7 +42,7 @@ export const PollBoardSlot = z.strictObject({
   /** SECRET: share (%), same rule as `label`. */
   value: z.number().nullable(),
   /** Team that found it (per-answer scoring). */
-  foundBy: TeamId.nullable().default(null),
+  foundBy: PollSide.nullable().default(null),
 });
 export type PollBoardSlot = z.infer<typeof PollBoardSlot>;
 
@@ -52,18 +55,18 @@ export const PollBoardMechanicView = z.strictObject({
   /** `play`: the team with the hand answers; `steal`: max strikes reached, another team may steal; `done`. */
   stage: z.enum(["play", "steal", "done"]),
   /** Team that has the hand (null until control gives it). */
-  controllingTeamId: TeamId.nullable(),
+  controllingTeamId: PollSide.nullable(),
   /** Team attempting the steal (null outside `steal` / before control designates it). */
-  stealingTeamId: TeamId.nullable(),
+  stealingTeamId: PollSide.nullable(),
   /** Sum of the values of found slots (public: those slots are revealed). */
   bank: z.number(),
   multiplier: z.number(),
   /** Team that takes the bank, once known (stage done). */
-  winnerTeamId: TeamId.nullable(),
+  winnerTeamId: PollSide.nullable(),
   /** `per-answer`: each team scores what it found (`teamPoints`); `bank`: the winner takes the bank. */
   scoring: z.enum(["per-answer", "bank"]).default("bank"),
   /** Per-answer scoring: points of each team on this question (× multiplier). */
-  teamPoints: z.array(z.strictObject({ teamId: TeamId, points: z.number() })).default([]),
+  teamPoints: z.array(z.strictObject({ teamId: PollSide, points: z.number() })).default([]),
 });
 export type PollBoardMechanicView = z.infer<typeof PollBoardMechanicView>;
 

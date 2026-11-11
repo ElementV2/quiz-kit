@@ -131,3 +131,63 @@ describe("mixed round — settings and points rule by category", () => {
   });
 });
 
+describe("survey in a game played individually", () => {
+  it("the hand goes to a player; the answers found score for that player (bank or per answer)", () => {
+    for (const mode of ["bank", "per-answer"] as const) {
+      const doc = structuredClone(MIXED);
+      const r0 = doc.format.rounds[0];
+      if (r0 === undefined) throw new Error("fixture");
+      r0.mechanicConfig = { kinds: { poll: { mode } } };
+      const poll = pick("q_poll_breakfast");
+      const top = poll.answerSpec.kind === "poll" ? (poll.answerSpec.options[0]?.id ?? "") : "";
+      const g = run(reg, [
+        ...START,
+        ctl({ type: "question.skip", roundIndex: 0, questionIndex: 0 }),
+        ctl({ type: "question.present" }),
+        ctl({ type: "poll.control", participantId: "p_2" }),
+        ctl({ type: "question.open" }),
+        ctl({ type: "answer.judge", correct: true, optionId: top }),
+        ctl({ type: "question.lock" }),
+        ctl({ type: "question.reveal" }),
+      ], createGame(makeSession(GameDocument.parse(doc))));
+      expect(g.state.mechanic?.id).toBe("poll-board");
+      expect(total(g, "p_2")).toBeGreaterThan(0);
+      expect(total(g, "p_1")).toBe(0);
+    }
+  });
+
+  it("refuses a hand given to nobody, or to both a team and a player", () => {
+    const g = run(reg, [...START, ctl({ type: "question.skip", roundIndex: 0, questionIndex: 0 }), ctl({ type: "question.present" })], createGame(makeSession(MIXED)));
+    expect(() => run(reg, [ctl({ type: "poll.control" })], g)).toThrow(/équipe ou un joueur/);
+    expect(() => run(reg, [ctl({ type: "poll.control", participantId: "p_9" })], g)).toThrow(/joueur inconnu/);
+    expect(() => run(reg, [ctl({ type: "poll.control", participantId: "p_1", teamId: "t_x" })], g)).toThrow(/équipe ou un joueur/);
+  });
+});
+
+describe("survey played individually — steal, removal", () => {
+  const poll = pick("q_poll_breakfast");
+  const ids = poll.answerSpec.kind === "poll" ? poll.answerSpec.options.map((o) => o.id) : [];
+  const PRESENTED: Step[] = [...START, ctl({ type: "question.skip", roundIndex: 0, questionIndex: 0 }), ctl({ type: "question.present" })];
+  it("bank rule: a player steals after the strikes and takes the bank; the other player gets « wrong »", () => {
+    const g = run(reg, [
+      ...PRESENTED,
+      ctl({ type: "poll.control", participantId: "p_1" }), ctl({ type: "question.open" }),
+      ctl({ type: "answer.judge", correct: true, optionId: ids[0] ?? "" }),
+      ctl({ type: "answer.judge", correct: false }), ctl({ type: "answer.judge", correct: false }), ctl({ type: "answer.judge", correct: false }),
+      ctl({ type: "poll.steal", participantId: "p_2" }),
+      ctl({ type: "answer.judge", correct: true, optionId: ids[1] ?? "" }),
+      ctl({ type: "question.lock" }), ctl({ type: "question.reveal" }),
+    ], createGame(makeSession(MIXED)));
+    expect(total(g, "p_2")).toBeGreaterThan(0);
+    expect(total(g, "p_1")).toBe(0);
+    expect(project(g, { role: "player", participantId: "p_1" }, reg)).toMatchObject({ myResult: "wrong" });
+  });
+
+  it("a removed player holding the hand keeps nothing: back to « give the hand »", () => {
+    const g = run(reg, [...PRESENTED, ctl({ type: "poll.control", participantId: "p_1" }), ctl({ type: "question.open" }), ctl({ type: "answer.judge", correct: true, optionId: ids[0] ?? "" }), ctl({ type: "player.remove", participantId: "p_1" })], createGame(makeSession(MIXED)));
+    const v = project(g, { role: "control" }, reg);
+    expect(v.mechanic).toMatchObject({ controllingTeamId: null, stage: "play", strikes: 0 });
+    expect(v.mechanic?.mechanic === "poll-board" && v.mechanic.slots.every((x) => x.foundBy === null)).toBe(true);
+  });
+});
+

@@ -154,9 +154,6 @@ export function roundIssues(doc: GameDocument, ri: number, registry: Registry): 
       issues.push({ questionId: q.id, message: played.error.message });
       return;
     }
-    if (played.value.mechanic.id === "poll-board" && doc.format.participants.mode !== "teams") {
-      issues.push({ questionId: q.id, message: "un sondage façon « Une famille en or » se joue en équipes : passer la partie en « Équipes » (onglet Format), sinon il ne rapporte aucun point" });
-    }
     const r = played.value.mechanic.init(played.value.config, q, { at: 0, rng: createRng(1, 1), phase: "idle" }, { previous: null, questionIndex, questionsLeft: list.length - questionIndex - 1, questions: list });
     if (!r.ok) issues.push({ questionId: q.id, message: r.error.message });
   };
@@ -307,12 +304,12 @@ export const MIXED_CATEGORIES: readonly MixedCategoryInfo[] = [
   { id: "choice", label: "QCM et vrai / faux", kinds: ["single", "multi", "boolean"], explain: "Réponse sur la tablette ; points selon le barème.", fields: [{ key: "shuffleOptions", kind: "boolean", label: "Mélanger l'ordre des réponses" }, change] },
   {
     id: "poll",
-    label: "Sondage (équipes)",
+    label: "Sondage",
     kinds: ["poll"],
-    explain: "Les équipes retrouvent les réponses d'un sondage ; points = % des réponses trouvées.",
+    explain: "Retrouver les réponses d'un sondage. La main se donne à une équipe (partie en équipes) ou à un joueur (partie individuelle). Points = % des réponses trouvées.",
     ownPoints: true,
     fields: [
-      { key: "mode", kind: "enum", label: "Qui marque", options: [{ value: "per-answer", label: "chaque équipe marque les réponses qu'elle trouve" }, { value: "bank", label: "la banque entière à l'équipe qui gagne (règle télé)" }] },
+      { key: "mode", kind: "enum", label: "Qui marque", options: [{ value: "per-answer", label: "chacun marque les réponses qu'il trouve" }, { value: "bank", label: "la banque entière à qui gagne la question (règle télé)" }] },
       { key: "maxStrikes", kind: "number", label: "Erreurs avant de passer la main", min: 1, max: 10 },
       { key: "multiplier", kind: "number", label: "Multiplicateur (manche double, triple…)", min: 0.5, max: 100, step: 0.5 },
     ],

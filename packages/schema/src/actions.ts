@@ -102,9 +102,10 @@ export const Action = z.discriminatedUnion("type", [
   /** The ladder candidate walks away with the step reached. */
   action("ladder.stop", {}),
   /** Gives the hand to a team (poll-board). */
-  action("poll.control", { teamId: TeamId }),
+  /** Gives the hand to a team — or, in a game played individually, to a player (`participantId`). */
+  action("poll.control", { teamId: TeamId.optional(), participantId: ParticipantId.optional() }),
   /** After the last strike, hands the steal attempt to another team (poll-board). */
-  action("poll.steal", { teamId: TeamId }),
+  action("poll.steal", { teamId: TeamId.optional(), participantId: ParticipantId.optional() }),
   // Scores (overrides, always accepted)
   action("score.adjust", {
     target: ScoreTarget,

@@ -1,7 +1,7 @@
 import { For, Match, Show, Switch, createSignal, onCleanup, type Component } from "solid-js";
 import type { ZoneType } from "@quiz/schema";
 import { formatNumber } from "./answers.ts";
-import { asBoard, asBuzzer, asLadder, asPollBoard, nameOf, optionLetter, optionShare, optionState, optionsOf, readPath, secondsLeft } from "./logic.ts";
+import { asBoard, asBuzzer, asLadder, asPollBoard, nameOf, optionLetter, optionShare, optionState, optionsOf, readPath, secondsLeft, sideName } from "./logic.ts";
 import { BoardZone, MEDIA_MECHANICS, MechanicMedia, NumberAnswerZone, OrderZone, PairsZone, RevealAnswerZone } from "./mechanic-zones.tsx";
 import { FitText, num, panel, str, type ZoneProps } from "./zone-kit.tsx";
 
@@ -256,7 +256,7 @@ const PollBoardZone: Component<ZoneProps> = (p) => (
             >
               {/* Per-answer scoring: what each team found on this question. */}
               <span style={{ "margin-left": "auto", display: "flex", gap: "28px", color: "var(--q-color-muted)" }}>
-                <For each={m().teamPoints}>{(t) => <span>{p.view.teamBoard.find((x) => x.teamId === t.teamId)?.name ?? ""} <b style={{ color: "var(--q-color-accent)" }}>{t.points}</b></span>}</For>
+                <For each={m().teamPoints}>{(t) => <span>{sideName(p.view, t.teamId)} <b style={{ color: "var(--q-color-accent)" }}>{t.points}</b></span>}</For>
               </span>
             </Show>
           </div>

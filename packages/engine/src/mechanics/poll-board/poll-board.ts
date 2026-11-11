@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { OptionId, TeamId, type ActionOf, type PollBoardMechanicView, type Phase, unsupportedQuestion } from "@quiz/schema";
+import { OptionId, ParticipantId, TeamId, type ActionOf, type PollBoardMechanicView, type Phase, type ScoreTarget, unsupportedQuestion } from "@quiz/schema";
 import { defineMechanic, type Judgement, type MechanicEnv } from "../../mechanic.ts";
 import { assertNever, err, ok, type Rejection, type Result } from "../../result.ts";
 import { roundHalfAway } from "../../scoring.ts";
@@ -28,14 +28,19 @@ export const PollBoardConfig = z.strictObject({
 });
 export type PollBoardConfig = z.infer<typeof PollBoardConfig>;
 
+/** A team (`t_…`) or, in a game played individually, a player (`p_…`): the prefix tells which. */
+const Side = z.union([TeamId, ParticipantId]);
+/** Score target of a side. */
+const targetOf = (side: string): ScoreTarget => (side.startsWith("p_") ? { participantId: side } : { teamId: side });
+
 const Slot = z.strictObject({
   optionId: OptionId,
   label: z.string(),
   value: z.number(),
   revealed: z.boolean(),
   found: z.boolean(),
-  /** Team that found it (null: flipped by control, or found before this was recorded). */
-  foundBy: TeamId.nullable().default(null),
+  /** Team — or player, in a game played individually — that found it (null: flipped by control). */
+  foundBy: Side.nullable().default(null),
 });
 
 export const PollBoardState = z.strictObject({
@@ -46,10 +51,10 @@ export const PollBoardState = z.strictObject({
   scoring: z.enum(["per-answer", "bank"]).default("bank"),
   strikes: z.number().int().min(0),
   stage: z.enum(["play", "steal", "done"]),
-  controllingTeamId: TeamId.nullable(),
-  stealingTeamId: TeamId.nullable(),
+  controllingTeamId: Side.nullable(),
+  stealingTeamId: Side.nullable(),
   /** Set when the stage becomes `done` (all slots found, or steal resolved). */
-  winnerTeamId: TeamId.nullable(),
+  winnerTeamId: Side.nullable(),
 });
 export type PollBoardState = z.infer<typeof PollBoardState>;
 
@@ -67,19 +72,23 @@ const SHOWN: ReadonlySet<Phase> = new Set(["presenting", "open", "locked", "judg
  * answers found stay on the board (the bank goes to whoever wins it), the strikes restart for the team taking over,
  * a steal attempt in progress is dropped.
  */
+const sideOf = (a: { readonly teamId?: string | undefined; readonly participantId?: string | undefined }): string => a.teamId ?? a.participantId ?? "";
+
 function giveHand(s: S, a: ActionOf<"poll.control">, env: MechanicEnv): R {
   if (!SHOWN.has(env.phase) || env.phase === "revealed") return err("wrong-phase", "la main se donne pendant la question (avant la révélation)");
   if (s.stage === "done") return err("conflict", "le jeu est terminé pour cette question");
-  if (s.controllingTeamId === a.teamId) return err("conflict", "cette équipe a déjà la main");
-  return ok({ ...s, controllingTeamId: a.teamId, strikes: 0, stage: "play", stealingTeamId: null });
+  const side = sideOf(a);
+  if (s.controllingTeamId === side) return err("conflict", "a déjà la main");
+  return ok({ ...s, controllingTeamId: side, strikes: 0, stage: "play", stealingTeamId: null });
 }
 
 function handSteal(s: S, a: ActionOf<"poll.steal">, env: MechanicEnv): R {
   if (!PLAYING.has(env.phase)) return err("wrong-phase", "les réponses ne sont pas ouvertes");
   if (s.stage !== "steal") return err("conflict", `le vol n'est possible qu'après ${s.maxStrikes} erreur(s)`);
-  if (a.teamId === s.controllingTeamId) return err("conflict", "l'équipe qui a la main ne peut pas voler");
-  if (s.stealingTeamId === a.teamId) return err("conflict", "cette équipe tente déjà le vol");
-  return ok({ ...s, stealingTeamId: a.teamId });
+  const side = sideOf(a);
+  if (side === s.controllingTeamId) return err("conflict", "qui a la main ne peut pas voler");
+  if (s.stealingTeamId === side) return err("conflict", "le vol est déjà en cours pour elle");
+  return ok({ ...s, stealingTeamId: side });
 }
 
 function find(s: S, optionId: string | undefined): Result<number, Rejection> {
@@ -180,15 +189,15 @@ export const pollBoard = defineMechanic<PollBoardConfig, PollBoardState>({
 
   judge(s): Judgement[] {
     if ((s.scoring ?? "bank") === "per-answer") { // an older snapshot may lack it: bank, as it was played
-      return [...pointsByTeam(s)].map(([teamId, points]): Judgement => ({ kind: "fixed", target: { teamId }, outcome: points > 0 ? "correct" : "wrong", points }));
+      return [...pointsByTeam(s)].map(([side, points]): Judgement => ({ kind: "fixed", target: targetOf(side), outcome: points > 0 ? "correct" : "wrong", points }));
     }
     const winner = s.winnerTeamId ?? s.controllingTeamId;
     if (winner === null) return [];
     const points = roundHalfAway(bankOf(s) * s.multiplier);
-    const out: Judgement[] = [{ kind: "fixed", target: { teamId: winner }, outcome: points > 0 ? "correct" : "wrong", points }];
+    const out: Judgement[] = [{ kind: "fixed", target: targetOf(winner), outcome: points > 0 ? "correct" : "wrong", points }];
     // The other side of a steal gets its result (no points).
     const loser = s.stage === "done" && s.stealingTeamId !== null ? (winner === s.stealingTeamId ? s.controllingTeamId : s.stealingTeamId) : null;
-    if (loser !== null) out.push({ kind: "fixed", target: { teamId: loser }, outcome: "wrong", points: 0 });
+    if (loser !== null) out.push({ kind: "fixed", target: targetOf(loser), outcome: "wrong", points: 0 });
     return out;
   },
 
@@ -200,8 +209,19 @@ export const pollBoard = defineMechanic<PollBoardConfig, PollBoardState>({
     return [];
   },
 
-  removeParticipant(s) {
-    return s; // nothing per participant: the board belongs to teams
+  removeParticipant(s, participantId) {
+    // A player may hold the hand (game played individually): a removed one keeps nothing — an id reused later must
+    // not inherit the hand, a steal or the answers found. Holding the hand: back to « give the hand ».
+    const off = (side: string | null): string | null => (side === participantId ? null : side);
+    const held = s.controllingTeamId === participantId;
+    return {
+      ...s,
+      slots: s.slots.map((x) => (x.foundBy === participantId ? { ...x, foundBy: null } : x)),
+      controllingTeamId: off(s.controllingTeamId),
+      stealingTeamId: off(s.stealingTeamId),
+      winnerTeamId: off(s.winnerTeamId),
+      ...(held ? { stage: "play" as const, strikes: 0, stealingTeamId: null } : {}),
+    };
   },
 
   answerOf() {

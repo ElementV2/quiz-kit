@@ -1,5 +1,5 @@
 import { For, Show, createSignal, type JSX } from "solid-js";
-import { asBoard, asBuzzer, asHints, asLadder, asNumberAnswer, asPollBoard, asRevealImage, asTextAnswer, boardRows, formatNumber, nameOf } from "@quiz/renderer";
+import { asBoard, asBuzzer, asHints, asLadder, asNumberAnswer, asPollBoard, asRevealImage, asTextAnswer, boardRows, formatNumber, nameOf, pollSideAction, pollSides, sideName } from "@quiz/renderer";
 import type { Action, HostView } from "@quiz/schema";
 import { ConfirmKey } from "@quiz/ui";
 
@@ -45,7 +45,7 @@ function Hand(p: { readonly view: HostView; readonly act: Act; readonly m: { rea
 
 function PollBoard(p: { readonly view: HostView; readonly act: Act }): JSX.Element {
   const [team, setTeam] = createSignal("");
-  const teamName = (id: string | null) => p.view.teamBoard.find((t) => t.teamId === id)?.name ?? "—";
+  const teamName = (id: string | null) => sideName(p.view, id);
   const open = () => JUDGEABLE.has(p.view.phase);
   return (
     <Show when={asPollBoard(p.view.mechanic)}>
@@ -62,13 +62,13 @@ function PollBoard(p: { readonly view: HostView; readonly act: Act }): JSX.Eleme
           </div>
           <Show when={p.view.drive && m().stage !== "done" && p.view.phase !== "revealed"}>
             <div class="h-row">
-              <select class="h-select" value={team()} onChange={(e) => setTeam(e.currentTarget.value)} aria-label="Équipe">
-                <option value="">Équipe…</option>
-                <For each={p.view.teamBoard}>{(t) => <option value={t.teamId}>{t.name}</option>}</For>
+              <select class="h-select" value={team()} onChange={(e) => setTeam(e.currentTarget.value)} aria-label={p.view.teamBoard.length > 0 ? "Équipe" : "Joueur"}>
+                <option value="">{p.view.teamBoard.length > 0 ? "Équipe…" : "Joueur…"}</option>
+                <For each={pollSides(p.view)}>{(t) => <option value={t.id}>{t.name}</option>}</For>
               </select>
-              <button type="button" class="q-btn" disabled={team() === "" || team() === m().controllingTeamId} onClick={() => void p.act({ type: "poll.control", teamId: team() })}>{m().controllingTeamId === null ? "Donner la main" : "Passer la main"}</button>
+              <button type="button" class="q-btn" disabled={team() === "" || team() === m().controllingTeamId} onClick={() => void p.act(pollSideAction("poll.control", team()))}>{m().controllingTeamId === null ? "Donner la main" : "Passer la main"}</button>
               <Show when={m().stage === "steal" && m().stealingTeamId === null}>
-                <button type="button" class="q-btn" disabled={team() === ""} onClick={() => void p.act({ type: "poll.steal", teamId: team() })}>Tentative de vol</button>
+                <button type="button" class="q-btn" disabled={team() === ""} onClick={() => void p.act(pollSideAction("poll.steal", team()))}>Tentative de vol</button>
               </Show>
             </div>
           </Show>

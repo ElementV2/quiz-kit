@@ -75,7 +75,7 @@ describe("roundIssues (compatibility through the mechanic init)", () => {
   it("templates have no issue", () => {
     expect(TEMPLATES.flatMap((t) => t.game.format.rounds.flatMap((_, ri) => roundIssues(t.game, ri, defaultRegistry).map((i) => `${t.id} r${ri}: ${i.message}`)))).toEqual([]);
   });
-  it("mixed round: everything fits, but a survey in a solo game is flagged (team game)", () => {
+  it("mixed round: everything fits, a survey in a solo game too (the hand goes to a player)", () => {
     const g = copy(DEMO_GAME);
     setMechanic(g, 0, "mixed", defaultRegistry);
     expect(roundIssues(g, 0, defaultRegistry)).toEqual([]);
@@ -83,7 +83,7 @@ describe("roundIssues (compatibility through the mechanic init)", () => {
     if (poll === undefined) throw new Error("fixture");
     g.questions.push(poll);
     g.format.rounds[0]?.questions.push(poll.id);
-    expect(roundIssues(g, 0, defaultRegistry).map((i) => i.message).join()).toMatch(/se joue en équipes/);
+    expect(roundIssues(g, 0, defaultRegistry)).toEqual([]); // played by players in a solo game: nothing to warn
   });
 
   it("flags a question the mechanic cannot play", () => {
