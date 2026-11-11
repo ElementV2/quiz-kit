@@ -8,10 +8,12 @@ export { createGame, decide, replay, nextSeq, CorruptJournalError, type Game, ty
 export { project, leaderboard } from "./project.ts";
 export { choice, ChoiceConfig, ChoiceState } from "./mechanics/choice/choice.ts";
 export { pollBoard, PollBoardConfig, PollBoardState } from "./mechanics/poll-board/poll-board.ts";
+export { buzzer, BuzzerConfig, BuzzerState } from "./mechanics/buzzer/buzzer.ts";
 
 import { createRegistry } from "./mechanic.ts";
 import { choice } from "./mechanics/choice/choice.ts";
 import { pollBoard } from "./mechanics/poll-board/poll-board.ts";
+import { buzzer } from "./mechanics/buzzer/buzzer.ts";
 
 /** Mechanics available in this build. */
-export const defaultRegistry = createRegistry([choice, pollBoard]);
+export const defaultRegistry = createRegistry([choice, pollBoard, buzzer]);

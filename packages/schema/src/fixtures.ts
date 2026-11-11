@@ -133,3 +133,67 @@ export const DEMO_POLL_GAME: GameDocument = {
     ],
   },
 };
+
+/**
+ * "Buzzer culture G" template: oral questions (expected answer for the host) and spoken multiple choice.
+ * Right answer +100, wrong answer -50; a wrong player is locked out for the question.
+ */
+export const DEMO_BUZZER_GAME: GameDocument = {
+  schemaVersion: 1,
+  title: "Démo buzzer culture G",
+  questions: [
+    {
+      id: "q_buzz_everest",
+      prompt: { text: "Quel est le plus haut sommet du monde ?" },
+      answerSpec: { kind: "oral", expected: "L'Everest (8 849 m)" },
+      hints: [],
+      tags: ["géo"],
+      notes: "Accepter « Chomolungma » ou « Sagarmatha ».",
+    },
+    {
+      id: "q_buzz_planets",
+      prompt: { text: "Quelle planète est surnommée la planète rouge ?" },
+      answerSpec: {
+        kind: "single",
+        correct: "c",
+        options: [
+          { id: "a", label: "Vénus" },
+          { id: "b", label: "Jupiter" },
+          { id: "c", label: "Mars" },
+          { id: "d", label: "Mercure" },
+        ],
+      },
+      hints: [],
+      tags: ["sciences"],
+      notes: "Couleur due à l'oxyde de fer en surface.",
+    },
+    {
+      id: "q_buzz_author",
+      prompt: { text: "Qui a écrit « Les Misérables » ?" },
+      answerSpec: { kind: "oral", expected: "Victor Hugo" },
+      hints: [],
+      tags: ["littérature"],
+      notes: "Publié en 1862.",
+    },
+  ],
+  format: {
+    id: "f_demo_buzzer",
+    name: "Buzzer culture G",
+    participants: { mode: "solo", min: 2, max: 20 },
+    tieBreak: "speed",
+    rounds: [
+      {
+        id: "r_buzz",
+        title: "Buzzer",
+        mechanic: "buzzer",
+        mechanicConfig: { lockoutOnWrong: true },
+        questions: ["q_buzz_everest", "q_buzz_planets", "q_buzz_author"],
+        reserve: [],
+        scoring: [
+          { type: "base", points: 100 },
+          { type: "penalty", points: -50 },
+        ],
+      },
+    ],
+  },
+};

@@ -79,6 +79,17 @@ sinon à l'équipe qui a la main (verrouiller plus tôt = banque à l'équipe qu
 `question.reveal` ne retourne **pas** les cases restantes. Vue publique : une case masquée a `label` et
 `value` à `null` (testé) ; animateur et régie voient tout.
 
+### `buzzer` (culture G)
+
+Questions `oral` (réponse attendue pour l'animateur) ou `single` (options lues, montrées à tous ; bonne
+réponse à l'animateur et à la régie seulement). Réponses ouvertes = buzzers ouverts. Chaque `buzz` entre
+dans la file dans l'ordre du journal : le premier journalisé a la main. La régie / l'animateur juge celui
+qui a la main (`answer.judge { participantId, correct }`, refusé pour un autre joueur) : faux → il sort de la
+file (bloqué pour la question si `lockoutOnWrong`, défaut `true`), la main passe au suivant ; juste → buzzers
+fermés. Le jugement reste possible réponses verrouillées. Points à `question.reveal` par la `ScoringRule`
+(base pour la bonne réponse, pénalité par mauvaise, dégressivité mesurée au buzz). Un `buzz` n'est jamais
+la cible d'un undo par défaut. Vue joueur légère : `me` (main, position, bloqué, peut buzzer), sans file.
+
 ## Actions (extrait)
 
 - Régie : `game.start`, `round.start`, `question.present`, `question.open`, `question.lock`,

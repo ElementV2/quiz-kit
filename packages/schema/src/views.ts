@@ -59,7 +59,38 @@ export const PollBoardMechanicView = z.strictObject({
 });
 export type PollBoardMechanicView = z.infer<typeof PollBoardMechanicView>;
 
-export const MechanicView = z.discriminatedUnion("mechanic", [ChoiceMechanicView, PollBoardMechanicView]);
+/** Buzzer (culture G): first journaled buzz takes the hand, the others queue; control / host judge. */
+export const BuzzerMechanicView = z.strictObject({
+  mechanic: z.literal("buzzer"),
+  kind: z.enum(["oral", "single"]),
+  /** Options read out by the host (`single`), shown to everyone; null for `oral`. */
+  options: z.array(z.strictObject({ id: OptionId, label: z.string(), media: Media.optional() })).nullable(),
+  /** SECRET (`single`): null for player / output until `revealed`, always null for `oral`. */
+  correct: OptionId.nullable(),
+  /** SECRET (`oral`): expected answer, same rule as `correct`; always null for `single`. */
+  expected: z.string().nullable(),
+  /** Player who has the hand (head of the queue), null if nobody or once someone answered right. */
+  hand: ParticipantId.nullable(),
+  /** Player judged right: buzzers are closed for this question. */
+  winner: ParticipantId.nullable(),
+  /** Waiting players in buzz order (hand first). Null for players: tablet views stay light. */
+  queue: z.array(ParticipantId).nullable(),
+  /** Players locked out after a wrong answer. Null for players (see `me`). */
+  lockedOut: z.array(ParticipantId).nullable(),
+  /** The viewing player's own buzzer state; null for other audiences. `canBuzz` ignores the player's status (see `canAnswer`). */
+  me: z
+    .strictObject({
+      hasHand: z.boolean(),
+      /** 1 = has the hand; null when not waiting. */
+      queuePosition: z.number().int().min(1).nullable(),
+      lockedOut: z.boolean(),
+      canBuzz: z.boolean(),
+    })
+    .nullable(),
+});
+export type BuzzerMechanicView = z.infer<typeof BuzzerMechanicView>;
+
+export const MechanicView = z.discriminatedUnion("mechanic", [ChoiceMechanicView, PollBoardMechanicView, BuzzerMechanicView]);
 export type MechanicView = z.infer<typeof MechanicView>;
 
 export const LeaderboardRow = z.strictObject({
