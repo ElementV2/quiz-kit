@@ -1,11 +1,12 @@
 import { For, Match, Show, Switch, createEffect, createMemo, createSignal, onCleanup } from "solid-js";
 import { render } from "solid-js/web";
-import { asBuzzer, asChoice, asLadder, asPollBoard, nameOf, optionLetter, optionState, secondsLeft } from "@quiz/renderer";
-import type { PlayerView } from "@quiz/schema";
+import { asChoice, asLadder, asPollBoard, nameOf, optionLetter, optionState, secondsLeft } from "@quiz/renderer";
+import type { AnswerValue, PlayerView } from "@quiz/schema";
 import { StatusPill, createQuizConnection, tokenFromUrl } from "@quiz/ui";
 import "@quiz/ui/ui.css";
 import "./player.css";
 import { createKeepAwake, enterFullscreen } from "./keep-awake.ts";
+import { MechanicInput } from "./MechanicInputs.tsx";
 
 const PLAYER_TOKEN_KEY = "quiz.playerToken";
 
@@ -97,6 +98,18 @@ function Game(props: { token: string }) {
     if (!ack.ok) setLastError(ack.reason);
   };
 
+  /** Any typed / built answer (phase 3 mechanics). Saved on screen only once the server view carries it. */
+  const send = async (answer: AnswerValue) => {
+    const v = view();
+    if (v === null || !v.canAnswer || v.me === null) return;
+    setSending("answer");
+    setLastError(null);
+    navigator.vibrate?.(20);
+    const ack = await conn.submit({ type: "answer.submit", participantId: v.me.participantId, answer });
+    setSending(null);
+    if (!ack.ok) setLastError(ack.reason);
+  };
+
   const start = async () => {
     setStarted(true);
     await enterFullscreen();
@@ -162,7 +175,7 @@ function Game(props: { token: string }) {
         </Match>
         <Match when={view()?.question === null || view()?.mechanic === null}>
           <div class="p-center">
-            <p class="p-big">{view()?.phase === "game.end" ? "Partie terminée !" : "Prochaine question dans un instant…"}</p>
+            <p class="p-big">{view()?.phase === "game.end" ? "Partie terminée !" : view()?.mechanic?.mechanic === "board" ? "La régie choisit une case…" : "Prochaine question dans un instant…"}</p>
             <Show when={view()?.me}>{(me) => <p class="p-rank">{me().rank}ᵉ · {me().total} pts</p>}</Show>
           </div>
         </Match>
@@ -171,7 +184,7 @@ function Game(props: { token: string }) {
             <main class="p-question">
               <div class="p-meta">
                 <span>Question {(v().question?.index ?? 0) + 1} / {v().question?.count}</span>
-                <Show when={v().timer}>{(t) => <span class={`p-timer${secondsLeft(t().endsAt, now()) <= 5 ? " p-timer-low" : ""}`}>⏱ {secondsLeft(t().endsAt, now())}</span>}</Show>
+                <Show when={v().timer}>{(t) => <span class={`p-timer${secondsLeft(t().endsAt, now()) <= 5 ? " p-timer-low" : ""}`}>{secondsLeft(t().endsAt, now())}<small> s</small></span>}</Show>
               </div>
               <h1 class="p-prompt">{v().question?.prompt.text}</h1>
               <Show when={asChoice(v().mechanic)}>
@@ -217,21 +230,8 @@ function Game(props: { token: string }) {
                   );
                 }}
               </Show>
-              <Show when={asBuzzer(v().mechanic)}>
-                {(m) => (
-                  <div class="p-buzz-wrap">
-                    <Switch>
-                      <Match when={m().winner !== null}><p class="p-big">{m().winner === v().me?.participantId ? "✓ Bravo !" : `✓ ${nameOf(v(), m().winner)}`}</p></Match>
-                      <Match when={m().me?.hasHand === true}><p class="p-big p-hand">🔔 Vous avez la main : répondez !</p></Match>
-                      <Match when={m().me?.lockedOut === true}><p class="p-big muted">Bloqué pour cette question</p></Match>
-                      <Match when={m().me?.queuePosition !== null && m().me?.queuePosition !== undefined}><p class="p-big">En file : n° {(m().me?.queuePosition ?? 0) + 1}</p></Match>
-                      <Match when={true}>
-                        <button type="button" class="p-buzz" disabled={!v().canAnswer || m().me?.canBuzz !== true || buzzing()} onClick={() => void buzz()}>BUZZ</button>
-                      </Match>
-                    </Switch>
-                    <Show when={m().hand !== null && m().hand !== v().me?.participantId && m().winner === null}><p class="muted">Main : {nameOf(v(), m().hand)}</p></Show>
-                  </div>
-                )}
+              <Show when={v().question?.id} keyed>
+                {(_id: string) => <MechanicInput view={v()} send={send} sending={sending() !== null} mediaUrl={conn.mediaUrl} buzz={buzz} buzzing={buzzing()} />}
               </Show>
               <Show when={asPollBoard(v().mechanic)}>
                 {(m) => (
@@ -242,17 +242,18 @@ function Game(props: { token: string }) {
                   </div>
                 )}
               </Show>
-              <footer class="p-feedback" role="status">
+              <footer class="p-feedback" role="status" data-tone={feedbackTone(v(), sending() !== null, lastError() !== null)}>
                 <Switch>
                   <Match when={v().myResult === "correct"}>✓ Bonne réponse !</Match>
                   <Match when={v().myResult === "wrong"}>✗ Raté…</Match>
                   <Match when={v().myResult === "none" && v().phase === "revealed"}>Pas de réponse</Match>
                   <Match when={sending() !== null}>Envoi…</Match>
                   <Match when={lastError()}>{lastError()}</Match>
-                  <Match when={v().myAnswer !== null && v().canAnswer}>Réponse enregistrée ✓ (modifiable jusqu'à la fin du chrono)</Match>
+                  <Match when={v().myAnswer !== null && v().canAnswer}>Réponse enregistrée ✓<small>Modifiable jusqu'à la fin du chrono</small></Match>
                   <Match when={v().myAnswer !== null}>Réponse enregistrée ✓</Match>
                   <Match when={v().phase === "presenting"}>Lisez la question…</Match>
-                  <Match when={v().phase === "locked"}>Réponses fermées</Match>
+                  <Match when={v().phase === "open" && v().canAnswer}>À vous !</Match>
+                  <Match when={v().phase === "locked" || v().phase === "judging"}>Réponses fermées</Match>
                 </Switch>
               </footer>
             </main>
@@ -261,6 +262,18 @@ function Game(props: { token: string }) {
       </Switch>
     </div>
   );
+}
+
+/** Colour of the status line: amber while sending / your turn, green saved or right, red wrong or refused. */
+function feedbackTone(v: PlayerView, sending: boolean, error: boolean): string {
+  if (v.myResult === "correct") return "ok";
+  if (v.myResult === "wrong") return "no";
+  if (v.phase === "revealed") return "idle";
+  if (sending) return "busy";
+  if (error) return "no";
+  if (v.myAnswer !== null) return "ok";
+  if (v.phase === "open" && v.canAnswer) return "busy";
+  return "idle";
 }
 
 function App() {

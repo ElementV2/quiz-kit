@@ -1,27 +1,25 @@
-import { For, Show, createMemo, createResource, createSignal, onCleanup, onMount } from "solid-js";
+import { For, Show, createMemo, createResource, createSignal, onCleanup, onMount, type JSX } from "solid-js";
 import { render } from "solid-js/web";
-import { OUTPUT_SCENES, gameFromQuestions, parseQuestionsCsv, type Action, type ControlView, type Participant } from "@quiz/schema";
+import type { Action, ControlView } from "@quiz/schema";
 import { asChoice, optionLetter, secondsLeft } from "@quiz/renderer";
-import { Button, MechanicPanel, Panel, StatusPill, createQuizConnection, tokenFromUrl } from "@quiz/ui";
+import { Button, HomeLink, MECHANIC_LABEL, MechanicPanel, ON_AIR_PHASES, PHASE_LABEL, StatusPill, createQuizConnection, formatAnswer, nextTarget, onAirTarget, questionAt, sameTarget } from "@quiz/ui";
 import "@quiz/ui/ui.css";
 import "./control.css";
-import { checklist, nextStep, parsePlayersCsv } from "./logic.ts";
+import { api, lanOrigin, token, withToken, type LinksResponse, type StatusResponse } from "./api.ts";
+import { ApiInfo, ChatPanel, StaffCode } from "./Integrations.tsx";
+import { KeyBuzzersPanel, createKeyBuzzers } from "./KeyBuzzers.tsx";
+import { checklist, nextStep } from "./logic.ts";
+import { GameImport, LayersPanel, LibraryPanel, LinksList, Players, ProgramPreview, TeamsPanel, useLayers } from "./Panels.tsx";
+import { QuestionTextEdit, RegradeEditor, RehearsalPanel, ReserveList, ResultsPanel } from "./ShowTools.tsx";
 
-type LinksResponse = { origins: string[]; entries: { label: string; id: string; path: string }[]; joinCode: string };
-type StatusResponse = { journal?: { ok?: boolean; journalMode?: unknown; synchronous?: unknown; lastError?: string | null }; presence?: { total: number; byRole: Record<string, number>; seats: number[]; players: string[] } };
+/**
+ * /control — the control room (doc 08), organised around the live task:
+ * top bar (show, phase, tally, code, host drive) · left run-down · centre the ONE next-step key and the question
+ * on air · right the program monitor and ONE open section at a time (players, layers, tools, checklist).
+ */
 
-const token = tokenFromUrl();
-const api = async <T,>(path: string, init?: RequestInit): Promise<T> => {
-  const res = await fetch(`${path}${path.includes("?") ? "&" : "?"}t=${encodeURIComponent(token)}`, init);
-  if (!res.ok) throw new Error(`${res.status}`);
-  return (await res.json()) as T; // oxlint-disable-line typescript/no-unsafe-type-assertion -- own server endpoints
-};
-
-const hex = (n: number): string => {
-  const b = new Uint8Array(n);
-  crypto.getRandomValues(b); // works over plain HTTP (ADR-0012)
-  return Array.from(b, (x) => x.toString(16).padStart(2, "0")).join("");
-};
+type Act = (a: Action, ok?: string) => Promise<boolean>;
+type Tab = "players" | "layers" | "tools" | "check";
 
 function App() {
   const conn = createQuizConnection({ token });
@@ -30,29 +28,35 @@ function App() {
     return v !== null && v.role === "control" ? v : null;
   });
   const readonly = () => view()?.readonly === true;
+  const [regrading, setRegrading] = createSignal<{ round: number; question: number } | null>(null);
   const [message, setMessage] = createSignal<{ ok: boolean; text: string } | null>(null);
   const [links] = createResource(() => api<LinksResponse>("/api/links").catch(() => null));
   const [status, setStatus] = createSignal<StatusResponse | null>(null);
   const [now, setNow] = createSignal(conn.serverNow());
+  const [tab, setTab] = createSignal<Tab>("players");
   const poll = async () => setStatus(await api<StatusResponse>("/api/status").catch(() => null));
   onMount(() => void poll());
   const timers = [setInterval(() => void poll(), 3000), setInterval(() => setNow(conn.serverNow()), 250)];
   onCleanup(() => timers.forEach(clearInterval));
 
-  const act = async (action: Action, okText?: string) => {
+  const act: Act = async (action, okText) => {
     const ack = await conn.submit(action);
     setMessage(ack.ok ? (okText === undefined ? null : { ok: true, text: okText }) : { ok: false, text: ack.reason });
     return ack.ok;
   };
+  const kb = createKeyBuzzers(view, act);
+  const layers = useLayers(view);
 
-  // Keyboard (doc 08): space = next step, Ctrl+Z = undo. Ignored while typing in a field.
+  // Keyboard (doc 08): armed buzzer keys first, then space = next step, Ctrl+Z = undo. Ignored while typing.
   const onKey = (e: KeyboardEvent) => {
     const t = e.target;
     if (t instanceof HTMLInputElement || t instanceof HTMLTextAreaElement || t instanceof HTMLSelectElement) return;
     const v = view();
     if (v === null || readonly()) return;
+    if (kb.handle(e)) return;
     if (e.code === "Space") {
       e.preventDefault();
+      if (e.repeat) return;
       const n = nextStep(v);
       if (n !== null) void act(n.action);
     } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "z") {
@@ -64,438 +68,292 @@ function App() {
   onCleanup(() => window.removeEventListener("keydown", onKey));
 
   const programUrl = () => {
-    const l = links();
-    const e = l?.entries.find((x) => x.id === "out-program");
+    const e = links()?.entries.find((x) => x.id === "out-program");
     return e === undefined ? null : `${e.path}&preview=1`;
   };
 
   return (
-    <div class="c-app">
+    <div class="c-app" data-buzzers={String(kb.armed())}>
       <header class="c-top">
-        <h1>Régie</h1>
-        <Show when={view()}>{(v) => <span class="muted">{v().round?.title ?? "—"} · {PHASE_LABEL[v().phase]}</span>}</Show>
+        <span class="c-brand">Régie</span>
+        <Show when={links()?.title}>{(t) => <span class="c-show" title={t()}>{t()}</span>}</Show>
+        <Show when={view()}>
+          {(v) => (
+            <>
+              <span class="q-tally" data-on={ON_AIR_PHASES.has(v().phase) ? "air" : undefined}>{ON_AIR_PHASES.has(v().phase) ? "Antenne" : "Hors antenne"}</span>
+              <span class="c-phase">{v().round?.title ?? "—"} · {PHASE_LABEL[v().phase]}</span>
+            </>
+          )}
+        </Show>
         <span class="c-spacer" />
-        <Show when={links()}>{(l) => <span class="c-code" title="Code pour /play">Code partie : <b>{l().joinCode}</b></span>}</Show>
+        <Show when={kb.armed()}>
+          <button type="button" class="q-tally c-armed" data-on="armed" title="Désarmer" onClick={() => kb.setArmed(false)}>Buzzers armés</button>
+        </Show>
+        <Show when={readonly()}><span class="q-tally">Lecture seule</span></Show>
+        <Show when={links()}>{(l) => <span class="c-code" title="Code à saisir sur /play">Code partie <b class="q-mono">{l().joinCode}</b></span>}</Show>
+        <Show when={view()}>
+          {(v) => (
+            <button type="button" class="q-switch" role="switch" aria-checked={v().hostDrives} disabled={readonly()} title="Laisser l'animateur présenter, ouvrir, révéler et passer les questions depuis sa tablette" onClick={() => void act({ type: "host.setDrive", enabled: !v().hostDrives }, v().hostDrives ? "La régie reprend le pilotage" : "L'animateur pilote le déroulé")}>
+              L'animateur pilote
+            </button>
+          )}
+        </Show>
         <StatusPill status={conn.status()} queued={conn.queued()} detail={conn.statusDetail()} />
+        <HomeLink />
       </header>
-      <Show when={view()} fallback={<p class="c-wait">Connexion à la régie…</p>}>
-        {(v) => (
-          <div class="c-grid">
-            <Panel title="Déroulé" class="c-rundown">
-              <For each={v().rundown}>
-                {(r) => (
-                  <div class="c-round">
-                    <div class="c-round-head">
-                      <b>{r.title}</b>
-                      <Show when={!readonly() && (v().phase === "idle" || v().phase === "round.end") && v().round?.index !== r.index}>
-                        <Button kind="ghost" onClick={() => void act({ type: "round.start", roundIndex: r.index })}>Démarrer</Button>
-                      </Show>
-                    </div>
-                    <For each={r.questions}>
-                      {(q) => {
-                        const current = () => v().round?.index === r.index && v().question?.index === q.index;
-                        return (
-                          <button type="button" class="c-q" data-current={String(current())} data-played={String(q.played)} disabled={readonly() || v().phase !== "idle" || v().round?.index !== r.index} onClick={() => void act({ type: "question.present", questionIndex: q.index })}>
-                            <span class="c-q-n">{q.index + 1}</span>
-                            <span class="c-q-t">{q.text}</span>
-                            <Show when={q.played}><span class="c-q-ok">✓</span></Show>
-                          </button>
-                        );
-                      }}
-                    </For>
-                  </div>
-                )}
-              </For>
-            </Panel>
 
-            <div class="c-center">
-              <Panel title="Programme (ce qui part à l'antenne)">
-                <Show when={programUrl()} fallback={<span class="muted">Aperçu indisponible</span>}>{(u) => <ProgramPreview src={u()} />}</Show>
-              </Panel>
-              <Panel title="Question en cours">
-                <Show when={v().question} fallback={<p class="muted">Aucune question à l'écran.</p>}>
+      <Show when={view()} fallback={<p class="c-wait">Connexion à la régie…</p>}>
+        {(v) => {
+          const regradeTarget = () => {
+            const r = regrading();
+            return r === null ? null : questionAt(v().rundown, { roundIndex: r.round, questionIndex: r.question });
+          };
+          const checks = createMemo(() => checklist(v(), status()));
+          const onAirLayers = () => layers().filter((l) => v().layers[l.id] === true).length;
+          return (
+            <div class="c-grid">
+              <Rundown view={v()} readonly={readonly()} act={act} onRegrade={(round, question) => setRegrading({ round, question })} />
+
+              <main class="c-center">
+                <Transport view={v()} readonly={readonly()} now={now()} act={act} />
+                <Show when={message()}>{(m) => <p class={`c-message ${m().ok ? "c-ok" : "c-err"}`} role="status">{m().text}</p>}</Show>
+                <Show when={v().skipped.length > 0}><p class="c-message c-err">{v().skipped.length} action(s) devenue(s) sans effet après un undo.</p></Show>
+                <Show when={regradeTarget()}>
                   {(q) => (
-                    <div class="c-current">
-                      <p class="c-prompt">{q().prompt.text}</p>
-                      <Show when={asChoice(v().mechanic)}>
-                        {(mm) => {
-                          const m = () => mm();
-                          return (
-                            <div class="c-opts">
-                              <For each={m()?.options ?? []}>
-                                {(o, i) => (
-                                  <div class="c-opt" data-correct={String(m()?.correct?.includes(o.id) === true)}>
-                                    <span>{optionLetter(i())}</span> {o.label}
-                                    <span class="c-count">{m()?.counts?.[o.id] ?? ""}</span>
-                                  </div>
-                                )}
-                              </For>
-                              <p class="muted">{m()?.answeredCount ?? 0} réponse(s) · {v().participants.length} joueur(s)</p>
-                            </div>
-                          );
-                        }}
-                      </Show>
-                      <MechanicPanel view={v()} mode={readonly() ? "host" : "control"} act={act} />
-                      <Show when={v().notes}>{(n) => <p class="c-notes">📝 {n()}</p>}</Show>
-                    </div>
+                    <section class="c-card">
+                      <h2 class="q-panel-title">Corriger la réponse</h2>
+                      <Show when={q().id} keyed>{(_id: string) => <RegradeEditor question={q()} act={act} withToken={withToken} onClose={() => setRegrading(null)} />}</Show>
+                    </section>
                   )}
                 </Show>
-              </Panel>
-            </div>
+                <OnAir view={v()} readonly={readonly()} act={act} mediaUrl={conn.mediaUrl} />
+              </main>
 
-            <div class="c-right">
-              <Panel title="Actions">
-                <Show when={!readonly()} fallback={<p class="muted">Poste en lecture seule.</p>}>
-                  <Show when={nextStep(v())} fallback={<p class="muted">Partie terminée.</p>}>
-                    {(n) => (
-                      <Button big onClick={() => void act(n().action)} title="Espace">
-                        {n().label} ▶
-                      </Button>
-                    )}
+              <aside class="c-side">
+                <div class="c-monitor">
+                  <Show when={programUrl()} fallback={<div class="c-preview c-preview-off">Aperçu indisponible</div>}>{(u) => <ProgramPreview src={u()} />}</Show>
+                </div>
+                <div class="q-tabs" role="tablist">
+                  <TabKey id="players" tab={tab()} setTab={setTab} label="Joueurs" badge={String(v().participants.length)} />
+                  <TabKey id="layers" tab={tab()} setTab={setTab} label="Couches" badge={onAirLayers() > 0 ? `${onAirLayers()} ant.` : null} tone="air" />
+                  <TabKey id="tools" tab={tab()} setTab={setTab} label="Outils" badge={null} />
+                  <TabKey id="check" tab={tab()} setTab={setTab} label="Check-list" badge={`${checks().filter((c) => c.ok).length}/${checks().length}`} tone={checks().every((c) => c.ok) ? "ok" : "warn"} />
+                </div>
+                <div class="c-tabpanel" role="tabpanel">
+                  <Show when={tab() === "players"}>
+                    <Players view={v()} readonly={readonly()} act={act} connected={new Set(status()?.presence?.seats ?? [])} connectedPlayers={new Set(status()?.presence?.players ?? [])} />
+                    <Show when={!readonly()}>
+                      <h3 class="q-panel-title c-subtitle">Équipes</h3>
+                      <TeamsPanel view={v()} act={act} />
+                    </Show>
                   </Show>
-                  <div class="c-row">
-                    <Show when={v().timer}>{(t) => <span class="c-timer">⏱ {secondsLeft(t().endsAt, now())} s</span>}</Show>
-                    <Show when={v().phase === "open"}>
-                      <Button kind="secondary" onClick={() => void act({ type: "timer.set", remainingMs: Math.max(0, (v().timer?.endsAt ?? now()) - now()) + 10_000 })}>+10 s</Button>
-                      <Button kind="secondary" onClick={() => void act({ type: "timer.stop" })}>Stop chrono</Button>
-                    </Show>
-                  </div>
-                  <div class="c-row">
-                    <Button kind="secondary" title="Ctrl+Z" onClick={() => void act({ type: "undo" }, "Dernière action annulée")}>↶ Annuler</Button>
-                    <Show when={v().question !== null && v().phase !== "revealed"}>
-                      <Button kind="ghost" onClick={() => void act({ type: "question.next" }, "Question passée")}>Passer la question</Button>
-                    </Show>
-                  </div>
-                  <p class="muted c-keys"><kbd>Espace</kbd> étape suivante · <kbd>Ctrl</kbd>+<kbd>Z</kbd> annuler</p>
-                </Show>
-                <Show when={message()}>{(m) => <p class={m().ok ? "c-ok" : "c-err"}>{m().text}</p>}</Show>
-                <Show when={v().skipped.length > 0}>
-                  <p class="c-err">{v().skipped.length} action(s) devenue(s) sans effet après un undo.</p>
-                </Show>
-              </Panel>
-              <Panel title="Prêt pour l'antenne">
-                <ul class="c-check">
-                  <For each={checklist(v(), status())}>{(c) => <li data-ok={String(c.ok)}><span>{c.ok ? "✓" : "✗"}</span> {c.label} <span class="muted">— {c.detail}</span></li>}</For>
-                </ul>
-              </Panel>
-              <Show when={!readonly()}>
-                <Panel title="Couches à l'antenne (TAKE / OUT)">
-                  <LayersPanel view={v()} act={act} />
-                </Panel>
-                <Panel title="Bibliothèque (parties du studio)">
-                  <LibraryPanel />
-                </Panel>
-                <Panel title="Équipes">
-                  <TeamsPanel view={v()} act={act} />
-                </Panel>
-              </Show>
-              <Show when={!readonly()}>
-                <Panel title="Nouvelle partie (import de questions)">
-                  <GameImport />
-                </Panel>
-              </Show>
-              <Panel title="Liens (OBS / vMix / tablettes)">
-                <Show when={links()} fallback={<p class="muted">…</p>}>{(l) => <LinksList links={l()} />}</Show>
-              </Panel>
+                  <Show when={tab() === "layers"}>
+                    <Show when={!readonly()} fallback={<p class="muted">Poste en lecture seule.</p>}><LayersPanel view={v()} layers={layers()} act={act} /></Show>
+                  </Show>
+                  <Show when={tab() === "tools"}>
+                    <div class="c-tools">
+                      <Tool title="Résultats (CSV, PDF)"><ResultsPanel withToken={withToken} /></Tool>
+                      <Show when={!readonly()}>
+                        <Tool title="Buzzers clavier (USB)"><KeyBuzzersPanel kb={kb} view={v()} /></Tool>
+                        <Tool title="Chat Twitch / YouTube"><ChatPanel withToken={withToken} /></Tool>
+                        <Tool title="Bibliothèque du studio"><LibraryPanel /></Tool>
+                        <Tool title="Nouvelle partie (import CSV)"><GameImport /></Tool>
+                        <Tool title="Répétition (bots)"><RehearsalPanel withToken={withToken} /></Tool>
+                        <Tool title="Code équipe (accueil)"><StaffCode withToken={withToken} /></Tool>
+                        <Tool title="API de contrôle (Companion, OSC)"><ApiInfo origin={lanOrigin(links())} token={token} /></Tool>
+                      </Show>
+                      <Tool title="Liens OBS, vMix, tablettes"><Show when={links()} fallback={<p class="muted">…</p>}>{(l) => <LinksList links={l()} />}</Show></Tool>
+                    </div>
+                  </Show>
+                  <Show when={tab() === "check"}>
+                    <ul class="c-check">
+                      <For each={checks()}>{(c) => <li data-ok={String(c.ok)}><span class="c-check-mark">{c.ok ? "✓" : "✗"}</span><span><b>{c.label}</b><br /><span class="muted">{c.detail}</span></span></li>}</For>
+                    </ul>
+                  </Show>
+                </div>
+              </aside>
             </div>
-
-            <Panel title="Joueurs et scores" class="c-players">
-              <Players view={v()} readonly={readonly()} act={act} connected={new Set(status()?.presence?.seats ?? [])} connectedPlayers={new Set(status()?.presence?.players ?? [])} />
-            </Panel>
-          </div>
-        )}
+          );
+        }}
       </Show>
     </div>
   );
 }
 
-const PHASE_LABEL: Record<ControlView["phase"], string> = {
-  lobby: "avant la partie",
-  idle: "entre deux questions",
-  presenting: "question présentée",
-  open: "réponses ouvertes",
-  locked: "réponses fermées",
-  judging: "validation",
-  revealed: "réponse révélée",
-  "round.end": "fin de manche",
-  "game.end": "fin de partie",
-};
-
-/** The real program output, embedded and scaled: exactly what goes on air (same page OBS loads). */
-function ProgramPreview(p: { src: string }) {
-  let box: HTMLDivElement | undefined;
-  const [scale, setScale] = createSignal(0.4);
-  onMount(() => {
-    if (box === undefined) return;
-    const el = box;
-    const ro = new ResizeObserver(() => setScale(el.clientWidth / 1920));
-    ro.observe(el);
-    onCleanup(() => ro.disconnect());
-  });
+function TabKey(p: { readonly id: Tab; readonly tab: Tab; readonly setTab: (t: Tab) => void; readonly label: string; readonly badge: string | null; readonly tone?: "air" | "warn" | "ok" }): JSX.Element {
   return (
-    <div ref={box} class="c-preview" style={{ "--s": String(scale()) }}>
-      <iframe title="programme" src={p.src} />
-    </div>
+    <button type="button" role="tab" class="q-tab" aria-selected={p.tab === p.id} onClick={() => p.setTab(p.id)}>
+      {p.label}
+      <Show when={p.badge}>{(b) => <span class="q-tab-badge" data-tone={p.tone}>{b()}</span>}</Show>
+    </button>
   );
 }
 
-/** Manual / auto-hold layers of the current game's scenes (or the built-in presets): TAKE puts them on air. */
-function LayersPanel(p: { view: ControlView; act: (a: Action, ok?: string) => Promise<boolean> }) {
-  const [layers] = createResource(
-    () => p.view.sessionId,
-    async () => {
-      const r = await api<{ scenes: { layers: { id: string; name: string; mode: string }[] }[] }>("/api/presentation").catch(() => ({ scenes: [] }));
-      const scenes = r.scenes.length > 0 ? r.scenes : Object.values(OUTPUT_SCENES);
-      const seen = new Map<string, string>();
-      for (const s of scenes) for (const l of s.layers) if (l.mode !== "auto" && !seen.has(l.id)) seen.set(l.id, l.name);
-      return [...seen].map(([id, name]) => ({ id, name }));
-    },
-  );
+/** One tool of the « Outils » tab; opening one closes the others (exclusive accordion). */
+function Tool(p: { readonly title: string; readonly children: JSX.Element }): JSX.Element {
   return (
-    <Show when={(layers() ?? []).length > 0} fallback={<p class="muted">Aucune couche manuelle dans les scènes.</p>}>
-      <div class="c-layers">
-        <For each={layers() ?? []}>
-          {(l) => {
-            const onAir = () => p.view.layers[l.id] === true;
-            return (
-              <div class="c-link">
-                <span>{onAir() ? "🔴 " : ""}{l.name}</span>
-                <Button kind={onAir() ? "danger" : "primary"} onClick={() => void p.act(onAir() ? { type: "layer.out", layerId: l.id } : { type: "layer.take", layerId: l.id })}>{onAir() ? "OUT" : "TAKE"}</Button>
-              </div>
-            );
-          }}
-        </For>
-      </div>
-    </Show>
+    <details class="c-tool" name="c-tools">
+      <summary>{p.title}</summary>
+      <div class="c-tool-body">{p.children}</div>
+    </details>
   );
 }
 
-/** Games prepared in the studio: launch one live (screens follow, links unchanged). */
-function LibraryPanel() {
-  const [games, { refetch }] = createResource(() => api<{ games: { id: string; title: string; questions: number }[] }>("/api/games").then((r) => r.games).catch(() => []));
-  const [msg, setMsg] = createSignal<string | null>(null);
-  const launch = async (id: string, title: string) => {
-    // oxlint-disable-next-line no-alert -- irreversible action confirmation (doc 08)
-    if (!window.confirm(`Lancer « ${title} » maintenant ? La partie en cours reste dans le journal.`)) return;
-    try {
-      const r = await api<{ joinCode: string }>(`/api/games/${id}/launch`, { method: "POST" });
-      setMsg(`« ${title} » lancée · code joueurs ${r.joinCode}`);
-    } catch (e) {
-      setMsg(`Échec : ${e instanceof Error ? e.message : String(e)}`);
-    }
+/** The ONE next-step key (space bar), the clock and the few keys of the moment. */
+function Transport(p: { readonly view: ControlView; readonly readonly: boolean; readonly now: number; readonly act: Act }): JSX.Element {
+  const step = () => nextStep(p.view);
+  const remaining = () => (p.view.timer === null ? null : secondsLeft(p.view.timer.endsAt, p.now));
+  const answered = () => {
+    const m = p.view.mechanic;
+    return m !== null && "answeredCount" in m ? m.answeredCount : null;
   };
+  const inQuestion = () => p.view.question !== null && p.view.phase !== "revealed" && ON_AIR_PHASES.has(p.view.phase);
   return (
-    <div class="c-links">
-      <For each={games() ?? []} fallback={<p class="muted">Aucune partie enregistrée dans le studio.</p>}>
-        {(g) => (
-          <div class="c-link">
-            <span>{g.title} <span class="muted">({g.questions} q.)</span></span>
-            <Button onClick={() => void launch(g.id, g.title)}>Lancer</Button>
-          </div>
-        )}
-      </For>
-      <Button kind="ghost" onClick={() => void refetch()}>Actualiser</Button>
-      <Show when={msg()}>{(m) => <p class="muted">{m()}</p>}</Show>
-    </div>
-  );
-}
-
-function TeamsPanel(p: { view: ControlView; act: (a: Action, ok?: string) => Promise<boolean> }) {
-  const [name, setName] = createSignal("");
-  const [color, setColor] = createSignal("#7c5cff");
-  const add = async () => {
-    if (name().trim().length === 0) return;
-    if (await p.act({ type: "team.add", teamId: `t_${hex(6)}`, name: name().trim(), color: color() })) setName("");
-  };
-  return (
-    <div class="c-links">
-      <For each={p.view.teamBoard}>{(t) => <div class="c-link"><span><span class="c-dot c-dot-on" style={{ background: t.color }} />{t.name}</span><b>{t.total}</b></div>}</For>
-      <div class="c-add">
-        <input placeholder="Nouvelle équipe" value={name()} onInput={(e) => setName(e.currentTarget.value)} onKeyDown={(e) => { if (e.key === "Enter") void add(); }} />
-        <input type="color" value={color()} onInput={(e) => setColor(e.currentTarget.value)} />
-        <Button onClick={() => void add()}>Ajouter</Button>
-      </div>
-    </div>
-  );
-}
-
-const CSV_EXAMPLE = ["type;question;A;B;C;D;E;F;réponse;notes", "qcm;Capitale de l'Italie ?;Milan;Rome;Turin;;;;B;", "vf;Le soleil est une étoile.;;;;;;;vrai;"].join("\n");
-
-const STATUSES: readonly Participant["status"][] = ["active", "eliminated", "waiting", "substitute", "disconnected"];
-const asStatus = (v: string): Participant["status"] => STATUSES.find((s) => s === v) ?? "active";
-
-/** CSV / spreadsheet paste → preview → new game. The screens follow at once, links stay the same. */
-function GameImport() {
-  const [title, setTitle] = createSignal("Ma partie");
-  const [text, setText] = createSignal("");
-  const [seconds, setSeconds] = createSignal(20);
-  const [result, setResult] = createSignal<string | null>(null);
-  const parsed = createMemo(() => parseQuestionsCsv(text()));
-  const loadFile = async (f: File | undefined) => {
-    if (f !== undefined) setText(await f.text());
-  };
-  const launch = async () => {
-    const { questions } = parsed();
-    if (questions.length === 0) return;
-    // oxlint-disable-next-line no-alert -- irreversible action confirmation (doc 08)
-    if (!window.confirm(`Lancer « ${title()} » (${questions.length} questions) ? La partie en cours reste dans le journal.`)) return;
-    try {
-      const game = gameFromQuestions(title().trim() || "Partie", questions, { timerSeconds: seconds(), points: 100, maxPlayers: 1000 });
-      const r = await api<{ sessionId: string; joinCode: string }>("/api/session", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ game }) });
-      setResult(`Nouvelle partie lancée · code joueurs ${r.joinCode}`);
-      setText("");
-    } catch (e) {
-      setResult(`Échec : ${e instanceof Error ? e.message : String(e)}`);
-    }
-  };
-  return (
-    <div class="c-import">
-      <label>Titre <input value={title()} onInput={(e) => setTitle(e.currentTarget.value)} /></label>
-      <label>Chrono (s) <input class="c-num" type="number" min="5" max="600" value={seconds()} onInput={(e) => setSeconds(Number(e.currentTarget.value) || 20)} /></label>
-      <textarea rows={5} placeholder={CSV_EXAMPLE} value={text()} onInput={(e) => setText(e.currentTarget.value)} />
-      <input type="file" accept=".csv,.tsv,.txt,text/csv" onChange={(e) => void loadFile(e.currentTarget.files?.[0])} />
-      <Show when={text().trim().length > 0}>
-        <p class="muted">{parsed().questions.length} question(s) prête(s){parsed().errors.length > 0 ? ` · ${parsed().errors.length} ligne(s) ignorée(s)` : ""}</p>
-        <Show when={parsed().errors.length > 0}>
-          <ul class="c-errors"><For each={parsed().errors.slice(0, 8)}>{(e) => <li>{e}</li>}</For></ul>
+    <section class="c-transport">
+      <Show when={!p.readonly} fallback={<p class="muted c-grow">Poste en lecture seule : la régie maître pilote.</p>}>
+        <Show when={step()} fallback={<button type="button" class="c-next" disabled>Partie terminée</button>}>
+          {(n) => (
+            <button type="button" class="c-next" title="Espace" onClick={() => void p.act(n().action)}>
+              <span>{n().label}</span>
+              <kbd>Espace</kbd>
+            </button>
+          )}
         </Show>
       </Show>
-      <Button disabled={parsed().questions.length === 0} onClick={() => void launch()}>Lancer cette partie</Button>
-      <Show when={result()}>{(r) => <p class="muted">{r()}</p>}</Show>
-    </div>
+      <div class="c-clock" data-low={String((remaining() ?? 99) <= 5)}>
+        <span class="c-clock-time q-mono" data-idle={String(remaining() === null)}>{remaining() === null ? "–:––" : `${Math.floor((remaining() ?? 0) / 60)}:${String((remaining() ?? 0) % 60).padStart(2, "0")}`}</span>
+        <span class="c-clock-meta q-mono">{answered() === null ? " " : `${answered()}/${p.view.participants.length} rép.`}</span>
+      </div>
+      <Show when={!p.readonly}>
+        <div class="c-keys">
+          <Button kind="secondary" disabled={p.view.phase !== "open"} onClick={() => void p.act({ type: "timer.set", remainingMs: Math.max(0, (p.view.timer?.endsAt ?? p.now) - p.now) + 10_000 })}>+10 s</Button>
+          <Button kind="secondary" disabled={p.view.phase !== "open" || p.view.timer === null} onClick={() => void p.act({ type: "timer.stop" })}>Stop chrono</Button>
+          <Button kind="secondary" disabled={!inQuestion()} onClick={() => { if (window.confirm("Passer cette question sans la révéler ?")) void p.act({ type: "question.next" }, "Question passée"); }}>Passer la question</Button> {/* oxlint-disable-line no-alert -- irreversible action confirmation (doc 08) */}
+          <Button kind="ghost" title="Ctrl+Z" onClick={() => void p.act({ type: "undo" }, "Dernière action annulée")}>↶ Annuler</Button>
+        </div>
+      </Show>
+    </section>
   );
 }
 
-function LinksList(p: { links: LinksResponse }) {
-  const [origin, setOrigin] = createSignal(p.links.origins.find((o) => !o.includes("localhost")) ?? p.links.origins[0] ?? location.origin);
-  const [copied, setCopied] = createSignal<string | null>(null);
-  const copy = async (text: string, id: string) => {
-    try {
-      await navigator.clipboard.writeText(text); // may be unavailable over HTTP: fall back to selection
-      setCopied(id);
-    } catch {
-      window.prompt("Copier le lien :", text); // oxlint-disable-line no-alert -- clipboard API needs a secure context; manual copy fallback
-    }
+/** The question on air (with its mechanic controls), else the one coming next — answer and notes included. */
+function OnAir(p: { readonly view: ControlView; readonly readonly: boolean; readonly act: Act; readonly mediaUrl: (h: string) => string }): JSX.Element {
+  const mode = () => (p.readonly ? "host" : "control");
+  const upNext = () => {
+    const t = nextTarget(p.view);
+    return t === null ? null : { t, q: questionAt(p.view.rundown, t), r: p.view.rundown[t.roundIndex] };
   };
   return (
-    <div class="c-links">
-      <label class="muted">
-        Adresse du serveur vue par les autres PC :{" "}
-        <select value={origin()} onChange={(e) => setOrigin(e.currentTarget.value)}>
-          <For each={p.links.origins}>{(o) => <option value={o}>{o}</option>}</For>
-        </select>
-      </label>
-      <p class="muted">Joueurs : {origin()}/play — code <b>{p.links.joinCode}</b></p>
-      <For each={p.links.entries.filter((e) => !e.id.startsWith("seat-") || Number(e.id.slice(5)) <= 8)}>
-        {(e) => (
-          <div class="c-link">
-            <span>{e.label}</span>
-            <Button kind="secondary" onClick={() => void copy(`${origin()}${e.path}`, e.id)}>{copied() === e.id ? "Copié ✓" : "Copier"}</Button>
+    <>
+    <Show
+      when={p.view.question}
+      fallback={
+        <>
+          <Show when={p.view.mechanic !== null}>
+            <section class="c-card"><MechanicPanel view={p.view} mode={mode()} act={p.act} mediaUrl={p.mediaUrl} /></section>
+          </Show>
+          <Show when={upNext()?.q} fallback={<Show when={p.view.mechanic === null}><section class="c-card c-card-empty"><p class="muted">{p.view.phase === "game.end" ? "Partie terminée." : "Rien à l'antenne."}</p></section></Show>}>
+            {(q) => (
+              <section class="c-card" data-mode="next">
+                <div class="c-card-head">
+                  <span class="q-tally" data-on="next">Suivante</span>
+                  <span class="muted">{upNext()?.r?.title} · <span class="q-mono">Q{q().index + 1}/{upNext()?.r?.questions.length}</span></span>
+                </div>
+                <p class="c-prompt">{q().text}</p>
+                <p class="c-answer"><span class="q-label">Réponse</span> {formatAnswer(q().answerSpec).headline}</p>
+                <Show when={q().notes}>{(n) => <p class="c-notes">{n()}</p>}</Show>
+              </section>
+            )}
+          </Show>
+        </>
+      }
+    >
+      {(q) => (
+        <section class="c-card" data-mode="air">
+          <div class="c-card-head">
+            <span class="q-tally" data-on="air">À l'antenne</span>
+            <span class="muted">{p.view.round?.title} · <span class="q-mono">Q{q().index + 1}/{q().count}</span></span>
+            <span class="c-spacer" />
+            <Show when={!p.readonly}><QuestionTextEdit text={q().prompt.text} act={p.act} /></Show>
           </div>
+          <p class="c-prompt">{q().prompt.text}</p>
+          <Show when={asChoice(p.view.mechanic)}>
+            {(m) => (
+              <ul class="c-opts">
+                <For each={m().options}>
+                  {(o, i) => (
+                    <li class="c-opt" data-correct={String(m().correct?.includes(o.id) === true)}>
+                      <span class="c-opt-letter q-mono">{optionLetter(i())}</span>
+                      <span class="c-grow">{o.label}</span>
+                      <span class="c-count q-mono">{m().counts?.[o.id] ?? ""}</span>
+                    </li>
+                  )}
+                </For>
+              </ul>
+            )}
+          </Show>
+          <MechanicPanel view={p.view} mode={mode()} act={p.act} mediaUrl={p.mediaUrl} />
+          <Show when={p.view.notes}>{(n) => <p class="c-notes">{n()}</p>}</Show>
+        </section>
+      )}
+    </Show>
+    <Show when={p.view.question !== null ? upNext()?.q : null}>{(q) => <p class="c-then"><span class="q-label">Ensuite</span><span>{q().text}</span></p>}</Show>
+    </>
+  );
+}
+
+/** Left column: rounds (collapsible), questions with their state; a click presents one when idle in its round. */
+function Rundown(p: { readonly view: ControlView; readonly readonly: boolean; readonly act: Act; readonly onRegrade: (round: number, question: number) => void }): JSX.Element {
+  const [toggled, setToggled] = createSignal<ReadonlySet<number>>(new Set());
+  const air = () => onAirTarget(p.view);
+  const next = () => nextTarget(p.view);
+  const isOpen = (i: number) => (p.view.round?.index ?? 0) === i ? !toggled().has(i) : toggled().has(i);
+  const toggle = (i: number) => {
+    const s = new Set(toggled());
+    if (s.has(i)) s.delete(i);
+    else s.add(i);
+    setToggled(s);
+  };
+  return (
+    <nav class="c-rundown" aria-label="Déroulé">
+      <h2 class="q-panel-title">Déroulé</h2>
+      <For each={p.view.rundown}>
+        {(r) => (
+          <section class="c-round" data-current={String(p.view.round?.index === r.index)}>
+            <div class="c-round-head">
+              <button type="button" class="c-round-toggle" aria-expanded={isOpen(r.index)} onClick={() => toggle(r.index)}>
+                <span class="c-round-title">{r.title}</span>
+                <span class="c-round-meta q-mono">{MECHANIC_LABEL[r.mechanic] ?? r.mechanic} · {r.questions.filter((q) => q.played).length}/{r.questions.length}</span>
+              </button>
+              <Show when={!p.readonly && (p.view.phase === "idle" || p.view.phase === "round.end") && p.view.round?.index !== r.index}>
+                <Button kind="ghost" onClick={() => void p.act({ type: "round.start", roundIndex: r.index })}>Démarrer</Button>
+              </Show>
+            </div>
+            <Show when={isOpen(r.index)}>
+              <For each={r.questions}>
+                {(q) => {
+                  const t = { roundIndex: r.index, questionIndex: q.index };
+                  const state = () => (sameTarget(t, air()) ? "air" : sameTarget(t, next()) ? "next" : q.played ? "played" : "todo");
+                  return (
+                    <div class="c-q-row">
+                      <button type="button" class="c-q" data-state={state()} data-current={String(state() === "air")} data-played={String(q.played)} title={q.text} disabled={p.readonly || p.view.phase !== "idle" || p.view.round?.index !== r.index} onClick={() => void p.act({ type: "question.present", questionIndex: q.index })}>
+                        <span class="c-q-n q-mono">{q.index + 1}</span>
+                        <span class="c-q-t">{q.text}</span>
+                        <Show when={q.played}><span class="c-q-ok">✓</span></Show>
+                      </button>
+                      <Show when={q.played && !p.readonly}>
+                        <button type="button" class="c-q-fix" title="Corriger la réponse et recalculer les points" onClick={() => p.onRegrade(r.index, q.index)}>Corriger</button>
+                      </Show>
+                    </div>
+                  );
+                }}
+              </For>
+              <ReserveList view={p.view} round={r} readonly={p.readonly} act={p.act} />
+            </Show>
+          </section>
         )}
       </For>
-      <p class="muted">Liste complète (tous les sièges) : links.txt dans le dossier de données du serveur.</p>
-    </div>
-  );
-}
-
-function Players(p: { view: ControlView; readonly: boolean; act: (a: Action, ok?: string) => Promise<boolean>; connected: Set<number>; connectedPlayers: Set<string> }) {
-  const [name, setName] = createSignal("");
-  const [csv, setCsv] = createSignal("");
-  const [csvReport, setCsvReport] = createSignal<string | null>(null);
-  const totals = createMemo(() => new Map(p.view.leaderboard.map((r) => [r.participantId, r])));
-  const freeSeat = () => {
-    const used = new Set(p.view.participants.map((x) => x.seat));
-    for (let i = 1; i < 999; i++) if (!used.has(i)) return i;
-    return undefined;
-  };
-  const add = async () => {
-    const n = name().trim();
-    if (n.length === 0) return;
-    const seat = freeSeat();
-    if (await p.act({ type: "player.add", participantId: `p_${hex(8)}`, displayName: n, channel: "seat", ...(seat === undefined ? {} : { seat }) })) setName("");
-  };
-  const importCsv = async () => {
-    const { rows, errors } = parsePlayersCsv(csv());
-    const teams = new Map(p.view.teams.map((t) => [t.name.toLowerCase(), t.id]));
-    let ok = 0;
-    const failures = [...errors];
-    for (const r of rows) {
-      let teamId: string | undefined;
-      if (r.team !== null) {
-        teamId = teams.get(r.team.toLowerCase());
-        if (teamId === undefined) {
-          teamId = `t_${hex(6)}`;
-          if (await p.act({ type: "team.add", teamId, name: r.team, color: `#${hex(3)}` })) teams.set(r.team.toLowerCase(), teamId);
-        }
-      }
-      const added = await p.act({ type: "player.add", participantId: `p_${hex(8)}`, displayName: r.name, channel: "seat", ...(r.seat === null ? {} : { seat: r.seat }), ...(teamId === undefined ? {} : { teamId }) });
-      if (added) ok++;
-      else failures.push(`${r.name} : refusé`);
-    }
-    setCsvReport(`${ok} joueur(s) importé(s)${failures.length > 0 ? ` · ${failures.length} problème(s) : ${failures.join(" · ")}` : ""}`);
-    if (failures.length === 0) setCsv("");
-  };
-  const online = (pl: Participant) => (pl.seat !== null && p.connected.has(pl.seat)) || p.connectedPlayers.has(pl.id);
-  return (
-    <div class="c-players-inner">
-      <table>
-        <thead>
-          <tr><th>#</th><th>Joueur</th><th>Siège</th><th>Équipe</th><th>Statut</th><th>Score</th><th /></tr>
-        </thead>
-        <tbody>
-          <For each={p.view.participants}>
-            {(pl) => (
-              <tr data-status={pl.status}>
-                <td>{totals().get(pl.id)?.rank ?? "–"}</td>
-                <td>
-                  <span class={`c-dot ${online(pl) ? "c-dot-on" : ""}`} title={online(pl) ? "tablette connectée" : "non connectée"} />
-                  <input value={pl.displayName} disabled={p.readonly} onChange={(e) => void p.act({ type: "player.rename", participantId: pl.id, displayName: e.currentTarget.value })} />
-                </td>
-                <td>
-                  <input class="c-num" type="number" min="1" value={pl.seat ?? ""} disabled={p.readonly} onChange={(e) => void p.act({ type: "player.setSeat", participantId: pl.id, seat: e.currentTarget.value === "" ? null : Number(e.currentTarget.value) })} />
-                </td>
-                <td>
-                  <select value={pl.teamId ?? ""} disabled={p.readonly} onChange={(e) => void p.act({ type: "player.setTeam", participantId: pl.id, teamId: e.currentTarget.value === "" ? null : e.currentTarget.value })}>
-                    <option value="">—</option>
-                    <For each={p.view.teams}>{(t) => <option value={t.id}>{t.name}</option>}</For>
-                  </select>
-                </td>
-                <td>
-                  <select value={pl.status} disabled={p.readonly} onChange={(e) => void p.act({ type: "player.setStatus", participantId: pl.id, status: asStatus(e.currentTarget.value) })}>
-                    <option value="active">actif</option>
-                    <option value="eliminated">éliminé</option>
-                    <option value="waiting">en attente</option>
-                    <option value="substitute">remplaçant</option>
-                    <option value="disconnected">absent</option>
-                  </select>
-                </td>
-                <td class="c-score">
-                  <Button kind="secondary" disabled={p.readonly} onClick={() => void p.act({ type: "score.adjust", target: { participantId: pl.id }, delta: -10, reason: "penalty" })}>−10</Button>
-                  <input class="c-num" type="number" value={totals().get(pl.id)?.total ?? 0} disabled={p.readonly} onChange={(e) => void p.act({ type: "score.setTotal", target: { participantId: pl.id }, total: Math.round(Number(e.currentTarget.value)) })} />
-                  <Button kind="secondary" disabled={p.readonly} onClick={() => void p.act({ type: "score.adjust", target: { participantId: pl.id }, delta: 10, reason: "bonus" })}>+10</Button>
-                </td>
-                <td>
-                  <Button kind="ghost" disabled={p.readonly} onClick={() => { if (window.confirm(`Retirer ${pl.displayName} ?`)) void p.act({ type: "player.remove", participantId: pl.id }); }}>Retirer</Button> {/* oxlint-disable-line no-alert -- irreversible action confirmation (doc 08) */}
-                </td>
-              </tr>
-            )}
-          </For>
-        </tbody>
-      </table>
-      <Show when={!p.readonly}>
-        <div class="c-add">
-          <input placeholder="Nouveau joueur" value={name()} onInput={(e) => setName(e.currentTarget.value)} onKeyDown={(e) => { if (e.key === "Enter") void add(); }} />
-          <Button onClick={() => void add()}>Ajouter</Button>
-        </div>
-        <details class="c-csv">
-          <summary>Importer des joueurs (coller depuis Excel / CSV : nom ; siège ; équipe)</summary>
-          <textarea rows={6} value={csv()} onInput={(e) => setCsv(e.currentTarget.value)} placeholder={"Ana;1;Rouges\nBo;2;Bleus"} />
-          <Button onClick={() => void importCsv()}>Importer</Button>
-          <Show when={csvReport()}>{(r) => <p class="muted">{r()}</p>}</Show>
-        </details>
-      </Show>
-    </div>
+    </nav>
   );
 }
 

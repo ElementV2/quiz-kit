@@ -35,7 +35,7 @@ export function Effects(p: { readonly view: View | null; readonly serverNow: () 
       Object.assign(app.canvas.style, { position: "absolute", inset: "0", width: "100%", height: "100%", pointerEvents: "none" });
       const particles: Particle[] = [];
       const accent = Number.parseInt(p.accent.replace("#", "").slice(0, 6), 16) || 0xffcc4d;
-      const palette = [accent, 0x22c55e, 0x38bdf8, 0xffffff, 0x7c5cff];
+      const palette = [accent, 0x35b866, 0x3fb6c6, 0xffffff, 0xe9b13b];
       // Deterministic-enough pseudo random for visuals only (never game logic).
       let seed = 1;
       const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);

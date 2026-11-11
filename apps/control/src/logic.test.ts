@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { parsePlayersCsv, splitCsvLine } from "./logic.ts";
+import type { AnswerSpec } from "@quiz/schema";
+import { DEFAULT_BUZZER_KEYS, REGRADABLE_KINDS, assignBuzzerKey, buzzerKey, keyLabel, keyOfSeat, parseAcceptedLines, parseBuzzerKeys, parsePlayersCsv, regradeSpec, splitCsvLine } from "./logic.ts";
 
 describe("players CSV", () => {
   it("parses ; , and tab separated lines, header optional", () => {
@@ -20,5 +21,42 @@ describe("players CSV", () => {
     const r = parsePlayersCsv("Ana;1\nBo;1\nCé;x\n;2");
     expect(r.rows).toHaveLength(1);
     expect(r.errors).toEqual(["ligne 2 : siège 1 en double", "ligne 3 : siège invalide « x »", "ligne 4 : nom vide"]);
+  });
+});
+
+describe("regrade editor", () => {
+  const single: AnswerSpec = { kind: "single", options: [{ id: "a", label: "A" }, { id: "b", label: "B" }], correct: "a" };
+  const options = [{ id: "a", label: "A" }, { id: "b", label: "B" }];
+  it("builds a corrected spec of the same kind, null when the draft is incomplete", () => {
+    expect(regradeSpec(single, { picked: ["b"] })).toEqual({ ...single, correct: "b" });
+    expect(regradeSpec(single, { picked: ["z"] })).toBeNull();
+    expect(regradeSpec({ kind: "multi", options, correct: ["a"] }, { picked: ["a", "b"] })).toMatchObject({ correct: ["a", "b"] });
+    expect(regradeSpec({ kind: "boolean", correct: true }, { truth: false })).toEqual({ kind: "boolean", correct: false });
+    expect(regradeSpec({ kind: "text", accepted: ["Van Gogh"] }, { accepted: " Vincent van Gogh \n\nVan Gogh\nVan Gogh" })).toEqual({ kind: "text", accepted: ["Vincent van Gogh", "Van Gogh"] });
+    expect(regradeSpec({ kind: "text", accepted: ["x"] }, { accepted: "  " })).toBeNull();
+    expect(regradeSpec({ kind: "number", correct: 330, tolerance: 10, unit: "m" }, { correct: "324,5", tolerance: "" })).toEqual({ kind: "number", correct: 324.5, tolerance: 0, unit: "m" });
+    expect(regradeSpec({ kind: "number", correct: 1, tolerance: 0 }, { correct: "abc" })).toBeNull();
+    expect(regradeSpec({ kind: "oral", expected: "x" }, {})).toBeNull();
+    expect(REGRADABLE_KINDS.has("order")).toBe(false);
+  });
+
+  it("drops blank and duplicate accepted lines", () => {
+    expect(parseAcceptedLines("a\r\n\nb\na")).toEqual(["a", "b"]);
+  });
+});
+
+describe("keyboard buzzers", () => {
+  it("default 1–9, malformed storage falls back to it", () => {
+    expect(parseBuzzerKeys(null)["3"]).toBe(3);
+    expect(parseBuzzerKeys("{oops")).toBe(DEFAULT_BUZZER_KEYS);
+    expect(parseBuzzerKeys('{"A": 2, "b": 0, "c": "x"}')).toEqual({ a: 2 });
+  });
+  it("one key per seat, one seat per key", () => {
+    const m = assignBuzzerKey(DEFAULT_BUZZER_KEYS, 1, "Q");
+    expect(m["q"]).toBe(1);
+    expect(m["1"]).toBeUndefined();
+    expect(keyOfSeat(assignBuzzerKey(m, 2, "q"), 1)).toBeNull();
+    expect(buzzerKey("A")).toBe("a");
+    expect(keyLabel(" ")).toBe("Espace");
   });
 });

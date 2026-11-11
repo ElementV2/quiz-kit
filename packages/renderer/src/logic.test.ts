@@ -56,7 +56,7 @@ describe("misc", () => {
     expect(secondsLeft(10_000, 20_000)).toBe(0);
   });
   it("theme → CSS variables", () => {
-    expect(themeVars(DEFAULT_THEME)).toMatchObject({ "--q-color-primary": "#7c5cff", "--q-color-surface-alt": "#1f2550", "--q-radius": "18px", "--q-logo": "none", "--q-mat-image": "none" });
+    expect(themeVars(DEFAULT_THEME)).toMatchObject({ "--q-color-primary": "#e9b13b", "--q-color-surface-alt": "#1d1f25", "--q-radius": "4px", "--q-logo": "none", "--q-mat-image": "none" });
     const neon = themeVars({ ...DEFAULT_THEME, material: "neon", logo: "a".repeat(64) }, (h) => `blob:${h.slice(0, 2)}`);
     expect(neon["--q-logo"]).toBe("url(blob:aa)");
     expect(neon["--q-mat-border"]).toContain("var(--q-color-accent)");

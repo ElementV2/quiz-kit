@@ -2,6 +2,8 @@ import { For, Show, createSignal, type JSX } from "solid-js";
 import { asBuzzer, asLadder, asPollBoard, nameOf } from "@quiz/renderer";
 import type { Action, ControlView, HostView } from "@quiz/schema";
 import { Button } from "./components.tsx";
+import { Phase3Panel } from "./AnswerPanels.tsx";
+import { CrowdVotePanel } from "./CrowdVotePanel.tsx";
 
 /**
  * Mechanic-specific controls (doc 08 « actions contextuelles »), shared by the control room and the host.
@@ -11,6 +13,8 @@ export function MechanicPanel(p: {
   readonly view: ControlView | HostView;
   readonly mode: "control" | "host";
   readonly act: (a: Action, okText?: string) => Promise<boolean>;
+  /** Media URL (preloaded blob); default `/media/<hash>`. */
+  readonly mediaUrl?: (hash: string) => string;
 }): JSX.Element {
   const control = () => p.mode === "control";
   const teams = () => (p.view.role === "control" ? p.view.teams : []);
@@ -73,7 +77,7 @@ export function MechanicPanel(p: {
               <Show when={m().hand} fallback={<p class="muted">{p.view.phase === "open" ? "En attente d'un buzz…" : "Ouvrir les réponses pour activer les buzzers."}</p>}>
                 {(h) => (
                   <>
-                    <p class="q-mech-hand">🔔 Main : <b>{nameOf(p.view, h())}</b></p>
+                    <p class="q-mech-hand">Main : <b>{nameOf(p.view, h())}</b></p>
                     <div class="q-mech-row">
                       <Button onClick={() => void p.act({ type: "answer.judge", participantId: h(), correct: true })}>✓ Bonne réponse</Button>
                       <Button kind="danger" onClick={() => void p.act({ type: "answer.judge", participantId: h(), correct: false })}>✗ Faux</Button>
@@ -90,6 +94,12 @@ export function MechanicPanel(p: {
         )}
       </Show>
 
+      {/* ── Phase 3 : réponse libre, estimation, ordre, paires, pin, répartition, plateau, indices, image ── */}
+      <Phase3Panel view={p.view} mode={p.mode} act={p.act} mediaUrl={p.mediaUrl ?? ((h) => `/media/${h}`)} />
+
+      {/* ── Vote du chat ── */}
+      <CrowdVotePanel mechanic={p.view.mechanic} />
+
       {/* ── Paliers ── */}
       <Show when={asLadder(p.view.mechanic)}>
         {(m) => (
@@ -99,7 +109,7 @@ export function MechanicPanel(p: {
             <Show when={control()}>
               <div class="q-mech-row">
                 <Button kind="secondary" disabled={m().jokers.fifty !== "available"} onClick={() => void p.act({ type: "joker.use", joker: "fifty" })}>50:50</Button>
-                <Button kind="secondary" disabled={m().jokers.audience !== "available"} onClick={() => void p.act({ type: "joker.use", joker: "audience" })}>👥 Sondage du public</Button>
+                <Button kind="secondary" disabled={m().jokers.audience !== "available"} onClick={() => void p.act({ type: "joker.use", joker: "audience" })}>Sondage du public</Button>
                 <Button kind="ghost" disabled={m().status !== "playing"} onClick={() => { if (window.confirm("Le candidat s'arrête et garde son gain ?")) void p.act({ type: "ladder.stop" }, "Le candidat s'arrête"); }}>Je m'arrête</Button> {/* oxlint-disable-line no-alert -- irreversible action confirmation (doc 08) */}
               </div>
             </Show>

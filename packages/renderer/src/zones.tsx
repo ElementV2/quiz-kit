@@ -1,54 +1,12 @@
-import { For, Show, createEffect, createSignal, onCleanup, type Component, type JSX } from "solid-js";
-import type { View, Zone, ZoneType } from "@quiz/schema";
-import { asBuzzer, asLadder, asPollBoard, estimateFontSize, nameOf, optionLetter, optionShare, optionState, optionsOf, readPath, secondsLeft } from "./logic.ts";
+import { For, Match, Show, Switch, createSignal, onCleanup, type Component } from "solid-js";
+import type { ZoneType } from "@quiz/schema";
+import { formatNumber } from "./answers.ts";
+import { asBoard, asBuzzer, asLadder, asPollBoard, nameOf, optionLetter, optionShare, optionState, optionsOf, readPath, secondsLeft } from "./logic.ts";
+import { BoardZone, MEDIA_MECHANICS, MechanicMedia, NumberAnswerZone, OrderZone, PairsZone, RevealAnswerZone } from "./mechanic-zones.tsx";
+import { FitText, num, panel, str, type ZoneProps } from "./zone-kit.tsx";
 
-export type ZoneProps = { readonly zone: Zone; readonly view: View; readonly serverNow: () => number; readonly mediaUrl: (hash: string) => string };
+export type { ZoneProps } from "./zone-kit.tsx";
 
-const num = (z: Zone, key: string, fallback: number): number => {
-  const v = z.props[key];
-  return typeof v === "number" ? v : fallback;
-};
-const str = (z: Zone, key: string, fallback: string): string => {
-  const v = z.props[key];
-  return typeof v === "string" ? v : fallback;
-};
-
-/** Surfaces: state colour (background-color) under the theme material (doc 06 « matériau des cadres », `--q-mat-*`). */
-const panel: JSX.CSSProperties = {
-  "background-color": "var(--q-color-surface)",
-  "background-image": "var(--q-mat-image)",
-  "background-size": "var(--q-mat-size)",
-  border: "var(--q-mat-border)",
-  "backdrop-filter": "var(--q-mat-backdrop)",
-  "border-radius": "var(--q-radius)",
-  "box-shadow": "var(--q-mat-shadow)",
-  "box-sizing": "border-box",
-};
-
-/** Auto-fit: shrink the font until the text fits the zone (doc 06 « auto-fit dans la textBox »). */
-function FitText(p: { readonly text: string; readonly max: number; readonly box: { w: number; h: number }; readonly align?: string }): JSX.Element {
-  let el: HTMLDivElement | undefined;
-  const [size, setSize] = createSignal(estimateFontSize(p.text, p.box, p.max));
-  createEffect(() => {
-    let s = estimateFontSize(p.text, p.box, p.max);
-    setSize(s);
-    if (el === undefined) return;
-    // Refine with the real DOM metrics (fonts differ from the estimate).
-    queueMicrotask(() => {
-      if (el === undefined) return;
-      while (s > 18 && (el.scrollHeight > el.clientHeight + 1 || el.scrollWidth > el.clientWidth + 1)) {
-        s -= 2;
-        el.style.fontSize = `${s}px`;
-      }
-      setSize(s);
-    });
-  });
-  return (
-    <div ref={el} style={{ width: "100%", height: "100%", display: "flex", "align-items": "center", "justify-content": p.align ?? "center", "text-align": "center", "font-size": `${size()}px`, "line-height": 1.15, overflow: "hidden", "overflow-wrap": "anywhere" }}>
-      {p.text}
-    </div>
-  );
-}
 
 const QuestionZone: Component<ZoneProps> = (p) => {
   const text = (): string => {
@@ -62,7 +20,7 @@ const QuestionZone: Component<ZoneProps> = (p) => {
   );
 };
 
-const AnswerListZone: Component<ZoneProps> = (p) => {
+const OptionGridZone: Component<ZoneProps> = (p) => {
   const m = () => p.view.mechanic;
   const myAnswer = () => (p.view.role === "player" ? p.view.myAnswer : null);
   const columns = () => num(p.zone, "columns", 2);
@@ -98,7 +56,7 @@ const AnswerListZone: Component<ZoneProps> = (p) => {
                       <FitText text={o.label} max={44} box={{ w: cellW() - 140, h: cellH() - 16 }} align="flex-start" />
                     </div>
                     <Show when={share() !== null}>
-                      <span style={{ position: "relative", "font-size": "28px", color: "var(--q-color-muted)" }}>{Math.round((share() ?? 0) * 100)}%</span>
+                      <span class="q-share" style={{ position: "relative", "font-size": "28px", color: "var(--q-color-muted)", "font-variant-numeric": "tabular-nums" }}>{mech().mechanic === "allocation" ? formatNumber(amountOf(mech(), o.id)) : `${Math.round((share() ?? 0) * 100)}%`}</span>
                     </Show>
                   </div>
                 );
@@ -108,6 +66,47 @@ const AnswerListZone: Component<ZoneProps> = (p) => {
         );
       }}
     </Show>
+  );
+};
+
+const amountOf = (m: NonNullable<ZoneProps["view"]["mechanic"]>, id: string): number => (m.mechanic === "allocation" ? (m.counts?.[id] ?? 0) : 0);
+
+/** Typed answers (no option list): only the right answer, at reveal. */
+const TYPED: ReadonlySet<string> = new Set(["text-answer", "pin"]);
+
+/**
+ * `answer-list`: the option grid (choice, ladder, buzzer, allocation, hints / reveal-image in choice mode),
+ * or the mechanic's own band (order, pairs, number ranking, board grid, revealed typed answer).
+ * Keyed on the mechanic kind so a new view never remounts the band (transitions keep running).
+ */
+const AnswerListZone: Component<ZoneProps> = (p) => {
+  const kind = () => p.view.mechanic?.mechanic ?? null;
+  return <AnswerListContent {...p} kind={kind} />;
+};
+
+/**
+ * Board rounds: the grid between two cells (program scene "grid" layer), nothing in any other case — hidden layers
+ * stay mounted for their transitions, so this zone must never duplicate the answer list.
+ */
+const BoardGridZone: Component<ZoneProps> = (p) => {
+  const kind = () => p.view.mechanic?.mechanic ?? null;
+  return <Show when={kind() === "board" && p.view.phase === "idle"}><AnswerListContent {...p} kind={kind} /></Show>;
+};
+
+const AnswerListContent: Component<ZoneProps & { kind: () => string | null }> = (p) => {
+  const kind = p.kind;
+  const textInput = () => {
+    const m = p.view.mechanic;
+    return (m?.mechanic === "hints" || m?.mechanic === "reveal-image") && m.input === "text";
+  };
+  return (
+    <Switch fallback={<OptionGridZone {...p} />}>
+      <Match when={kind() === "order"}><OrderZone {...p} /></Match>
+      <Match when={kind() === "pairs"}><PairsZone {...p} /></Match>
+      <Match when={kind() === "number-answer"}><NumberAnswerZone {...p} /></Match>
+      <Match when={kind() === "board"}><BoardZone {...p} options={() => <OptionGridZone {...p} />} /></Match>
+      <Match when={TYPED.has(kind() ?? "") || textInput()}><RevealAnswerZone {...p} /></Match>
+    </Switch>
   );
 };
 
@@ -130,7 +129,11 @@ const TimerZone: Component<ZoneProps> = (p) => {
 const LeaderboardZone: Component<ZoneProps> = (p) => {
   const rows = () => p.view.leaderboard.slice(0, num(p.zone, "maxRows", 10));
   const rowH = () => Math.min(80, (p.zone.rect.h - 80) / Math.max(1, num(p.zone, "maxRows", 10)));
+  // Between two cells of a board round the grid takes the screen (program scene "grid" layer).
+  // Only where the scene has a grid to show instead (prop set on the program preset), never an empty screen.
+  const gridOnAir = () => p.zone.props["yieldToBoardGrid"] === true && p.view.phase === "idle" && p.view.mechanic?.mechanic === "board";
   return (
+    <Show when={!gridOnAir()}>
     <div style={{ ...panel, width: "100%", height: "100%", padding: "24px 32px", display: "flex", "flex-direction": "column", gap: "8px" }}>
       <div style={{ "font-size": "36px", color: "var(--q-color-accent)", "margin-bottom": "8px" }}>{str(p.zone, "title", "Classement")}</div>
       <For each={rows()}>
@@ -143,6 +146,7 @@ const LeaderboardZone: Component<ZoneProps> = (p) => {
         )}
       </For>
     </div>
+    </Show>
   );
 };
 
@@ -183,6 +187,7 @@ const TextZone: Component<ZoneProps> = (p) => {
 const QuestionMediaZone: Component<ZoneProps> = (p) => {
   const media = () => p.view.question?.prompt.media;
   return (
+    <Show when={!MEDIA_MECHANICS.has(p.view.mechanic?.mechanic ?? "")} fallback={<MechanicMedia {...p} />}>
     <Show when={media()}>
       {(m) => (
         <div style={{ ...panel, width: "100%", height: "100%", overflow: "hidden", display: "grid", "place-items": "center", "background-color": "transparent", "background-image": "none", border: "none", "box-shadow": "none" }}>
@@ -198,6 +203,7 @@ const QuestionMediaZone: Component<ZoneProps> = (p) => {
           </Show>
         </div>
       )}
+    </Show>
     </Show>
   );
 };
@@ -242,21 +248,38 @@ const PollBoardZone: Component<ZoneProps> = (p) => (
   </Show>
 );
 
-/** Buzzer: who has the hand, who won. Names come from the board carried by the view. */
-const BuzzerZone: Component<ZoneProps> = (p) => (
-  <Show when={asBuzzer(p.view.mechanic)}>
-    {(m) => (
-      <Show when={m().winner ?? m().hand}>
-        {(id) => (
-          <div style={{ ...panel, width: "100%", height: "100%", display: "flex", "align-items": "center", "justify-content": "center", gap: "18px", "font-size": `${Math.round(p.zone.rect.h * 0.42)}px`, "background-color": m().winner !== null ? "var(--q-color-correct)" : "var(--q-color-primary)" }}>
-            <span>{m().winner !== null ? "✓" : "🔔"}</span>
-            <span>{nameOf(p.view, id())}</span>
-          </div>
-        )}
-      </Show>
-    )}
-  </Show>
-);
+/** Buzzer (and board): who has the hand, who won; on the board, the cell in play while nobody has the hand. */
+const BuzzerZone: Component<ZoneProps> = (p) => {
+  const m = () => asBuzzer(p.view.mechanic) ?? asBoard(p.view.mechanic);
+  const cell = () => asBoard(p.view.mechanic)?.cell ?? null;
+  const fs = () => `${Math.round(p.zone.rect.h * 0.42)}px`;
+  return (
+    <Show when={m()}>
+      {(mm) => (
+        <Show
+          when={mm().winner ?? mm().hand}
+          fallback={
+            <Show when={cell()}>
+              {(c) => (
+                <div class="q-board-current" style={{ ...panel, width: "100%", height: "100%", display: "flex", "align-items": "center", "justify-content": "center", gap: "18px", "font-size": fs(), "background-color": "var(--q-color-surface-alt)" }}>
+                  <span style={{ overflow: "hidden", "white-space": "nowrap", "text-overflow": "ellipsis" }}>{c().category}</span>
+                  <b style={{ color: "var(--q-color-accent)", "font-variant-numeric": "tabular-nums" }}>{formatNumber(c().value)}</b>
+                </div>
+              )}
+            </Show>
+          }
+        >
+          {(id) => (
+            <div style={{ ...panel, width: "100%", height: "100%", display: "flex", "align-items": "center", "justify-content": "center", gap: "18px", "font-size": fs(), "background-color": mm().winner !== null ? "var(--q-color-correct)" : "var(--q-color-primary)" }}>
+              <span>{mm().winner !== null ? "✓" : "🔔"}</span>
+              <span>{nameOf(p.view, id())}</span>
+            </div>
+          )}
+        </Show>
+      )}
+    </Show>
+  );
+};
 
 /** Ladder (« paliers ») : steps bottom-up, current level, safe steps, jokers. */
 const LadderZone: Component<ZoneProps> = (p) => (
@@ -297,6 +320,7 @@ const REGISTRY: Record<ZoneType, Component<ZoneProps>> = {
   buzzer: BuzzerZone,
   ladder: LadderZone,
   "answer-list": AnswerListZone,
+  "board-grid": BoardGridZone,
   timer: TimerZone,
   leaderboard: LeaderboardZone,
   "round-info": RoundInfoZone,

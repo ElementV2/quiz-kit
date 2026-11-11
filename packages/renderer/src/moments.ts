@@ -39,6 +39,19 @@ const correctShown = (v: View): boolean => {
       return m.winner !== null;
     case "poll-board":
       return m.slots.some((s) => s.found);
+    case "board":
+      return m.winner !== null;
+    case "text-answer":
+    case "number-answer":
+    case "order":
+    case "pairs":
+    case "pin":
+    case "allocation":
+    case "hints":
+    case "reveal-image":
+      return m.correct !== null;
+    case "crowd-vote":
+      return m.correct !== null && m.majority?.length === 1 && m.majority[0] === m.correct;
     default:
       return false;
   }
@@ -51,6 +64,8 @@ export function detectMoments(prev: View | null, next: View, serverNow: number):
   const pm = prev.mechanic;
   const nm = next.mechanic;
   if (pm?.mechanic === "buzzer" && nm?.mechanic === "buzzer" && pm.winner === null && nm.winner !== null) out.push({ kind: "buzzer.won" });
+  if (pm?.mechanic === "board" && nm?.mechanic === "board" && pm.winner === null && nm.winner !== null) out.push({ kind: "buzzer.won" });
+  if (pm?.mechanic === "board" && nm?.mechanic === "board" && (nm.lockedOut?.length ?? 0) > (pm.lockedOut?.length ?? 0)) out.push({ kind: "answer.wrong" });
   if (pm?.mechanic === "poll-board" && nm?.mechanic === "poll-board" && nm.slots.filter((s) => s.found).length > pm.slots.filter((s) => s.found).length) out.push({ kind: "answer.correct" });
   if (pm?.mechanic === "ladder" && nm?.mechanic === "ladder" && nm.level > pm.level) out.push({ kind: "ladder.reached", level: nm.level });
   // Wrong answers: a buzzer player locked out, a poll strike, a ladder answer revealed wrong.

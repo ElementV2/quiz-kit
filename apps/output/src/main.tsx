@@ -3,6 +3,7 @@ import { render } from "solid-js/web";
 import { DEFAULT_THEME, OUTPUT_SCENES, PROGRAM_SCENE, Scene, Theme } from "@quiz/schema";
 import { SceneRenderer, parseEffectsLevel } from "@quiz/renderer";
 import { createQuizConnection, tokenFromUrl } from "@quiz/ui";
+import "@quiz/ui/fonts.css";
 
 type Presentation = { theme: Theme | null; scenes: Scene[] };
 

@@ -5,13 +5,16 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
-    "./ui.css": "./src/ui.css"
+    "./ui.css": "./src/ui.css",
+    "./fonts.css": "./src/fonts.css"
   },
   "scripts": {
     "test": "vitest run --passWithNoTests",
     "typecheck": "tsc -p tsconfig.json"
   },
   "dependencies": {
+    "@fontsource-variable/archivo": "5.3.0",
+    "@fontsource/ibm-plex-mono": "5.3.0",
     "@quiz/protocol": "workspace:*",
     "@quiz/renderer": "workspace:*",
     "@quiz/schema": "workspace:*",

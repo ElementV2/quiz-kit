@@ -1,30 +1,7 @@
-import type { Action, ControlView } from "@quiz/schema";
+import type { ControlView } from "@quiz/schema";
 
-/** The single "next step" key (doc 08: space): the natural next control action for the current phase. */
-export function nextStep(v: ControlView): { label: string; action: Action } | null {
-  switch (v.phase) {
-    case "lobby":
-      return { label: "Démarrer la partie", action: { type: "game.start" } };
-    case "idle":
-      if (v.round === null) return { label: "Démarrer la manche", action: { type: "round.start" } };
-      return { label: v.nextQuestion === null ? "Fin de manche" : "Présenter la question", action: { type: "question.present" } };
-    case "round.end":
-      return { label: "Manche suivante", action: { type: "round.start" } };
-    case "presenting":
-      return { label: "Ouvrir les réponses", action: { type: "question.open" } };
-    case "open":
-      return { label: "Fermer les réponses", action: { type: "question.lock" } };
-    case "locked":
-    case "judging":
-      return { label: "Révéler", action: { type: "question.reveal" } };
-    case "revealed":
-      return { label: "Question suivante", action: { type: "question.next" } };
-    case "game.end":
-      return null;
-    default:
-      return null;
-  }
-}
+/** Shared with the external control API (Companion / OSC). */
+export { nextStep } from "@quiz/protocol";
 
 export type PlayerRow = { readonly name: string; readonly seat: number | null; readonly team: string | null };
 
@@ -109,3 +86,107 @@ export function checklist(v: ControlView, s: { journal?: { ok?: boolean; journal
     { label: "Aucune action ignorée après un undo", ok: v.skipped.length === 0, detail: v.skipped.length === 0 ? "RAS" : `${v.skipped.length} action(s) sans effet` },
   ];
 }
+
+type Spec = ControlView["rundown"][number]["questions"][number]["answerSpec"];
+
+/** Answer kinds the control room can correct with a simple editor (`question.regrade`, doc 09). */
+export const REGRADABLE_KINDS: ReadonlySet<Spec["kind"]> = new Set(["single", "multi", "boolean", "text", "number"]);
+
+/** Accepted answers typed one per line (first = canonical), blanks and duplicates dropped. */
+export function parseAcceptedLines(text: string): string[] {
+  return [...new Set(text.split(/\r?\n/).map((l) => l.trim()).filter((l) => l.length > 0))];
+}
+
+/**
+ * Corrected answer spec from the editor's draft (same kind as the original, other fields kept).
+ * Returns null when the draft cannot be sent (nothing picked, empty list, not a number).
+ */
+export function regradeSpec(spec: Spec, draft: { readonly picked?: readonly string[] | undefined; readonly truth?: boolean | undefined; readonly accepted?: string | undefined; readonly correct?: string | undefined; readonly tolerance?: string | undefined }): Spec | null {
+  switch (spec.kind) {
+    case "single": {
+      const id = draft.picked?.[0];
+      return id === undefined || !spec.options.some((o) => o.id === id) ? null : { ...spec, correct: id };
+    }
+    case "multi": {
+      const ids = (draft.picked ?? []).filter((id) => spec.options.some((o) => o.id === id));
+      return ids.length === 0 ? null : { ...spec, correct: ids };
+    }
+    case "boolean":
+      return draft.truth === undefined ? null : { ...spec, correct: draft.truth };
+    case "text": {
+      const accepted = parseAcceptedLines(draft.accepted ?? "");
+      return accepted.length === 0 ? null : { ...spec, accepted };
+    }
+    case "number": {
+      const correct = Number((draft.correct ?? "").replace(",", "."));
+      const tolerance = Number((draft.tolerance ?? "0").replace(",", ".") || "0");
+      if ((draft.correct ?? "").trim() === "" || !Number.isFinite(correct) || !Number.isFinite(tolerance) || tolerance < 0) return null;
+      return { ...spec, correct, tolerance };
+    }
+    case "poll":
+    case "oral":
+    case "order":
+    case "pairs":
+    case "pin":
+    case "allocation":
+      return null;
+    default:
+      return null;
+  }
+}
+
+/** Is a question on air (the reserve replaces it), or does the reserve go to the next question? */
+export const questionOnAir = (v: ControlView): boolean => v.question !== null && (v.phase === "presenting" || v.phase === "open" || v.phase === "locked" || v.phase === "judging");
+
+export type RegradeDraft = { picked: string[]; truth: boolean | undefined; accepted: string; correct: string; tolerance: string };
+
+/** Editor draft initialised from the current answer spec. */
+export function initialRegradeDraft(spec: Spec): RegradeDraft {
+  const d: RegradeDraft = { picked: [], truth: undefined, accepted: "", correct: "", tolerance: "0" };
+  if (spec.kind === "single") d.picked = [spec.correct];
+  else if (spec.kind === "multi") d.picked = [...spec.correct];
+  else if (spec.kind === "boolean") d.truth = spec.correct;
+  else if (spec.kind === "text") d.accepted = spec.accepted.join("\n");
+  else if (spec.kind === "number") {
+    d.correct = String(spec.correct);
+    d.tolerance = String(spec.tolerance);
+  }
+  return d;
+}
+
+/** Keyboard buzzers (USB HID boxes seen as a keyboard): key → seat. Keys are `KeyboardEvent.key`, lowercased. */
+export type BuzzerKeyMap = Readonly<Record<string, number>>;
+
+/** Default mapping: 1–9 → seats 1–9 (top row and numeric keypad give the same `key`). */
+export const DEFAULT_BUZZER_KEYS: BuzzerKeyMap = Object.fromEntries(Array.from({ length: 9 }, (_, i) => [String(i + 1), i + 1]));
+
+/** Normalises a `KeyboardEvent.key` (letters are case-insensitive: Shift must not change the seat). */
+export const buzzerKey = (key: string): string => (key.length === 1 ? key.toLowerCase() : key);
+
+/** Saved mapping (localStorage JSON) → valid map; anything malformed falls back to the default. */
+export function parseBuzzerKeys(raw: string | null): BuzzerKeyMap {
+  if (raw === null) return DEFAULT_BUZZER_KEYS;
+  try {
+    const data: unknown = JSON.parse(raw);
+    if (typeof data !== "object" || data === null || Array.isArray(data)) return DEFAULT_BUZZER_KEYS;
+    const out: Record<string, number> = {};
+    for (const [k, v] of Object.entries(data)) if (k.length > 0 && k.length <= 20 && typeof v === "number" && Number.isInteger(v) && v >= 1 && v <= 999) out[buzzerKey(k)] = v;
+    return out;
+  } catch {
+    return DEFAULT_BUZZER_KEYS;
+  }
+}
+
+/** Assigns a key to a seat: the key leaves its previous seat, the seat keeps one key only. */
+export function assignBuzzerKey(map: BuzzerKeyMap, seat: number, key: string): Record<string, number> {
+  const k = buzzerKey(key);
+  const out: Record<string, number> = {};
+  for (const [kk, s] of Object.entries(map)) if (kk !== k && s !== seat) out[kk] = s;
+  out[k] = seat;
+  return out;
+}
+
+export const keyOfSeat = (map: BuzzerKeyMap, seat: number): string | null => Object.entries(map).find(([, s]) => s === seat)?.[0] ?? null;
+
+/** Readable key name (`" "` → `Espace`). */
+export const keyLabel = (key: string): string => (key === " " ? "Espace" : key.length === 1 ? key.toUpperCase() : key);

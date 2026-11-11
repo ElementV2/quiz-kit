@@ -79,7 +79,8 @@ test("a full question with control, output and two tablets over plain HTTP", asy
   await control.screenshot({ path: "screenshots/control.png", fullPage: true });
   await seat2.screenshot({ path: "screenshots/phone-revealed.png" });
 
-  // Checklist: the real output counts, the control-room preview does not.
+  // Checklist (its own tab): the real output counts, the control-room preview does not.
+  await control.getByRole("tab", { name: /Check-list/ }).click();
   await expect(control.getByText(/1 sortie\(s\) connectée\(s\)/)).toBeVisible({ timeout: 8000 });
   await expect(control.getByText("2 siège(s) OK")).toBeVisible({ timeout: 8000 });
 
