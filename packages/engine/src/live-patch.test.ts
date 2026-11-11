@@ -130,7 +130,7 @@ describe("game.patch — review 8", () => {
     const cfg = clone(g.state.game);
     const r0 = cfg.format.rounds[0];
     if (r0 !== undefined) r0.mechanicConfig = { ...(r0.mechanicConfig as Record<string, unknown>), __changed: true }; // oxlint-disable-line typescript/no-unsafe-type-assertion -- test: any change of the settings
-    expect(() => run(reg, [ctl({ type: "game.patch", baseVersion: base, game: cfg })], g)).toThrow(/réglages ne changent/);
+    expect(() => run(reg, [ctl({ type: "game.patch", baseVersion: base, game: cfg })], g)).toThrow(/réglages/);
     // stakes on the next question, then another question takes its place
     const staked = run(reg, [ctl({ type: "question.setStakes", roundIndex: 0, questionIndex: 1, points: null, multiplier: 3 })], g);
     const swap = clone(staked.state.game);
@@ -138,6 +138,22 @@ describe("game.patch — review 8", () => {
     swap.format.rounds[0]?.questions.splice(1, 0, "q_new");
     const patched = run(reg, [ctl({ type: "game.patch", baseVersion: staked.state.gameVersion, game: swap })], staked);
     expect(patched.state.stakes).toBeNull();
+  });
+});
+
+describe("game.patch — rounds already played keep their rules", () => {
+  it("a round left (another one started) keeps its barème and settings: corrections score like the reveal did", () => {
+    const two = clone(DEMO_GAME);
+    const first = two.format.rounds[0];
+    if (first === undefined) throw new Error("fixture");
+    two.format.rounds.push({ ...first, id: "r_two", title: "Deuxième" });
+    let g = run(reg, START, createGame(makeSession(two)));
+    g = run(reg, [ctl({ type: "question.next" }), ctl({ type: "round.start", roundIndex: 1 })], g);
+    const rules = clone(g.state.game);
+    const r0 = rules.format.rounds[0];
+    if (r0 === undefined) throw new Error("fixture");
+    r0.mechanicConfig = { kinds: { choice: { scoring: [{ type: "base", points: 999 }] } } };
+    expect(() => run(reg, [ctl({ type: "game.patch", baseVersion: g.state.gameVersion, game: rules })], g)).toThrow(/déjà jouée/);
   });
 });
 

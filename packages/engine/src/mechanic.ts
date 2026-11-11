@@ -1,5 +1,5 @@
 import type { z } from "zod";
-import type { Action, AnswerValue, MechanicView, ParticipantId, Phase, Question, ScoreTarget } from "@quiz/schema";
+import type { Action, AnswerValue, MechanicView, ParticipantId, Phase, Question, ScoreTarget, ScoringRule } from "@quiz/schema";
 import type { Result, Rejection } from "./result.ts";
 import type { Rng } from "./rng.ts";
 
@@ -78,7 +78,7 @@ export interface Mechanic<C, S> {
    * Router round (« mixte », ADR-0015): the mechanic that plays this question and its settings. A router never
    * goes on air itself; every engine path resolves it through `playedBy` (route.ts).
    */
-  route?(config: C, question: Question): { readonly id: string; readonly config: unknown };
+  route?(config: C, question: Question): { readonly id: string; readonly config: unknown; readonly scoring?: ScoringRule };
   /** Called on `question.present`. Rejects question kinds it cannot run. */
   init(config: C, question: Question, env: MechanicEnv, round: RoundContext<S>): Result<S, Rejection>;
   /** `answer.submit` while phase = open. */

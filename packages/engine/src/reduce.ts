@@ -1,5 +1,5 @@
 import { HOST_DRIVE_ACTIONS, isAllowed, type Action, type ActionOf, type Actor, type Participant, type Round, type ScoreEntry, type ScoreTarget, ROLE_LABEL_FR, STATUS_LABEL_FR, actionLabel, answerKindLabel, mechanicLabel } from "@quiz/schema";
-import { playedBy } from "./route.ts";
+import { playedBy, scoringOf } from "./route.ts";
 import { applyVerdicts, type ForcedVerdict } from "./verdicts.ts";
 import type { AnyMechanic, FixedJudgement, Judgement, MechanicEnv, Registry } from "./mechanic.ts";
 import { assertNever, err, ok, type Rejection, type Result } from "./result.ts";
@@ -416,7 +416,7 @@ function reveal(s: GameState, ctx: Ctx, registry: Registry): R {
   if (s.openedAt === null) return err("conflict", "réponses jamais ouvertes");
   const window = { openedAt: s.openedAt, durationMs: s.windowMs };
   const stakes = stakesFor(s);
-  const rule = stakedRule(round.scoring, stakes);
+  const rule = stakedRule(scoringOf(round, question, registry), stakes); // a mixed round may score this kind its own way
   const entries: ScoreEntry[] = [];
   const fixed: FixedJudgement[] = [];
   for (const j of applyVerdicts(m.judge(s.mechanic.state), s.verdicts, s.openedAt)) {
@@ -465,10 +465,10 @@ function correctTimes(m: AnyMechanic, state: unknown, openedAt: number): { parti
 }
 
 /** Ledger entries of a set of judgements (rule points use the round's ScoringRule and the given answer window). */
-function judgementEntries(s: GameState, ctx: Ctx, judgements: readonly Judgement[], round: Round, questionId: string, window: { openedAt: number; durationMs: number | null }, reason: ScoreEntry["reason"], stakes: Stakes | null): ScoreEntry[] {
+function judgementEntries(s: GameState, ctx: Ctx, judgements: readonly Judgement[], scoring: Round["scoring"], questionId: string, window: { openedAt: number; durationMs: number | null }, reason: ScoreEntry["reason"], stakes: Stakes | null): ScoreEntry[] {
   const entries: ScoreEntry[] = [];
   const fixed: FixedJudgement[] = [];
-  const rule = stakedRule(round.scoring, stakes);
+  const rule = stakedRule(scoring, stakes);
   for (const j of judgements) {
     if (j.kind === "fixed") {
       fixed.push(stakes?.multiplier == null ? j : { ...j, points: roundHalfAway(j.points * stakes.multiplier) });
@@ -558,7 +558,7 @@ function forceVerdict(s: GameState, a: ActionOf<"answer.verdict">, ctx: Ctx, reg
   const teamAtScoring = new Map<string, string | null>();
   for (const e of s.ledger) if (voided.has(e.id) && "participantId" in e.target) teamAtScoring.set(e.target.participantId, e.teamId);
   const ledger = s.ledger.map((e) => (voided.has(e.id) && !e.voided ? { ...e, voided: true } : e));
-  const fresh = judgementEntries({ ...s, ledger }, ctx, applyVerdicts(m.judge(record.state), verdicts, record.openedAt ?? 0), round, record.questionId, { openedAt: record.openedAt ?? 0, durationMs: record.windowMs }, "regrade", record.stakes).map((e, i) => ({
+  const fresh = judgementEntries({ ...s, ledger }, ctx, applyVerdicts(m.judge(record.state), verdicts, record.openedAt ?? 0), scoringOf(round, s.game.questions.find((x) => x.id === record.questionId), registry), record.questionId, { openedAt: record.openedAt ?? 0, durationMs: record.windowMs }, "regrade", record.stakes).map((e, i) => ({
     ...e,
     id: `se_${ctx.seq}_${ledger.length + i}`,
     teamId: "participantId" in e.target && teamAtScoring.has(e.target.participantId) ? (teamAtScoring.get(e.target.participantId) ?? null) : e.teamId,
@@ -592,7 +592,7 @@ function regrade(s: GameState, a: ActionOf<"question.regrade">, ctx: Ctx, regist
     const teamAtScoring = new Map<string, string | null>();
     for (const e of ledger) if (voided.has(e.id) && "participantId" in e.target) teamAtScoring.set(e.target.participantId, e.teamId);
     ledger = ledger.map((e) => (voided.has(e.id) && !e.voided ? { ...e, voided: true } : e));
-    const fresh = judgementEntries({ ...s, ledger }, ctx, applyVerdicts(m.judge(r.value), h.verdicts, h.openedAt ?? 0), round, question.id, { openedAt: h.openedAt ?? 0, durationMs: h.windowMs }, "regrade", h.stakes)
+    const fresh = judgementEntries({ ...s, ledger }, ctx, applyVerdicts(m.judge(r.value), h.verdicts, h.openedAt ?? 0), scoringOf(round, question, registry), question.id, { openedAt: h.openedAt ?? 0, durationMs: h.windowMs }, "regrade", h.stakes)
       .map((e, i) => ({
         ...e,
         // Unique ids across several records rewritten by the same event.

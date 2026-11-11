@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { defaultRegistry } from "@quiz/engine";
+import { MixedKinds, defaultRegistry } from "@quiz/engine";
 import { DEMO_EVENING_GAME, DEMO_GAME, DEMO_POLL_GAME, GameDocument, PER_KIND_MECHANICS, TEMPLATES, type Question } from "@quiz/schema";
-import { MECHANICS, addToRound, configValues, defaultConfig, deleteQuestion, deleteRound, duplicateRound, mechanicOptions, moveItem, newRound, newScoring, parseNumberList, removeFromRound, roundIssues, roundsOf, setConfigField, setMechanic, swapList } from "./format-logic.ts";
+import { MECHANICS, MIXED_CATEGORIES, normalizeRule, mixedCategoryCounts, mixedCategoryValues, mixedScoring, setMixedField, setMixedScoring, addToRound, configValues, defaultConfig, deleteQuestion, deleteRound, duplicateRound, mechanicOptions, moveItem, newRound, newScoring, parseNumberList, removeFromRound, roundIssues, roundsOf, setConfigField, setMechanic, swapList } from "./format-logic.ts";
 import { QUESTION_TYPES, newQuestion } from "./question-factories.ts";
 
 /** Keys of a mechanic config schema (zod object shape). */
@@ -20,15 +20,39 @@ describe("mechanic catalogue", () => {
     expect(mechanicOptions(defaultRegistry).map((m) => m.id).toSorted()).toEqual([...defaultRegistry.ids()].filter((id) => !PER_KIND_MECHANICS.has(id)).toSorted());
   });
   it("form fields match the keys of each mechanic config schema", () => {
-    const ids = Object.keys(MECHANICS);
+    const ids = Object.keys(MECHANICS).filter((id) => id !== "mixed"); // mixed: one form per category (below)
     expect(ids.map((id) => [id, MECHANICS[id]?.fields.map((f) => f.key).toSorted()])).toEqual(ids.map((id) => [id, configKeys(id)]));
+    // Each category block offers every setting of its schema (its points rule apart).
+    const shape = MixedKinds.shape;
+    expect(MIXED_CATEGORIES.map((c) => [c.id, c.fields.map((f) => f.key).toSorted()])).toEqual(
+      MIXED_CATEGORIES.map((c) => [c.id, Object.keys(shape[c.id].unwrap().shape).filter((k) => k !== "scoring").toSorted()]),
+    );
   });
   it("default configs are valid for every mechanic (ladder included)", () => {
     expect(defaultRegistry.ids().filter((id) => defaultRegistry.get(id)?.configSchema.safeParse(defaultConfig(defaultRegistry, id)).success !== true)).toEqual([]);
     expect(defaultConfig(defaultRegistry, "board")).toMatchObject({ values: [100, 200, 300, 400, 500], penalty: true });
   });
   it("a new mixed round scores surveys per answer (each team what it finds)", () => {
-    expect(defaultConfig(defaultRegistry, "mixed")).toMatchObject({ pollScoring: "per-answer" });
+    expect(mixedCategoryValues(defaultRegistry, { mechanic: "mixed", mechanicConfig: defaultConfig(defaultRegistry, "mixed") }, "poll")).toMatchObject({ mode: "per-answer" });
+  });
+  it("mixed settings by category: own value over the older flat key; own points rule or the round's", () => {
+    const g = copy(DEMO_GAME);
+    setMechanic(g, 0, "mixed", defaultRegistry);
+    const r = () => g.format.rounds[0] ?? newRound(defaultRegistry, "x", 1);
+    setConfigField(g, 0, "allowChange", false); // older flat key
+    expect(mixedCategoryValues(defaultRegistry, r(), "text")).toMatchObject({ allowChange: false });
+    setMixedField(g, 0, "text", "allowChange", true);
+    expect(mixedCategoryValues(defaultRegistry, r(), "text")).toMatchObject({ allowChange: true });
+    expect(mixedCategoryValues(defaultRegistry, r(), "choice")).toMatchObject({ allowChange: false });
+    setMixedScoring(g, 0, "text", [{ type: "base", points: 500 }]);
+    expect(mixedScoring(r(), "text")).toEqual([{ type: "base", points: 500 }]);
+    expect(GameDocument.safeParse(g).success && defaultRegistry.get("mixed")?.configSchema.safeParse(r().mechanicConfig).success).toBe(true);
+    setMixedScoring(g, 0, "text", null);
+    expect(mixedScoring(r(), "text")).toBeNull();
+    expect(mixedCategoryCounts(g, r()).get("choice")).toBe(3);
+  });
+  it("a points rule stays valid while edited (decay minimum never above the base)", () => {
+    expect(normalizeRule([{ type: "base", points: 300 }, { type: "timeDecay", minPoints: 500 }])).toEqual([{ type: "base", points: 300 }, { type: "timeDecay", minPoints: 300 }]);
   });
   it("shows defaults filled for a partial config", () => {
     expect(configValues(defaultRegistry, { mechanic: "mixed", mechanicConfig: { numberMode: "closest" } })).toEqual({ numberMode: "closest", allowChange: true, shuffleOptions: false, pollMaxStrikes: 3, pollMultiplier: 1, pollScoring: "bank", allocationKeepOneEmpty: true, buzzerLockout: true });

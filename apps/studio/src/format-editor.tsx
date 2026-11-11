@@ -4,9 +4,9 @@ import { GameDocument, type Round, type ScoringComponent } from "@quiz/schema";
 import { Button, Panel, confirmDialog } from "@quiz/ui";
 import { JsonField, NumField } from "./fields.tsx";
 import { FlowEditor } from "./flow-editor.tsx";
-import { MECHANICS, SCORING_LABEL, mechanicLabel, addToRound, configValues, deleteRound, duplicateRound, mechanicOptions, moveItem, newRound, newScoring, parseNumberList, removeFromRound, roundIssues, setConfigField, setMechanic, swapList, type ConfigField, type RoundIssue, type RoundList } from "./format-logic.ts";
+import { MECHANICS, MIXED_CATEGORIES, normalizeRule, SCORING_LABEL, mechanicLabel, mixedCategoryCounts, mixedCategoryValues, mixedScoring, setMixedField, setMixedScoring, addToRound, configValues, deleteRound, duplicateRound, mechanicOptions, moveItem, newRound, newScoring, parseNumberList, removeFromRound, roundIssues, setConfigField, setMechanic, swapList, type ConfigField, type RoundIssue, type RoundList } from "./format-logic.ts";
 import { kindLabel } from "./question-factories.ts";
-import { hex, snapshot, type Update } from "./util.ts";
+import { clone, hex, snapshot, type Update } from "./util.ts";
 
 const PARTICIPANTS = [["solo", "Joueurs individuels"], ["teams", "Équipes"], ["crowd", "Public (grand nombre)"]] as const;
 /** The number a scoring block edits. */
@@ -76,6 +76,7 @@ export function FormatEditor(p: { doc: GameDocument; update: Update }): JSX.Elem
 }
 
 function RoundCard(p: { doc: GameDocument; round: Round; ri: number; count: number; issues: readonly RoundIssue[]; schemaIssues: readonly string[]; update: Update }): JSX.Element {
+  const [special, setSpecial] = createSignal(false);
   const edit = (f: (r: Round) => void, key?: string) => p.update((d) => { const r = d.format.rounds[p.ri]; if (r !== undefined) f(r); }, key === undefined ? undefined : `${p.round.id}:${key}`);
   const info = () => MECHANICS[p.round.mechanic];
   const general = () => p.issues.filter((i) => i.questionId === null || !p.doc.questions.some((q) => q.id === i.questionId));
@@ -102,19 +103,31 @@ function RoundCard(p: { doc: GameDocument; round: Round; ri: number; count: numb
       </Show>
       <div class="s-round-body">
         <div class="s-round-col">
-          <label class="s-field"><span class="s-label">Type de manche</span>
-            <select value={p.round.mechanic} onChange={(e) => { const v = e.currentTarget.value; p.update((d) => setMechanic(d, p.ri, v, defaultRegistry)); }}>
-              {/* A partie launched before « Mixte » existed (live edit): its round type stays visible. */}
-              <Show when={!mechanicOptions(defaultRegistry).some((m) => m.id === p.round.mechanic)}>
-                <option value={p.round.mechanic} disabled>{mechanicLabel(p.round.mechanic)} (partie lancée avant « Mixte »)</option>
-              </Show>
-              <For each={mechanicOptions(defaultRegistry).filter((m) => !m.special)}>{(m) => <option value={m.id}>{m.label}</option>}</For>
-              <optgroup label="Formats spéciaux (règle de toute la manche)">
+          {/*
+            A round takes every kind of question (« Mixte »): no type to pick. Special formats (rules for the whole round:
+            ladder, board, all on the buzzer…) stay one click away, never in the way.
+          */}
+          <Show
+            when={p.round.mechanic !== "mixed" || special()}
+            fallback={
+              <p class="s-explain s-normal">
+                <span class="muted">Tous les types de questions dans cette manche, chacun avec ses réglages.</span>
+                <button type="button" class="s-link" onClick={() => setSpecial(true)}>Format spécial…</button>
+              </p>
+            }
+          >
+            <label class="s-field"><span class="s-label">Format spécial de la manche</span>
+              <select value={p.round.mechanic} onChange={(e) => { const v = e.currentTarget.value; p.update((d) => setMechanic(d, p.ri, v, defaultRegistry)); if (v === "mixed") setSpecial(false); }}>
+                {/* A partie launched before « Mixte » existed (live edit): its round type stays visible. */}
+                <Show when={!mechanicOptions(defaultRegistry).some((m) => m.id === p.round.mechanic)}>
+                  <option value={p.round.mechanic} disabled>{mechanicLabel(p.round.mechanic)} (partie lancée avant « Mixte »)</option>
+                </Show>
+                <option value="mixed">Aucun : manche normale (tous types de questions)</option>
                 <For each={mechanicOptions(defaultRegistry).filter((m) => m.special)}>{(m) => <option value={m.id}>{m.label}</option>}</For>
-              </optgroup>
-            </select>
-          </label>
-          <p class="muted s-explain">{info()?.explain ?? "Mécanique sans description."}</p>
+              </select>
+            </label>
+            <Show when={p.round.mechanic !== "mixed"}><p class="muted s-explain">{info()?.explain ?? "Mécanique sans description."}</p></Show>
+          </Show>
           <QuestionList title="Questions jouées (dans l'ordre)" list="questions" doc={p.doc} round={p.round} ri={p.ri} issues={p.issues} update={p.update} />
           <QuestionList title="Réserve (questions de secours)" list="reserve" doc={p.doc} round={p.round} ri={p.ri} issues={p.issues} update={p.update} />
         </div>
@@ -134,7 +147,9 @@ function RoundCard(p: { doc: GameDocument; round: Round; ri: number; count: numb
             </div>
           </div>
           <ScoringBlocks round={p.round} edit={edit} usesScoring={info()?.usesScoring ?? true} />
-          <ConfigForm round={p.round} ri={p.ri} update={p.update} />
+          <Show when={p.round.mechanic === "mixed"} fallback={<ConfigForm round={p.round} ri={p.ri} update={p.update} />}>
+            <MixedSettings doc={p.doc} round={p.round} ri={p.ri} update={p.update} />
+          </Show>
         </div>
       </div>
     </li>
@@ -185,8 +200,20 @@ function QuestionList(p: { title: string; list: RoundList; doc: GameDocument; ro
 }
 
 function ScoringBlocks(p: { round: Round; edit: (f: (r: Round) => void, key?: string) => void; usesScoring: boolean }): JSX.Element {
-  const setValue = (ci: number, v: number) => p.edit((r) => {
-    const c = r.scoring[ci];
+  return (
+    <RuleEditor
+      title={p.round.mechanic === "mixed" ? "Barème de la manche (toutes les catégories sans barème propre)" : "Barème"}
+      rule={p.round.scoring}
+      editRule={(f) => p.edit((r) => { f(r.scoring); normalizeRule(r.scoring); })}
+      off={!p.usesScoring}
+    />
+  );
+}
+
+/** Edits one points rule (the round's, or a category's own in a mixed round). */
+function RuleEditor(p: { title: string; rule: readonly ScoringComponent[]; editRule: (f: (rule: ScoringComponent[]) => void) => void; off?: boolean }): JSX.Element {
+  const setValue = (ci: number, v: number) => p.editRule((rule) => {
+    const c = rule[ci];
     if (c === undefined) return;
     switch (c.type) {
       case "base":
@@ -204,28 +231,71 @@ function ScoringBlocks(p: { round: Round; edit: (f: (r: Round) => void, key?: st
     }
   });
   const unit: Record<ScoringComponent["type"], string> = { base: "points", timeDecay: "points au minimum", penalty: "points", multiplier: "×" };
-  const available = () => SCORING_TYPES.filter((t) => t !== "timeDecay" || !p.round.scoring.some((c) => c.type === "timeDecay"));
+  const available = () => SCORING_TYPES.filter((t) => t !== "timeDecay" || !p.rule.some((c) => c.type === "timeDecay"));
   return (
     <div class="s-section">
-      <span class="s-label">Barème</span>
-      <Show when={!p.usesScoring}><p class="muted s-hint">Cette mécanique calcule elle-même ses points (réglages ci-dessous) : le barème n'est pas utilisé.</p></Show>
-      <div class="s-scoring" data-off={String(!p.usesScoring)}>
-        <For each={p.round.scoring}>
+      <span class="s-label">{p.title}</span>
+      <Show when={p.off === true}><p class="muted s-hint">Cette mécanique calcule elle-même ses points (réglages ci-dessous) : le barème n'est pas utilisé.</p></Show>
+      <div class="s-scoring" data-off={String(p.off === true)}>
+        <For each={p.rule}>
           {(c, ci) => (
             <div class="s-score-row">
               <span>{SCORING_LABEL[c.type]}</span>
               <NumField step={c.type === "multiplier" ? 0.5 : 10} value={scoreValue(c)} onChange={(v) => setValue(ci(), v)} />
               <span class="muted">{unit[c.type]}</span>
-              <Button kind="ghost" title="Retirer la règle" disabled={p.round.scoring.length <= 1} onClick={() => p.edit((r) => { r.scoring.splice(ci(), 1); })}>✕</Button>
+              <Button kind="ghost" title="Retirer la règle" disabled={p.rule.length <= 1} onClick={() => p.editRule((rule) => { rule.splice(ci(), 1); })}>✕</Button>
             </div>
           )}
         </For>
       </div>
-      <select value="" aria-label="Ajouter une règle de score" onChange={(e) => { const t = SCORING_TYPES.find((x) => x === e.currentTarget.value); e.currentTarget.value = ""; if (t !== undefined) p.edit((r) => { r.scoring.push(newScoring(t)); }); }}>
+      <select value="" aria-label="Ajouter une règle de score" onChange={(e) => { const t = SCORING_TYPES.find((x) => x === e.currentTarget.value); e.currentTarget.value = ""; if (t !== undefined) p.editRule((rule) => { rule.push(newScoring(t)); }); }}>
         <option value="">+ ajouter une règle…</option>
         <For each={available()}>{(t) => <option value={t}>{SCORING_LABEL[t]}</option>}</For>
       </select>
-      <Show when={p.round.scoring.some((c) => c.type === "timeDecay")}><p class="muted s-hint">Dégressif : les points baissent de la base jusqu'au minimum pendant le temps de réponse.</p></Show>
+      <Show when={p.rule.some((c) => c.type === "timeDecay")}><p class="muted s-hint">Dégressif : les points baissent de la base jusqu'au minimum pendant le temps de réponse.</p></Show>
+    </div>
+  );
+}
+
+/**
+ * « Mixte » round: one block per question category — its settings and, when it scores by the barème, its own
+ * points rule or the round's. Categories used by the round come first, open.
+ */
+function MixedSettings(p: { doc: GameDocument; round: Round; ri: number; update: Update }): JSX.Element {
+  const counts = createMemo(() => mixedCategoryCounts(p.doc, p.round));
+  const ordered = createMemo(() => MIXED_CATEGORIES.toSorted((a, b) => Number((counts().get(b.id) ?? 0) > 0) - Number((counts().get(a.id) ?? 0) > 0)));
+  return (
+    <div class="s-section s-mixed">
+      <span class="s-label">Réglages par catégorie de question</span>
+      <For each={ordered()}>
+        {(c) => {
+          const n = () => counts().get(c.id) ?? 0;
+          const values = createMemo(() => mixedCategoryValues(defaultRegistry, p.round, c.id));
+          const own = () => mixedScoring(p.round, c.id);
+          return (
+            <details class="s-cat" open={n() > 0} data-used={String(n() > 0)}>
+              <summary><span class="s-cat-name">{c.label}</span> <span class="muted q-mono">{n() > 0 ? `${n()} question(s)` : "aucune question"}</span></summary>
+              <p class="muted s-hint">{c.explain}</p>
+              <For each={c.fields}>{(f) => <ConfigInput field={f} values={values()} set={(key, v) => p.update((d) => setMixedField(d, p.ri, c.id, key, v))} />}</For>
+              <Show when={c.ownPoints !== true} fallback={<p class="muted s-hint">Points décidés par la catégorie elle-même (pas de barème).</p>}>
+                <label class="s-inline s-check">
+                  <input type="checkbox" checked={own() !== null} onChange={(e) => { const on = e.currentTarget.checked; p.update((d) => setMixedScoring(d, p.ri, c.id, on ? clone([...p.round.scoring]) : null)); }} />
+                  Barème propre à cette catégorie (sinon celui de la manche)
+                </label>
+                <Show when={own()}>
+                  {(rule) => (
+                    <RuleEditor
+                      title={`Barème — ${c.label}`}
+                      rule={rule()}
+                      editRule={(f) => p.update((d) => { const r = d.format.rounds[p.ri]; const cur = r === undefined ? null : mixedScoring(r, c.id); if (cur === null) return; const next = clone(cur); f(next); setMixedScoring(d, p.ri, c.id, normalizeRule(next)); })}
+                    />
+                  )}
+                </Show>
+              </Show>
+            </details>
+          );
+        }}
+      </For>
     </div>
   );
 }

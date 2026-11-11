@@ -359,3 +359,13 @@
 .s-new-menu > button > span { font-size: 11px; }
 .s-menu-label { margin: 6px 10px 2px; font-size: 10px; font-weight: 650; font-stretch: 75%; text-transform: uppercase; letter-spacing: .12em; color: var(--ui-faint); }
 .s-live-tag { align-self: center; }
+
+/* « Mixte » round: one fold per question category; the used ones first and open. */
+.s-mixed { display: grid; gap: 6px; }
+.s-cat { border: 1px solid var(--ui-border); border-radius: var(--ui-radius); padding: 6px 10px; background: var(--ui-surface); }
+.s-cat[data-used="false"] { opacity: .75; }
+.s-cat > summary { cursor: pointer; display: flex; gap: 8px; align-items: baseline; padding: 2px 0; }
+.s-cat-name { font-weight: 650; }
+.s-cat[open] > summary { margin-bottom: 6px; border-bottom: 1px solid var(--ui-border); padding-bottom: 6px; }
+.s-normal { display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; }
+.s-link { font: inherit; font-size: 12px; background: none; border: 0; padding: 0; color: var(--ui-accent); cursor: pointer; text-decoration: underline; text-underline-offset: 2px; }

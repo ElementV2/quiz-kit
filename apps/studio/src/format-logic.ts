@@ -1,5 +1,5 @@
-import { createRng, playedBy, type Registry } from "@quiz/engine";
-import { mechanicLabel as frenchMechanicLabel, type GameDocument, type Question, type Round, type ScoringComponent } from "@quiz/schema";
+import { MIXED_CATEGORY, createRng, playedBy, type MixedCategory, type Registry } from "@quiz/engine";
+import { ScoringComponent as ScoringComponentSchema, mechanicLabel as frenchMechanicLabel, type AnswerKind, type GameDocument, type Question, type Round, type ScoringComponent } from "@quiz/schema";
 import { pruneRound } from "./flow-logic.ts";
 
 /**
@@ -30,7 +30,6 @@ export type MechanicInfo = {
   readonly seed?: Readonly<Record<string, unknown>>;
 };
 
-const allowChange: ConfigField = { key: "allowChange", kind: "boolean", label: "Le joueur peut changer sa réponse jusqu'à la fermeture" };
 const progressive: ConfigField[] = [
   { key: "maxPoints", kind: "number", label: "Points si trouvé tout de suite", min: 0, max: 1_000_000 },
   { key: "minPoints", kind: "number", label: "Points si trouvé à la fin", min: 0, max: 1_000_000 },
@@ -41,19 +40,10 @@ const progressive: ConfigField[] = [
 export const MECHANICS: Readonly<Record<string, MechanicInfo>> = {
   mixed: {
     label: "Mixte (tous types)",
-    explain: "Toutes les questions dans la même manche : chacune se joue selon son type — QCM et vrai / faux sur tablette, sondage en cases à découvrir, réponse orale au buzzer (l'animateur juge), réponse libre, nombre, ordre, associations, point sur image, répartition. Le barème vaut pour toutes, sauf le sondage (en équipes) qui compte ses propres points.",
+    explain: "Toutes les questions dans la même manche : chacune se joue selon son type, avec les réglages et le barème de sa catégorie (ci-dessous).",
     usesScoring: true,
-    fields: [
-      { key: "shuffleOptions", kind: "boolean", label: "QCM : mélanger l'ordre des réponses" },
-      allowChange,
-      { key: "pollMaxStrikes", kind: "number", label: "Sondage : erreurs avant de passer la main", min: 1, max: 10 },
-      { key: "pollMultiplier", kind: "number", label: "Sondage : multiplicateur (manche double, triple…)", min: 0.5, max: 100, step: 0.5 },
-      { key: "pollScoring", kind: "enum", label: "Sondage : qui marque", options: [{ value: "per-answer", label: "chaque équipe marque les réponses qu'elle trouve" }, { value: "bank", label: "la banque entière à l'équipe qui gagne (règle télé)" }] },
-      { key: "allocationKeepOneEmpty", kind: "boolean", label: "Répartition : laisser au moins une réponse vide" },
-      { key: "numberMode", kind: "enum", label: "Nombre : qui gagne", options: [{ value: "tolerance", label: "toute réponse dans la tolérance" }, { value: "closest", label: "le ou les plus proches" }] },
-      { key: "buzzerLockout", kind: "boolean", label: "Réponse orale (buzzer) : qui se trompe ne peut plus buzzer" },
-    ],
-    seed: { pollScoring: "per-answer" },
+    fields: [], // by category: MIXED_CATEGORIES (own form)
+    seed: { kinds: { poll: { mode: "per-answer" } } },
   },
   buzzer: {
     label: "Buzzer",
@@ -297,3 +287,116 @@ const SCORING_NEW: { readonly [K in ScoringComponent["type"]]: Extract<ScoringCo
 };
 
 export const newScoring = (type: ScoringComponent["type"]): ScoringComponent => ({ ...SCORING_NEW[type] });
+
+// ───────────── « Mixte » round: settings by question category ─────────────
+
+export type MixedCategoryInfo = {
+  readonly id: MixedCategory;
+  readonly label: string;
+  readonly kinds: readonly AnswerKind[];
+  readonly explain: string;
+  readonly fields: readonly ConfigField[];
+  /** The category decides its own points (survey, allocation): no points rule of its own. */
+  readonly ownPoints?: boolean;
+};
+
+const change: ConfigField = { key: "allowChange", kind: "boolean", label: "Le joueur peut changer sa réponse jusqu'à la fermeture" };
+
+/** One block per category in Format (order = how often they are used). */
+export const MIXED_CATEGORIES: readonly MixedCategoryInfo[] = [
+  { id: "choice", label: "QCM et vrai / faux", kinds: ["single", "multi", "boolean"], explain: "Réponse sur la tablette ; points selon le barème.", fields: [{ key: "shuffleOptions", kind: "boolean", label: "Mélanger l'ordre des réponses" }, change] },
+  {
+    id: "poll",
+    label: "Sondage (équipes)",
+    kinds: ["poll"],
+    explain: "Les équipes retrouvent les réponses d'un sondage ; points = % des réponses trouvées.",
+    ownPoints: true,
+    fields: [
+      { key: "mode", kind: "enum", label: "Qui marque", options: [{ value: "per-answer", label: "chaque équipe marque les réponses qu'elle trouve" }, { value: "bank", label: "la banque entière à l'équipe qui gagne (règle télé)" }] },
+      { key: "maxStrikes", kind: "number", label: "Erreurs avant de passer la main", min: 1, max: 10 },
+      { key: "multiplier", kind: "number", label: "Multiplicateur (manche double, triple…)", min: 0.5, max: 100, step: 0.5 },
+    ],
+  },
+  { id: "oral", label: "Réponse orale (buzzer)", kinds: ["oral"], explain: "Le premier qui buzze répond à voix haute ; l'animateur ou la régie juge.", fields: [{ key: "lockoutOnWrong", kind: "boolean", label: "Qui se trompe ne peut plus buzzer sur la question" }] },
+  { id: "text", label: "Réponse libre", kinds: ["text"], explain: "Réponse tapée ; accents, majuscules et petites fautes tolérés.", fields: [change] },
+  { id: "number", label: "Nombre (estimation)", kinds: ["number"], explain: "Un nombre : juste dans la tolérance, ou seuls les plus proches gagnent.", fields: [{ key: "mode", kind: "enum", label: "Qui gagne", options: [{ value: "tolerance", label: "toute réponse dans la tolérance" }, { value: "closest", label: "le ou les plus proches" }] }, change] },
+  { id: "order", label: "Remettre dans l'ordre", kinds: ["order"], explain: "Classer les éléments.", fields: [change] },
+  { id: "pairs", label: "Associations", kinds: ["pairs"], explain: "Relier chaque élément à son partenaire.", fields: [change] },
+  { id: "pin", label: "Point sur image", kinds: ["pin"], explain: "Poser un point dans la zone cible de l'image.", fields: [change] },
+  { id: "allocation", label: "Répartition de mise", kinds: ["allocation"], explain: "Répartir une mise entre les réponses ; on garde ce qui est posé sur la bonne.", ownPoints: true, fields: [change, { key: "keepOneEmpty", kind: "boolean", label: "Obligation de laisser au moins une réponse vide" }] },
+];
+
+/** Older flat keys of the mixed config (still read when the category says nothing). */
+const FLAT: Readonly<Record<string, string>> = {
+  "choice.shuffleOptions": "shuffleOptions",
+  "poll.mode": "pollScoring",
+  "poll.maxStrikes": "pollMaxStrikes",
+  "poll.multiplier": "pollMultiplier",
+  "number.mode": "numberMode",
+  "oral.lockoutOnWrong": "buzzerLockout",
+  "allocation.keepOneEmpty": "allocationKeepOneEmpty",
+};
+
+const kindsOf = (cfg: Record<string, unknown>): Record<string, Record<string, unknown>> => {
+  const k = cfg["kinds"];
+  if (!isRecord(k)) return {};
+  return Object.fromEntries(Object.entries(k).flatMap(([c, v]) => (isRecord(v) ? [[c, v]] : [])));
+};
+
+/** Values shown for one category: its own, else the flat key of older games, else the defaults. */
+export function mixedCategoryValues(registry: Registry, round: Pick<Round, "mechanic" | "mechanicConfig">, cat: MixedCategory): Record<string, unknown> {
+  const flat = configValues(registry, round); // defaults filled
+  const own = kindsOf(isRecord(round.mechanicConfig) ? round.mechanicConfig : {})[cat] ?? {};
+  const info = MIXED_CATEGORIES.find((c) => c.id === cat);
+  const out: Record<string, unknown> = {};
+  for (const f of info?.fields ?? []) out[f.key] = own[f.key] ?? flat[FLAT[`${cat}.${f.key}`] ?? f.key];
+  return out;
+}
+
+/** Sets one setting of a category (`undefined` removes it: back to the flat / default value). */
+export function setMixedField(d: GameDocument, ri: number, cat: MixedCategory, key: string, value: unknown): void {
+  const r = d.format.rounds[ri];
+  if (r === undefined) return;
+  const cfg: Record<string, unknown> = { ...(isRecord(r.mechanicConfig) ? r.mechanicConfig : {}) };
+  const kinds = kindsOf(cfg);
+  const block: Record<string, unknown> = { ...kinds[cat], [key]: value };
+  if (value === undefined) delete block[key];
+  cfg["kinds"] = { ...kinds, [cat]: block };
+  r.mechanicConfig = cfg;
+}
+
+/** A category's own points rule (`null`: back to the round's barème). */
+export function setMixedScoring(d: GameDocument, ri: number, cat: MixedCategory, rule: ScoringComponent[] | null): void {
+  setMixedField(d, ri, cat, "scoring", rule === null ? undefined : rule);
+}
+
+/** A category's own points rule, if any (shape-checked: what the editor can show). */
+export function mixedScoring(round: Pick<Round, "mechanicConfig">, cat: MixedCategory): ScoringComponent[] | null {
+  const own = kindsOf(isRecord(round.mechanicConfig) ? round.mechanicConfig : {})[cat]?.["scoring"];
+  if (!Array.isArray(own) || own.length === 0) return null;
+  const parts = own.map((c) => ScoringComponentSchema.safeParse(c));
+  return parts.every((x) => x.success) ? parts.flatMap((x) => (x.success ? [x.data] : [])) : null;
+}
+
+/**
+ * Keeps a points rule valid while it is edited: the decay minimum never above the base (else the whole round
+ * would refuse to play). Mutates and returns the rule.
+ */
+export function normalizeRule(rule: ScoringComponent[]): ScoringComponent[] {
+  const base = rule.reduce((sum, c) => (c.type === "base" ? sum + c.points : sum), 0);
+  for (const c of rule) if (c.type === "timeDecay" && c.minPoints > base) c.minPoints = Math.max(0, base);
+  return rule;
+}
+
+/** How many questions of the round (played + reserve) fall in each category. */
+export function mixedCategoryCounts(doc: GameDocument, round: Round): Map<MixedCategory, number> {
+  const out = new Map<MixedCategory, number>();
+  const byId = new Map(doc.questions.map((q) => [q.id, q]));
+  for (const id of [...round.questions, ...round.reserve]) {
+    const q = byId.get(id);
+    const cat = q === undefined ? undefined : MIXED_CATEGORY[q.answerSpec.kind]; // the engine's own mapping
+    if (cat !== undefined) out.set(cat, (out.get(cat) ?? 0) + 1);
+  }
+  return out;
+}
+

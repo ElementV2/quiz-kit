@@ -31,6 +31,14 @@ export function livePatchProblem(s: GameState, next: GameDocument, freeOrder = f
     // Media, hints, tags… of a played question are what results and replay show: only its wording / notes change.
     if (before !== undefined && frozenPart(before) !== frozenPart(after)) return `la question jouée « ${before.prompt.text} » ne change plus que par son texte`;
   }
+  // Any round with a reveal (also one left and maybe re-entered later): its points rules stay as they scored.
+  for (const ri of new Set(s.history.map((h) => h.roundIndex))) {
+    const before = cur.format.rounds[ri];
+    const after = next.format.rounds[ri];
+    if (before === undefined || after === undefined || after.id !== before.id) continue; // checked below for started rounds
+    if (JSON.stringify(after.scoring) !== JSON.stringify(before.scoring)) return `le barème de la manche « ${before.title} » (déjà jouée) ne change plus`;
+    if (JSON.stringify(after.mechanicConfig) !== JSON.stringify(before.mechanicConfig)) return `les réglages de la manche « ${before.title} » (déjà jouée) ne changent plus`;
+  }
   if (s.roundIndex === null) return null; // nothing started: anything goes
   // Rounds already started keep their place and their kind.
   for (let i = 0; i <= s.roundIndex; i++) {
@@ -41,6 +49,8 @@ export function livePatchProblem(s: GameState, next: GameDocument, freeOrder = f
     if (after.mechanic !== before.mechanic) return `la manche « ${before.title} » est en cours : son type (« ${mechanicLabel(before.mechanic)} ») ne peut pas changer`;
     // The scoring of a round already started is frozen: a later regrade must score like the reveal did.
     if (JSON.stringify(after.scoring) !== JSON.stringify(before.scoring)) return `le barème de la manche « ${before.title} » (déjà commencée) ne change plus`;
+    // Rounds already over: their settings (a mixed round's per-category rules) still score corrections.
+    if (i < s.roundIndex && JSON.stringify(after.mechanicConfig) !== JSON.stringify(before.mechanicConfig)) return `les réglages de la manche « ${before.title} » (déjà jouée) ne changent plus`;
   }
   const round = cur.format.rounds[s.roundIndex];
   const nextRound = next.format.rounds[s.roundIndex];

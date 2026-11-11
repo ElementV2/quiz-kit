@@ -31,7 +31,8 @@ test("studio Format: a ladder round + a mixed round (free text + order) built fr
   // Round 1 becomes "Paliers" (single-answer QCM only): the boolean and multi questions are flagged by the engine's own init.
   await studio.getByRole("button", { name: "Format", exact: true }).click();
   const round1 = studio.locator(".s-round").nth(0);
-  await round1.getByLabel("Type de manche").selectOption("ladder");
+  await round1.getByRole("button", { name: "Format spécial…" }).click();
+  await round1.getByLabel("Format spécial de la manche").selectOption("ladder");
   await expect(round1.getByText("⚠ question incompatible").first()).toBeVisible();
   await expect(round1.getByText("⚠ question incompatible")).toHaveCount(2);
 
@@ -39,13 +40,23 @@ test("studio Format: a ladder round + a mixed round (free text + order) built fr
   await studio.getByRole("button", { name: "+ Ajouter une manche" }).click();
   const round2 = studio.locator(".s-round").nth(1);
   await expect(round2.getByText(/aucune question/).first()).toBeVisible();
-  await expect(round2.getByLabel("Type de manche")).toHaveValue("mixed");
+  await expect(round2.getByText("Tous les types de questions dans cette manche")).toBeVisible(); // no type to pick
   await round2.getByLabel("Titre de la manche").fill("Chronologie");
-  await expect(round2.getByText(/Toutes les questions dans la même manche/)).toBeVisible();
+  await expect(round2.getByText("Réglages par catégorie de question")).toBeVisible();
+  // A category with its own points rule: tick, then edit it (the round's rule stays as it is).
+  const qcm = round2.locator(".s-cat").filter({ hasText: "QCM et vrai / faux" });
+  await qcm.locator("summary").click();
+  await qcm.getByText("Barème propre à cette catégorie").click();
+  await expect(qcm.getByText("Barème — QCM et vrai / faux")).toBeVisible();
+  await qcm.locator(".s-score-row").first().locator("input").fill("300");
+  await qcm.locator(".s-score-row").first().locator("input").press("Tab");
+  await expect(qcm.locator(".s-score-row").first().locator("input")).toHaveValue("300");
   // Config form of a special format (board values), then back to mixed.
-  await round2.getByLabel("Type de manche").selectOption("board");
+  await round2.getByRole("button", { name: "Format spécial…" }).click();
+  await round2.getByLabel("Format spécial de la manche").selectOption("board");
   await expect(round2.getByText("Valeurs des cases, de haut en bas")).toBeVisible();
-  await round2.getByLabel("Type de manche").selectOption("mixed");
+  await round2.getByLabel("Format spécial de la manche").selectOption("mixed");
+  await expect(round2.getByRole("button", { name: "Format spécial…" })).toBeVisible();
   await studio.screenshot({ path: "screenshots/studio-format.png" });
 
   // Bank: a new order question goes to the last round by default, a free-text one to round 1.

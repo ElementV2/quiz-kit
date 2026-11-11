@@ -8,7 +8,14 @@ import type { GameDocument } from "./session.ts";
  * Applied when a game document is loaded (library, import), never to a journaled session (replay stays exact).
  */
 /** A « Mixte » round that never chose how surveys score. */
-const noScoring = (r: GameDocument["format"]["rounds"][number]): boolean => r.mechanic === "mixed" && !(typeof r.mechanicConfig === "object" && r.mechanicConfig !== null && "pollScoring" in r.mechanicConfig);
+const noScoring = (r: GameDocument["format"]["rounds"][number]): boolean => {
+  if (r.mechanic !== "mixed") return false;
+  const c: unknown = r.mechanicConfig;
+  if (typeof c !== "object" || c === null) return true;
+  const kinds: unknown = "kinds" in c ? c.kinds : null;
+  const poll: unknown = typeof kinds === "object" && kinds !== null && "poll" in kinds ? kinds.poll : null;
+  return !("pollScoring" in c) && !(typeof poll === "object" && poll !== null && "mode" in poll);
+};
 
 export function toMixedRounds(game: GameDocument): GameDocument {
   if (!game.format.rounds.some((r) => PER_KIND_MECHANICS.has(r.mechanic) || noScoring(r))) return game;

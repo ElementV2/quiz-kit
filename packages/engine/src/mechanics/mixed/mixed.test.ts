@@ -83,7 +83,7 @@ describe("mixed round — what must not break live", () => {
     const r0 = cfg.format.rounds[0];
     if (r0 === undefined) throw new Error("fixture");
     r0.mechanicConfig = { allowChange: false };
-    expect(() => run(reg, [ctl({ type: "game.patch", baseVersion: g.state.gameVersion, game: cfg })], g)).toThrow(/réglages ne changent/);
+    expect(() => run(reg, [ctl({ type: "game.patch", baseVersion: g.state.gameVersion, game: cfg })], g)).toThrow(/réglages/);
     // The next question (a survey) becomes a free text: played by text-answer at present.
     const kind = structuredClone(g.state.game);
     const poll = kind.questions.find((q) => q.id === "q_poll_breakfast");
@@ -107,6 +107,27 @@ describe("mixed round — what must not break live", () => {
       return m === null || m.hidesPromptMedia === true || m.freeOrder === true || m.route !== undefined;
     });
     expect(bad).toEqual([]);
+  });
+});
+
+describe("mixed round — settings and points rule by category", () => {
+  it("a category with its own points rule scores with it; the others with the round's", () => {
+    const doc = structuredClone(MIXED);
+    const r0 = doc.format.rounds[0];
+    if (r0 === undefined) throw new Error("fixture");
+    r0.mechanicConfig = { kinds: { text: { scoring: [{ type: "base", points: 500 }] }, choice: { allowChange: false } } };
+    const qcm = pick("q_capital_fr");
+    const correct = qcm.answerSpec.kind === "single" ? qcm.answerSpec.correct : "";
+    let g = run(reg, [...START, ctl({ type: "question.present" }), ctl({ type: "question.open" }), answer("p_1", correct), ctl({ type: "question.lock" }), ctl({ type: "question.reveal" }), NEXT], createGame(makeSession(GameDocument.parse(doc))));
+    const qcmPoints = total(g, "p_1");
+    expect(qcmPoints).toBeGreaterThan(0);
+    expect(qcmPoints).not.toBe(500);
+    g = run(reg, [ctl({ type: "question.skip", roundIndex: 0, questionIndex: 1 }), ctl({ type: "question.skip", roundIndex: 0, questionIndex: 2 }), ctl({ type: "question.present" }), ctl({ type: "question.open" }), text("p_2", "van gogh"), ctl({ type: "question.lock" }), ctl({ type: "question.reveal" })], g);
+    expect(total(g, "p_2")).toBe(500);
+    expect(replay(g.session, g.events, reg).state).toEqual(g.state);
+    // A verdict correction then a regrade of that text question still score with the category's rule.
+    const forced = run(reg, [ctl({ type: "answer.verdict", roundIndex: 0, questionIndex: 3, participantId: "p_1", correct: true })], g);
+    expect(total(forced, "p_1") - qcmPoints).toBe(500);
   });
 });
 

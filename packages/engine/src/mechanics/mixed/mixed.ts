@@ -1,7 +1,7 @@
 import { z } from "zod";
-import type { AnswerKind, MechanicView } from "@quiz/schema";
+import { ScoringRule, type AnswerKind, type MechanicView } from "@quiz/schema";
 import { defineMechanic } from "../../mechanic.ts";
-import { err } from "../../result.ts";
+import { assertNever, err } from "../../result.ts";
 
 /**
  * « Mixte » round (ADR-0015): any question kind in the same round. It never runs a question itself: on
@@ -10,6 +10,43 @@ import { err } from "../../result.ts";
  * regrade, the renderer and the tablets therefore see an ordinary choice / poll-board / buzzer… question.
  * Round-level mechanics (ladder, board) are never used here: their progression spans the whole round.
  */
+const allowChange = z.boolean().optional();
+const scoring = ScoringRule.optional();
+
+/**
+ * Settings by question category (studio « Format », one block per category). Every key is optional: absent = the
+ * flat key of older versions, else the mechanic's default. `scoring`: that category's own points rule (absent: the
+ * round's). Survey and allocation decide their own points (no rule).
+ */
+export const MixedKinds = z.strictObject({
+  choice: z.strictObject({ shuffleOptions: z.boolean().optional(), allowChange, scoring }).optional(),
+  poll: z.strictObject({ mode: z.enum(["per-answer", "bank"]).optional(), maxStrikes: z.number().int().min(1).max(10).optional(), multiplier: z.number().positive().max(100).optional() }).optional(),
+  oral: z.strictObject({ lockoutOnWrong: z.boolean().optional(), scoring }).optional(),
+  text: z.strictObject({ allowChange, scoring }).optional(),
+  number: z.strictObject({ mode: z.enum(["tolerance", "closest"]).optional(), allowChange, scoring }).optional(),
+  order: z.strictObject({ allowChange, scoring }).optional(),
+  pairs: z.strictObject({ allowChange, scoring }).optional(),
+  pin: z.strictObject({ allowChange, scoring }).optional(),
+  allocation: z.strictObject({ allowChange, keepOneEmpty: z.boolean().optional() }).optional(),
+});
+export type MixedKinds = z.infer<typeof MixedKinds>;
+export type MixedCategory = keyof MixedKinds;
+
+/** The settings category of each answer kind. */
+export const MIXED_CATEGORY: Readonly<Record<AnswerKind, MixedCategory>> = {
+  single: "choice",
+  multi: "choice",
+  boolean: "choice",
+  poll: "poll",
+  oral: "oral",
+  text: "text",
+  number: "number",
+  order: "order",
+  pairs: "pairs",
+  pin: "pin",
+  allocation: "allocation",
+};
+
 export const MixedConfig = z.strictObject({
   /** QCM: shuffle the options (seeded, same order for everyone). */
   shuffleOptions: z.boolean().default(false),
@@ -27,6 +64,8 @@ export const MixedConfig = z.strictObject({
   numberMode: z.enum(["tolerance", "closest"]).default("tolerance"),
   /** Spoken answer (buzzer): a player who was wrong cannot buzz again on the same question. */
   buzzerLockout: z.boolean().default(true),
+  /** Settings by category (they win over the flat keys above, kept for older games). */
+  kinds: MixedKinds.optional(),
 });
 export type MixedConfig = z.infer<typeof MixedConfig>;
 
@@ -45,27 +84,34 @@ export const MIXED_ROUTES: Readonly<Record<AnswerKind, string>> = {
   allocation: "allocation",
 };
 
-/** Settings handed to the routed mechanic (its own defaults for the rest). */
-function routedConfig(id: string, c: MixedConfig): Record<string, unknown> {
-  switch (id) {
+/** Settings handed to the routed mechanic for a category: by-category value, else the flat key, else default. */
+function routedConfig(cat: MixedCategory, c: MixedConfig): Record<string, unknown> {
+  const k = c.kinds ?? {};
+  switch (cat) {
     case "choice":
-      return { shuffleOptions: c.shuffleOptions, allowChange: c.allowChange };
-    case "number-answer":
-      return { allowChange: c.allowChange, mode: c.numberMode };
-    case "poll-board":
-      return { maxStrikes: c.pollMaxStrikes, multiplier: c.pollMultiplier, scoring: c.pollScoring };
+      return { shuffleOptions: k.choice?.shuffleOptions ?? c.shuffleOptions, allowChange: k.choice?.allowChange ?? c.allowChange };
+    case "number":
+      return { allowChange: k.number?.allowChange ?? c.allowChange, mode: k.number?.mode ?? c.numberMode };
+    case "poll":
+      return { maxStrikes: k.poll?.maxStrikes ?? c.pollMaxStrikes, multiplier: k.poll?.multiplier ?? c.pollMultiplier, scoring: k.poll?.mode ?? c.pollScoring };
     case "allocation":
-      return { allowChange: c.allowChange, keepOneEmpty: c.allocationKeepOneEmpty };
-    case "buzzer":
-      return { lockoutOnWrong: c.buzzerLockout };
-    case "text-answer":
+      return { allowChange: k.allocation?.allowChange ?? c.allowChange, keepOneEmpty: k.allocation?.keepOneEmpty ?? c.allocationKeepOneEmpty };
+    case "oral":
+      return { lockoutOnWrong: k.oral?.lockoutOnWrong ?? c.buzzerLockout };
+    case "text":
     case "order":
     case "pairs":
     case "pin":
-      return { allowChange: c.allowChange };
+      return { allowChange: k[cat]?.allowChange ?? c.allowChange };
     default:
-      return {};
+      return assertNever(cat);
   }
+}
+
+/** The points rule of a category, when it has its own. */
+function categoryScoring(cat: MixedCategory, c: MixedConfig): ScoringRule | undefined {
+  if (cat === "poll" || cat === "allocation") return undefined; // own points
+  return c.kinds?.[cat]?.scoring;
 }
 
 const neverOnAir = (): never => {
@@ -77,8 +123,10 @@ export const mixed = defineMechanic<MixedConfig, never>({
   configSchema: MixedConfig,
   stateSchema: z.never(), // never on air: a snapshot claiming so is invalid → full replay
   route(cfg, question) {
-    const id = MIXED_ROUTES[question.answerSpec.kind];
-    return { id, config: routedConfig(id, cfg) };
+    const kind = question.answerSpec.kind;
+    const cat = MIXED_CATEGORY[kind];
+    const own = categoryScoring(cat, cfg);
+    return { id: MIXED_ROUTES[kind], config: routedConfig(cat, cfg), ...(own === undefined ? {} : { scoring: own }) };
   },
   init: () => err("unsupported", "manche mixte : la question est jouée par le type qui lui correspond"),
   submit: neverOnAir,
