@@ -8,16 +8,19 @@ import { isPrivileged } from "../shared/answers.ts";
  * Chat majority (doc 03 `crowd-vote`): Twitch / YouTube viewers vote for an option (`crowd.tally`, batched by
  * the server). One vote per viewer; a later vote replaces the earlier one while voting is open. Votes still count
  * `streamDelayMs` after the lock: the stream reaches viewers late (doc 04 `streamDelayMs`). Majority wins; with
- * a `single` question and a `teamId`, the team (e.g. « Le chat ») scores `points` when the majority is right.
+ * a `single` question and a team chosen by the control room (`crowd.setTeam`, kept for the next questions of the
+ * round), that team (e.g. « Le chat ») scores `points` when the majority is right.
  * Works with `single` (right answer known) and `poll` (opinion, no right answer) questions.
  */
 
-export const CrowdVoteConfig = z.strictObject({
+/**
+ * Not strict on purpose: older documents carry a `teamId` typed by hand (it never matched a real team) — dropped on
+ * read, the team is now chosen live (`crowd.setTeam`).
+ */
+export const CrowdVoteConfig = z.object({
   streamDelayMs: z.number().int().min(0).max(60_000).default(0),
   /** Live distribution on air (default) or hidden until the reveal. */
   showLive: z.boolean().default(true),
-  /** Team credited when the chat majority is right (fixed points). */
-  teamId: TeamId.optional(),
   points: z.number().int().min(0).max(1_000_000).default(0),
 });
 export type CrowdVoteConfig = z.infer<typeof CrowdVoteConfig>;
@@ -67,9 +70,11 @@ export const crowdVote = defineMechanic<CrowdVoteConfig, CrowdVoteState>({
   stateSchema: CrowdVoteState,
   ownPoints: true,
 
-  init(cfg, question) {
+  init(cfg, question, _env, round) {
     const a = question.answerSpec;
-    const common = { streamDelayMs: cfg.streamDelayMs, showLive: cfg.showLive, teamId: cfg.teamId ?? null, points: cfg.points, votes: [] };
+    // The team chosen on the previous question of the round stays (no need to pick it again each time).
+    const teamId = round.previous?.state.teamId ?? null;
+    const common = { streamDelayMs: cfg.streamDelayMs, showLive: cfg.showLive, teamId, points: cfg.points, votes: [] };
     if (a.kind === "single") return ok({ options: a.options.map(lite), correct: a.correct, frozen: null, ...common });
     if (a.kind === "poll") return ok({ options: a.options.map(lite), correct: null, frozen: null, ...common });
     return err("unsupported", `${unsupportedQuestion("crowd-vote", a.kind)} (QCM à une réponse ou sondage seulement)`);
@@ -80,6 +85,10 @@ export const crowdVote = defineMechanic<CrowdVoteConfig, CrowdVoteState>({
   },
 
   onAction(s, a, env) {
+    if (a.type === "crowd.setTeam") {
+      if (env.phase === "revealed") return err("wrong-phase", "déjà révélé : choisir l'équipe avant la révélation");
+      return ok({ ...s, teamId: a.teamId });
+    }
     if (a.type !== "crowd.tally") return null;
     const inDelay = (env.phase === "locked" || env.phase === "judging") && env.lockedAt !== undefined && env.lockedAt !== null && env.at - env.lockedAt <= s.streamDelayMs;
     if (env.phase !== "open" && !inDelay) return err("wrong-phase", "vote du chat fermé");
@@ -124,6 +133,8 @@ export const crowdVote = defineMechanic<CrowdVoteConfig, CrowdVoteState>({
       correct: revealed || isPrivileged(env.audience) ? s.correct : null,
       majority: revealed ? majorityOf(s) : null,
       streamDelayMs: s.streamDelayMs,
+      teamId: s.teamId,
+      points: s.points,
     };
   },
 });

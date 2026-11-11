@@ -1,12 +1,18 @@
 import { For, Show, type JSX } from "solid-js";
 import { asCrowdVote, formatNumber, optionLetter } from "@quiz/renderer";
-import type { MechanicView } from "@quiz/schema";
+import type { Action, MechanicView } from "@quiz/schema";
 
 /**
  * Chat vote (`crowd-vote`) for the control room and the host: votes per option as bars, voters, and the
- * majority once revealed. Read only: the votes come from the chat ingest, never from this panel.
+ * majority once revealed. The votes come from the chat ingest, never from this panel; the control room picks the team
+ * that scores when the majority is right (`teams` + `act` given: control room only).
  */
-export function CrowdVotePanel(p: { readonly mechanic: MechanicView | null }): JSX.Element {
+export function CrowdVotePanel(p: {
+  readonly mechanic: MechanicView | null;
+  readonly teams?: readonly { readonly id: string; readonly name: string }[] | undefined;
+  readonly revealed?: boolean | undefined;
+  readonly act?: ((a: Action, okText?: string) => Promise<boolean>) | undefined;
+}): JSX.Element {
   return (
     <Show when={asCrowdVote(p.mechanic)}>
       {(m) => {
@@ -32,6 +38,20 @@ export function CrowdVotePanel(p: { readonly mechanic: MechanicView | null }): J
                 )}
               </For>
             </ul>
+            <Show when={m().points > 0}>
+              <Show
+                when={p.teams !== undefined && p.act !== undefined && p.revealed !== true}
+                fallback={<p class="muted">{m().teamId === null ? "Aucune équipe ne reçoit les points du chat." : `${p.teams?.find((t) => t.id === m().teamId)?.name ?? "Une équipe"} reçoit ${m().points} pts si la majorité a raison.`}</p>}
+              >
+                <label class="q-crowd-team">Si la majorité a raison, {m().points} pts pour
+                  <select value={m().teamId ?? ""} onChange={(e) => { const v = e.currentTarget.value; void p.act?.({ type: "crowd.setTeam", teamId: v === "" ? null : v }, v === "" ? "aucune équipe" : "équipe du chat choisie"); }}>
+                    <option value="">aucune équipe</option>
+                    <For each={p.teams ?? []}>{(t) => <option value={t.id}>{t.name}</option>}</For>
+                  </select>
+                </label>
+                <Show when={(p.teams ?? []).length === 0}><p class="muted">Créer une équipe (onglet Joueurs, ex. « Le chat ») pour lui donner les points.</p></Show>
+              </Show>
+            </Show>
             <Show when={m().majority}>
               {(maj) => <p class="q-mech-ok">Majorité : {m().options.filter((o) => maj().includes(o.id)).map((o) => o.label).join(" / ") || "aucun vote"}</p>}
             </Show>

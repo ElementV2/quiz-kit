@@ -227,3 +227,4 @@ label:has(> input[type="checkbox"]), label:has(> input[type="radio"]) { min-heig
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; scroll-behavior: auto !important; }
 }
+.q-crowd-team { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; margin: 6px 0 0; }

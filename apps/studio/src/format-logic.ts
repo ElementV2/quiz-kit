@@ -94,8 +94,7 @@ export const MECHANICS: Readonly<Record<string, MechanicInfo>> = {
     fields: [
       { key: "showLive", kind: "boolean", label: "Afficher la répartition des votes en direct" },
       { key: "streamDelayMs", kind: "number", label: "Retard du flux vidéo (ms) : votes encore acceptés après la fermeture", min: 0, max: 60_000, step: 100 },
-      { key: "points", kind: "number", label: "Points pour l'équipe du chat si la majorité a raison", min: 0, max: 1_000_000 },
-      { key: "teamId", kind: "text", label: "Équipe créditée (identifiant, ex. t_chat)", placeholder: "aucune" },
+      { key: "points", kind: "number", label: "Points si la majorité du chat a raison (l'équipe qui les reçoit se choisit en direct dans la régie)", min: 0, max: 1_000_000 },
     ],
   },
   "reveal-image": {

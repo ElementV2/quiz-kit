@@ -169,6 +169,8 @@ export const Action = z.discriminatedUnion("type", [
   action("crowd.tally", {
     votes: z.array(z.strictObject({ userId: z.string().regex(/^(tw|yt):[0-9A-Za-z_-]{1,64}$/), optionId: OptionId })).min(1).max(1000),
   }),
+  /** Chat vote: the team that scores when the chat majority is right, chosen live by the control room (null: none). */
+  action("crowd.setTeam", { teamId: TeamId.nullable() }),
   // Undo (ADR-0010). The engine always journals the resolved `targetSeq`, so replay never guesses.
   action("undo", { targetSeq: z.number().int().min(1).optional() }),
 ]);
@@ -181,7 +183,7 @@ const CONTROL_ONLY: readonly ActionType[] = [
   "question.next", "timer.set", "timer.stop", "player.add", "player.rename", "player.setStatus",
   "player.setTeam", "player.setSeat", "player.remove", "team.add", "undo", "layer.take", "layer.out",
   "element.reveal", "joker.use", "ladder.stop", "poll.control", "poll.steal", "question.replaceFromReserve", "question.edit",
-  "host.setDrive", "question.setStakes", "game.patch", "question.skip", "chain.end", "chain.openVote", "chain.closeVote",
+  "host.setDrive", "question.setStakes", "game.patch", "question.skip", "chain.end", "chain.openVote", "chain.closeVote", "crowd.setTeam",
 ];
 
 /**

@@ -277,6 +277,9 @@ export const CrowdVoteMechanicView = z.strictObject({
   correct: OptionId.nullable(),
   /** Option(s) with the most votes, once revealed. */
   majority: z.array(OptionId).nullable(),
+  /** Team scoring `points` when the majority is right (chosen live by the control room), null: none. */
+  teamId: TeamId.nullable().default(null),
+  points: z.number().int().default(0),
   /** Votes still accepted this long after the lock (stream delay), ms. */
   streamDelayMs: z.number().int(),
 });

@@ -22,7 +22,7 @@ export type ContractOptions = {
   /** Builds a mechanic-specific operator action (`answer.judge`, `element.reveal`, `joker.use`…), sent as control. */
   readonly controlActionFor?: (control: ControlView, picks: readonly number[]) => Action | null;
   /** Who sends `controlActionFor` actions (default control; `system` for server-fed inputs like chat votes). */
-  readonly controlActor?: Actor;
+  readonly controlActor?: Actor | ((a: Action) => Actor);
   /**
    * Mechanic-specific secrets check, run on every player / output view in every phase (on top of the
    * generic checks: notes, answers, ledger, `correct` / `counts` before reveal). Must throw on a leak.
@@ -121,7 +121,8 @@ function toIntent(g: Game, cmd: Cmd, opts: ContractOptions): { action: Action; a
     }
     case "control": {
       const a = opts.controlActionFor?.(controlView(g, opts), cmd.picks) ?? null;
-      return a === null ? null : { action: a, actor: opts.controlActor ?? CONTROL };
+      const by = opts.controlActor;
+      return a === null ? null : { action: a, actor: typeof by === "function" ? by(a) : (by ?? CONTROL) };
     }
     case "expire":
       return g.state.timer === null ? null : { action: { type: "timer.expired", timerId: g.state.timer.id }, actor: actor("system") };
