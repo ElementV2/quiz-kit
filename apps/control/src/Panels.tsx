@@ -206,6 +206,25 @@ export function Players(p: { readonly view: ControlView; readonly readonly: bool
   const [csvReport, setCsvReport] = createSignal<string | null>(null);
   const [editing, setEditing] = createSignal<string | null>(null);
   const totals = createMemo(() => new Map(p.view.leaderboard.map((r) => [r.participantId, r])));
+  // Score step of the − / + keys: 1 by default, remembered on this station.
+  const STEPS = [1, 5, 10, 50, 100] as const;
+  const savedStep = (() => {
+    try {
+      const n = Number(localStorage.getItem("quiz.control.step"));
+      return STEPS.find((x) => x === n) ?? 1;
+    } catch {
+      return 1;
+    }
+  })();
+  const [step, setStep] = createSignal<number>(savedStep);
+  const chooseStep = (n: number) => {
+    setStep(n);
+    try {
+      localStorage.setItem("quiz.control.step", String(n));
+    } catch {
+      // private mode: not remembered
+    }
+  };
   const freeSeat = () => {
     const used = new Set(p.view.participants.map((x) => x.seat));
     for (let i = 1; i < 999; i++) if (!used.has(i)) return i;
@@ -243,6 +262,13 @@ export function Players(p: { readonly view: ControlView; readonly readonly: bool
   const teamOf = (id: string | null) => p.view.teams.find((t) => t.id === id) ?? null;
   return (
     <div class="c-stack">
+      <Show when={!p.readonly && p.view.participants.length > 0}>
+        <div class="c-steps" role="group" aria-label="Pas des boutons − / +">
+          <span class="muted">Ajuster de</span>
+          <For each={STEPS}>{(n) => <button type="button" class="q-stakes-key" data-on={String(step() === n)} onClick={() => chooseStep(n)}>{n}</button>}</For>
+          <span class="muted">point(s) · total exact : cliquer sur le nom</span>
+        </div>
+      </Show>
       <ul class="c-players">
         <For each={sorted()} fallback={<li class="muted c-empty">Aucun joueur. Ajoutez-en ci-dessous ou importez une liste.</li>}>
           {(pl) => (
@@ -258,8 +284,8 @@ export function Players(p: { readonly view: ControlView; readonly readonly: bool
                 </button>
                 <span class="c-total q-mono">{totals().get(pl.id)?.total ?? 0}</span>
                 <Show when={!p.readonly}>
-                  <button type="button" class="c-step" title="−10 (pénalité)" onClick={() => void p.act({ type: "score.adjust", target: { participantId: pl.id }, delta: -10, reason: "penalty" })}>−10</button>
-                  <button type="button" class="c-step" title="+10 (bonus)" onClick={() => void p.act({ type: "score.adjust", target: { participantId: pl.id }, delta: 10, reason: "bonus" })}>+10</button>
+                  <button type="button" class="c-step" title={`Retirer ${step()} point(s)`} onClick={() => void p.act({ type: "score.adjust", target: { participantId: pl.id }, delta: -step(), reason: "penalty" })}>−{step()}</button>
+                  <button type="button" class="c-step" title={`Ajouter ${step()} point(s)`} onClick={() => void p.act({ type: "score.adjust", target: { participantId: pl.id }, delta: step(), reason: "bonus" })}>+{step()}</button>
                 </Show>
               </div>
               <Show when={editing() === pl.id && !p.readonly}>
