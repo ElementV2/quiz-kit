@@ -166,7 +166,7 @@ describe("poll-board scoring", () => {
   it("slots revealed by control count for nobody", () => {
     const g = play([...OPEN, good("a"), ctl({ type: "element.reveal", index: 4 }), ...END]);
     expect(teamTotal(g.state, "t_a")).toBe(38);
-    expect(viewOf(g, { role: "output", scene: "program" }).slots[4]).toEqual({ index: 4, revealed: true, found: false, optionId: "e", label: "Pamplemousse", value: 6 });
+    expect(viewOf(g, { role: "output", scene: "program" }).slots[4]).toEqual({ index: 4, revealed: true, found: false, foundBy: null, optionId: "e", label: "Pamplemousse", value: 6 });
   });
 
   it("undoing a strike restores the play, replay included", () => {
@@ -277,3 +277,21 @@ describe("review of phase 1 mechanics — poll-board", () => {
     expect(rejection(play([...OPEN, good("a"), ...END]), { type: "poll.control", teamId: "t_b" })).toBe("wrong-phase"); // revealed
   });
 });
+
+describe("poll-board — per-answer scoring (each team scores what it finds)", () => {
+  const perAnswer: GameDocument = { ...CONTRACT_GAME, format: { ...CONTRACT_GAME.format, rounds: CONTRACT_GAME.format.rounds.map((r) => ({ ...r, mechanicConfig: { ...(r.mechanicConfig as Record<string, unknown>), scoring: "per-answer" } })) } }; // oxlint-disable-line typescript/no-unsafe-type-assertion -- fixture settings
+  const playIt = (steps: readonly Step[]) => run(reg, steps, createGame(makeSession(perAnswer)));
+  it("each found answer credits the team that found it, even after the hand passed; a successful steal credits its slot only", () => {
+    const g = playIt([...OPEN, good("a"), ctl({ type: "poll.control", teamId: "t_b" }), good("b"), ...END]);
+    const v = viewOf(g, { role: "output", scene: "program" });
+    const a = v.slots.find((x) => x.optionId === "a")?.value ?? 0;
+    const b = v.slots.find((x) => x.optionId === "b")?.value ?? 0;
+    expect(teamTotal(g.state, "t_a")).toBe(a);
+    expect(teamTotal(g.state, "t_b")).toBe(b);
+    expect(v).toMatchObject({ scoring: "per-answer" });
+    const steal = playIt([...OPEN, good("a"), bad, bad, bad, ctl({ type: "poll.steal", teamId: "t_b" }), good("b"), ...END]);
+    expect(teamTotal(steal.state, "t_a")).toBe(a);
+    expect(teamTotal(steal.state, "t_b")).toBe(b);
+  });
+});
+

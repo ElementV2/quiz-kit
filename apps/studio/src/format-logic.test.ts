@@ -27,8 +27,11 @@ describe("mechanic catalogue", () => {
     expect(defaultRegistry.ids().filter((id) => defaultRegistry.get(id)?.configSchema.safeParse(defaultConfig(defaultRegistry, id)).success !== true)).toEqual([]);
     expect(defaultConfig(defaultRegistry, "board")).toMatchObject({ values: [100, 200, 300, 400, 500], penalty: true });
   });
+  it("a new mixed round scores surveys per answer (each team what it finds)", () => {
+    expect(defaultConfig(defaultRegistry, "mixed")).toMatchObject({ pollScoring: "per-answer" });
+  });
   it("shows defaults filled for a partial config", () => {
-    expect(configValues(defaultRegistry, { mechanic: "mixed", mechanicConfig: { numberMode: "closest" } })).toEqual({ numberMode: "closest", allowChange: true, shuffleOptions: false, pollMaxStrikes: 3, pollMultiplier: 1, allocationKeepOneEmpty: true, buzzerLockout: true });
+    expect(configValues(defaultRegistry, { mechanic: "mixed", mechanicConfig: { numberMode: "closest" } })).toEqual({ numberMode: "closest", allowChange: true, shuffleOptions: false, pollMaxStrikes: 3, pollMultiplier: 1, pollScoring: "bank", allocationKeepOneEmpty: true, buzzerLockout: true });
   });
   it("an optional text field cleared is removed from the config", () => {
     const g = copy(DEMO_GAME);

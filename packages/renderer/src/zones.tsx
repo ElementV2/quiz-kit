@@ -250,7 +250,15 @@ const PollBoardZone: Component<ZoneProps> = (p) => (
             <For each={Array.from({ length: m().maxStrikes }, (_, i) => i)}>
               {(i) => <span style={{ color: i < m().strikes ? "var(--q-color-wrong)" : "rgba(255,255,255,.18)", "font-weight": 900 }}>✗</span>}
             </For>
-            <span style={{ "margin-left": "auto", color: "var(--q-color-muted)" }}>Banque <b style={{ color: "var(--q-color-accent)" }}>{m().bank}</b></span>
+            <Show
+              when={m().scoring === "per-answer"}
+              fallback={<span style={{ "margin-left": "auto", color: "var(--q-color-muted)" }}>Banque <b style={{ color: "var(--q-color-accent)" }}>{m().bank}</b></span>}
+            >
+              {/* Per-answer scoring: what each team found on this question. */}
+              <span style={{ "margin-left": "auto", display: "flex", gap: "28px", color: "var(--q-color-muted)" }}>
+                <For each={m().teamPoints}>{(t) => <span>{p.view.teamBoard.find((x) => x.teamId === t.teamId)?.name ?? ""} <b style={{ color: "var(--q-color-accent)" }}>{t.points}</b></span>}</For>
+              </span>
+            </Show>
           </div>
         </div>
       );

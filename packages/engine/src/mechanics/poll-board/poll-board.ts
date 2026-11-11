@@ -19,6 +19,12 @@ export const PollBoardConfig = z.strictObject({
   maxStrikes: z.number().int().min(1).max(10).default(3),
   /** Bank multiplier (double / triple rounds). Rounded symmetrically to an integer. */
   multiplier: z.number().positive().max(100).default(1),
+  /**
+   * `per-answer`: every team scores the value of each answer IT found (simple, what most shows want).
+   * `bank`: TV rule — the whole bank goes to the team that wins the question (hand kept, or a successful steal).
+   * Default `bank` so journals written before replay identically; new rounds are created `per-answer`.
+   */
+  scoring: z.enum(["per-answer", "bank"]).default("bank"),
 });
 export type PollBoardConfig = z.infer<typeof PollBoardConfig>;
 
@@ -28,6 +34,8 @@ const Slot = z.strictObject({
   value: z.number(),
   revealed: z.boolean(),
   found: z.boolean(),
+  /** Team that found it (null: flipped by control, or found before this was recorded). */
+  foundBy: TeamId.nullable().default(null),
 });
 
 export const PollBoardState = z.strictObject({
@@ -35,6 +43,7 @@ export const PollBoardState = z.strictObject({
   slots: z.array(Slot),
   maxStrikes: z.number().int().min(1),
   multiplier: z.number().positive(),
+  scoring: z.enum(["per-answer", "bank"]).default("bank"),
   strikes: z.number().int().min(0),
   stage: z.enum(["play", "steal", "done"]),
   controllingTeamId: TeamId.nullable(),
@@ -81,7 +90,16 @@ function find(s: S, optionId: string | undefined): Result<number, Rejection> {
   return ok(i);
 }
 
-const markFound = (s: S, i: number): S["slots"] => s.slots.map((x, j) => (j === i ? { ...x, revealed: true, found: true } : x));
+const markFound = (s: S, i: number, team: string | null): S["slots"] => s.slots.map((x, j) => (j === i ? { ...x, revealed: true, found: true, foundBy: team } : x));
+
+/** Per-answer scoring: what each team found (values × multiplier), teams that played and found nothing at 0. */
+function pointsByTeam(s: S): Map<string, number> {
+  const out = new Map<string, number>();
+  for (const t of [s.controllingTeamId, s.stealingTeamId]) if (t !== null) out.set(t, 0);
+  for (const x of s.slots) if (x.found && x.foundBy !== null && x.foundBy !== undefined) out.set(x.foundBy, (out.get(x.foundBy) ?? 0) + x.value);
+  for (const [t, v] of out) out.set(t, roundHalfAway(v * s.multiplier));
+  return out;
+}
 
 function judgeAnswer(s: S, a: ActionOf<"answer.judge">, env: MechanicEnv): R {
   if (!PLAYING.has(env.phase)) return err("wrong-phase", "les réponses ne sont pas ouvertes");
@@ -94,7 +112,7 @@ function judgeAnswer(s: S, a: ActionOf<"answer.judge">, env: MechanicEnv): R {
       }
       const i = find(s, a.optionId);
       if (!i.ok) return i;
-      const slots = markFound(s, i.value);
+      const slots = markFound(s, i.value, s.controllingTeamId);
       const allFound = slots.every((x) => x.revealed);
       return ok({ ...s, slots, stage: allFound ? "done" : "play", winnerTeamId: allFound ? s.controllingTeamId : null });
     }
@@ -103,7 +121,7 @@ function judgeAnswer(s: S, a: ActionOf<"answer.judge">, env: MechanicEnv): R {
       if (!a.correct) return ok({ ...s, stage: "done", winnerTeamId: s.controllingTeamId });
       const i = find(s, a.optionId);
       if (!i.ok) return i;
-      return ok({ ...s, slots: markFound(s, i.value), stage: "done", winnerTeamId: s.stealingTeamId });
+      return ok({ ...s, slots: markFound(s, i.value, s.stealingTeamId), stage: "done", winnerTeamId: s.stealingTeamId });
     }
     case "done":
       return err("conflict", "le jeu est terminé pour cette question");
@@ -133,12 +151,13 @@ export const pollBoard = defineMechanic<PollBoardConfig, PollBoardState>({
     const slots: S["slots"] = [];
     for (const o of spec.options) {
       if (o.value === undefined || o.value < 0) return err("invalid", `la réponse « ${o.label} » n'a pas de valeur (%) positive`);
-      slots.push({ optionId: o.id, label: o.label, value: o.value, revealed: false, found: false });
+      slots.push({ optionId: o.id, label: o.label, value: o.value, revealed: false, found: false, foundBy: null });
     }
     return ok({
       slots: slots.toSorted((x, y) => y.value - x.value), // stable: equal values keep the authored order
       maxStrikes: cfg.maxStrikes,
       multiplier: cfg.multiplier,
+      scoring: cfg.scoring,
       strikes: 0,
       stage: "play",
       controllingTeamId: null,
@@ -160,6 +179,9 @@ export const pollBoard = defineMechanic<PollBoardConfig, PollBoardState>({
   },
 
   judge(s): Judgement[] {
+    if ((s.scoring ?? "bank") === "per-answer") { // an older snapshot may lack it: bank, as it was played
+      return [...pointsByTeam(s)].map(([teamId, points]): Judgement => ({ kind: "fixed", target: { teamId }, outcome: points > 0 ? "correct" : "wrong", points }));
+    }
     const winner = s.winnerTeamId ?? s.controllingTeamId;
     if (winner === null) return [];
     const points = roundHalfAway(bankOf(s) * s.multiplier);
@@ -200,7 +222,7 @@ export const pollBoard = defineMechanic<PollBoardConfig, PollBoardState>({
       slots: s.slots.map((x, index) => {
         const revealed = x.revealed || end;
         const shown = revealed || privileged;
-        return { index, revealed, found: x.found, optionId: shown ? x.optionId : null, label: shown ? x.label : null, value: shown ? x.value : null };
+        return { index, revealed, found: x.found, foundBy: x.foundBy ?? null, optionId: shown ? x.optionId : null, label: shown ? x.label : null, value: shown ? x.value : null };
       }),
       strikes: s.strikes,
       maxStrikes: s.maxStrikes,
@@ -210,6 +232,8 @@ export const pollBoard = defineMechanic<PollBoardConfig, PollBoardState>({
       bank: bankOf(s),
       multiplier: s.multiplier,
       winnerTeamId: s.winnerTeamId,
+      scoring: s.scoring ?? "bank",
+      teamPoints: s.scoring === "per-answer" ? [...pointsByTeam(s)].map(([teamId, points]) => ({ teamId, points })) : [],
     };
   },
 });

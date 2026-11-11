@@ -38,6 +38,8 @@ export const PollBoardSlot = z.strictObject({
   label: z.string().nullable(),
   /** SECRET: share (%), same rule as `label`. */
   value: z.number().nullable(),
+  /** Team that found it (per-answer scoring). */
+  foundBy: TeamId.nullable().default(null),
 });
 export type PollBoardSlot = z.infer<typeof PollBoardSlot>;
 
@@ -58,6 +60,10 @@ export const PollBoardMechanicView = z.strictObject({
   multiplier: z.number(),
   /** Team that takes the bank, once known (stage done). */
   winnerTeamId: TeamId.nullable(),
+  /** `per-answer`: each team scores what it found (`teamPoints`); `bank`: the winner takes the bank. */
+  scoring: z.enum(["per-answer", "bank"]).default("bank"),
+  /** Per-answer scoring: points of each team on this question (× multiplier). */
+  teamPoints: z.array(z.strictObject({ teamId: TeamId, points: z.number() })).default([]),
 });
 export type PollBoardMechanicView = z.infer<typeof PollBoardMechanicView>;
 

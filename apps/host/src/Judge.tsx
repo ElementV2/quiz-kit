@@ -56,7 +56,9 @@ function PollBoard(p: { readonly view: HostView; readonly act: Act }): JSX.Eleme
             <span class="h-strikes" aria-label={`${m().strikes} erreur(s) sur ${m().maxStrikes}`}>
               <For each={Array.from({ length: m().maxStrikes }, (_, i) => i < m().strikes)}>{(on) => <i data-on={String(on)}>✗</i>}</For>
             </span>
-            <span class="q-mono">Banque {formatNumber(m().bank)}{m().multiplier !== 1 ? ` ×${m().multiplier}` : ""}</span>
+            <Show when={m().scoring === "per-answer"} fallback={<span class="q-mono">Banque {formatNumber(m().bank)}{m().multiplier !== 1 ? ` ×${m().multiplier}` : ""}</span>}>
+              <span class="q-mono">{m().teamPoints.map((t) => `${teamName(t.teamId)} ${formatNumber(t.points)}`).join(" · ")}</span>
+            </Show>
           </div>
           <Show when={p.view.drive && m().stage !== "done" && p.view.phase !== "revealed"}>
             <div class="h-row">
@@ -71,7 +73,7 @@ function PollBoard(p: { readonly view: HostView; readonly act: Act }): JSX.Eleme
             </div>
           </Show>
           <Show when={m().stage === "steal"}><p class="h-alert">Vol : {teamName(m().stealingTeamId)}, une seule réponse</p></Show>
-          <Show when={m().winnerTeamId !== null}><p class="h-found">Banque gagnée par {teamName(m().winnerTeamId)}</p></Show>
+          <Show when={m().scoring === "bank" && m().winnerTeamId !== null}><p class="h-found">Banque gagnée par {teamName(m().winnerTeamId)}</p></Show>
           <ol class="h-slots">
             <For each={m().slots}>
               {(s) => (

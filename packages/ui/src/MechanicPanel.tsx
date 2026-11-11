@@ -32,7 +32,9 @@ export function MechanicPanel(p: {
             <div class="q-mech-row">
               <span>Main : <b>{teamName(m().controllingTeamId)}</b></span>
               <span class="q-mech-strikes">{"✗".repeat(m().strikes)}<span class="muted">{"✗".repeat(Math.max(0, m().maxStrikes - m().strikes))}</span></span>
-              <span>Banque <b>{m().bank}</b>{m().multiplier !== 1 ? ` ×${m().multiplier}` : ""}</span>
+              <Show when={m().scoring === "per-answer"} fallback={<span>Banque <b>{m().bank}</b>{m().multiplier !== 1 ? ` ×${m().multiplier}` : ""}</span>}>
+                <span>{m().teamPoints.length === 0 ? "Chaque équipe marque ce qu'elle trouve" : m().teamPoints.map((t) => `${teamName(t.teamId)} ${t.points}`).join(" · ")}{m().multiplier !== 1 ? ` (multiplicateur ×${m().multiplier} compris)` : ""}</span>
+              </Show>
             </div>
             <Show when={control() && m().stage !== "done" && p.view.phase !== "revealed"}>
               <div class="q-mech-row">
@@ -47,7 +49,7 @@ export function MechanicPanel(p: {
               </div>
             </Show>
             <Show when={m().stage === "steal"}><p class="q-mech-alert">Vol : {teamName(m().stealingTeamId)} — une seule réponse</p></Show>
-            <Show when={m().winnerTeamId !== null}><p class="q-mech-ok">Banque gagnée par {teamName(m().winnerTeamId)}</p></Show>
+            <Show when={m().scoring === "bank" && m().winnerTeamId !== null}><p class="q-mech-ok">Banque gagnée par {teamName(m().winnerTeamId)}</p></Show>
             <ol class="q-mech-slots">
               <For each={m().slots}>
                 {(s) => (

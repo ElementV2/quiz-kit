@@ -48,10 +48,12 @@ export const MECHANICS: Readonly<Record<string, MechanicInfo>> = {
       allowChange,
       { key: "pollMaxStrikes", kind: "number", label: "Sondage : erreurs avant de passer la main", min: 1, max: 10 },
       { key: "pollMultiplier", kind: "number", label: "Sondage : multiplicateur (manche double, triple…)", min: 0.5, max: 100, step: 0.5 },
+      { key: "pollScoring", kind: "enum", label: "Sondage : qui marque", options: [{ value: "per-answer", label: "chaque équipe marque les réponses qu'elle trouve" }, { value: "bank", label: "la banque entière à l'équipe qui gagne (règle télé)" }] },
       { key: "allocationKeepOneEmpty", kind: "boolean", label: "Répartition : laisser au moins une réponse vide" },
       { key: "numberMode", kind: "enum", label: "Nombre : qui gagne", options: [{ value: "tolerance", label: "toute réponse dans la tolérance" }, { value: "closest", label: "le ou les plus proches" }] },
       { key: "buzzerLockout", kind: "boolean", label: "Réponse orale (buzzer) : qui se trompe ne peut plus buzzer" },
     ],
+    seed: { pollScoring: "per-answer" },
   },
   buzzer: {
     label: "Buzzer",

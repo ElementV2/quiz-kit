@@ -43,3 +43,7 @@ gardent leurs types (toujours exécutés par le moteur, toujours listés pour la
 - Les modèles retirés (`RETIRED_TEMPLATES`) sont effacés de la bibliothèque au démarrage s'ils n'ont jamais été
   modifiés (ou remplacés par le modèle actuel du même id) ; une copie modifiée est gardée.
 - Un état « mixed » à l'antenne est invalide (`stateSchema: z.never()`) : un snapshot qui le prétendrait est ignoré.
+- Sondage : comptage « par réponse » (chaque équipe marque ce qu'elle trouve) par défaut des nouvelles manches et à
+  l'ouverture d'une partie de la bibliothèque dont la manche mixte n'a rien choisi (jusqu'ici, seule la règle
+  « banque » existait : ces parties changent donc de règle à la prochaine ouverture ; rechoisir « banque » dans
+  Format si on veut la règle télé). Les journaux gardent la règle jouée (défaut `bank` du schéma).

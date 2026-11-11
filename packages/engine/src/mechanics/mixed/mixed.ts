@@ -19,6 +19,8 @@ export const MixedConfig = z.strictObject({
   pollMaxStrikes: z.number().int().min(1).max(10).default(3),
   /** Survey: bank multiplier (double / triple round). */
   pollMultiplier: z.number().positive().max(100).default(1),
+  /** Survey: `per-answer` (each team scores what it finds) or `bank` (TV rule). Default kept for older journals. */
+  pollScoring: z.enum(["per-answer", "bank"]).default("bank"),
   /** Allocation: at least one answer must be left empty. */
   allocationKeepOneEmpty: z.boolean().default(true),
   /** Number: right within the question's tolerance, or only the closest win. */
@@ -51,7 +53,7 @@ function routedConfig(id: string, c: MixedConfig): Record<string, unknown> {
     case "number-answer":
       return { allowChange: c.allowChange, mode: c.numberMode };
     case "poll-board":
-      return { maxStrikes: c.pollMaxStrikes, multiplier: c.pollMultiplier };
+      return { maxStrikes: c.pollMaxStrikes, multiplier: c.pollMultiplier, scoring: c.pollScoring };
     case "allocation":
       return { allowChange: c.allowChange, keepOneEmpty: c.allocationKeepOneEmpty };
     case "buzzer":

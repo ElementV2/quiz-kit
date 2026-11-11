@@ -220,6 +220,12 @@ function setup(opts: ContractOptions): Game {
   return g;
 }
 
+/** Fixed by default; `QUIZ_CONTRACT_SEED=<integer>` explores other scenarios (anything else: the default). */
+function contractSeed(): number {
+  const n = Number(process.env["QUIZ_CONTRACT_SEED"]);
+  return Number.isInteger(n) ? n : 20_261_111;
+}
+
 /** Runs the contract property; throws on the first violated invariant. Returns what was exercised. */
 export function assertContract(opts: ContractOptions, numRuns = 200): Coverage {
   const cov: Coverage = { reveals: 0, autoScores: 0, undos: 0, skipped: 0, answersTried: 0, answers: 0, controlTried: 0, controlActions: 0 };
@@ -254,7 +260,9 @@ export function assertContract(opts: ContractOptions, numRuns = 200): Coverage {
       const snapshot = { seq: mid, state: replay(g.session, g.events.slice(0, mid), opts.registry).state };
       expect(replay(g.session, g.events, opts.registry, snapshot).state, "replay from snapshot differs").toEqual(g.state);
     }),
-    { numRuns },
+    // Fixed seed: the same 200 scenarios on every run (a coverage threshold or a detection test never flips at
+    // random); QUIZ_CONTRACT_SEED explores other ones on demand.
+    { numRuns, seed: contractSeed() },
   );
   return cov;
 }
