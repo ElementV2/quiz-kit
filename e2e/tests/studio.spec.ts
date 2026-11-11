@@ -77,6 +77,16 @@ test("studio design import: PSD named layers become zones, fonts / colours liste
   await studio.getByRole("button", { name: "+ Nouvelle" }).click();
   await studio.getByRole("button", { name: "Scènes" }).click();
   await studio.getByRole("button", { name: "Personnaliser les scènes" }).click();
+  // The 1920x1080 stage fills the canvas, also after leaving the tab and coming back (scale bug).
+  const fills = () => studio.evaluate(() => {
+    const c = document.querySelector(".s-canvas")?.getBoundingClientRect();
+    const st = document.querySelector(".s-stage")?.getBoundingClientRect();
+    return c !== undefined && st !== undefined && Math.abs(c.width - st.width) < 2 && Math.abs(c.height - st.height) < 2;
+  });
+  await expect.poll(fills).toBe(true);
+  await studio.getByRole("button", { name: "Contenu" }).click();
+  await studio.getByRole("button", { name: "Scènes" }).click();
+  await expect.poll(fills).toBe(true);
 
   await studio.locator('input[type="file"][accept^=".psd"]').setInputFiles({ name: "maquette.psd", mimeType: "image/vnd.adobe.photoshop", buffer: psd });
   await expect(studio.getByText(/PSD 1920×1080 : 2 zone\(s\) créée\(s\)/)).toBeVisible();

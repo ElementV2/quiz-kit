@@ -299,7 +299,6 @@ function SceneEditor(p: { doc: GameDocument; update: (f: (d: GameDocument) => vo
       refPixels = ctx?.getImageData(0, 0, 1920, 1080) ?? null; // same origin (/media): canvas not tainted
     }).catch(() => undefined);
   });
-  let box: HTMLDivElement | undefined;
   let stage: HTMLDivElement | undefined;
   const toStage = (e: PointerEvent): { x: number; y: number } => {
     const r = stage?.getBoundingClientRect();
@@ -399,13 +398,15 @@ function SceneEditor(p: { doc: GameDocument; update: (f: (d: GameDocument) => vo
     }, { once: true });
     document.body.append(frame);
   };
-  onMount(() => {
-    if (box === undefined) return;
-    const el = box;
-    const ro = new ResizeObserver(() => setScale(el.clientWidth / 1920));
+  // The canvas is created later than this component (inside <Show>): observe it when its ref is set,
+  // otherwise the scale stays at its initial 0.5 and the 1920x1080 stage fills only a corner.
+  let ro: ResizeObserver | undefined;
+  const setBox = (el: HTMLDivElement) => {
+    ro?.disconnect();
+    ro = new ResizeObserver(() => setScale(el.clientWidth / 1920));
     ro.observe(el);
-    onCleanup(() => ro.disconnect());
-  });
+  };
+  onCleanup(() => ro?.disconnect());
   const ensureScenes = () => p.update((d) => { if (d.scenes.length === 0) d.scenes = Object.values(OUTPUT_SCENES).map((s) => structuredClone(s)); });
   const scene = (): Scene | undefined => p.doc.scenes[sceneIdx()];
   const view = createMemo(() => {
@@ -544,7 +545,7 @@ function SceneEditor(p: { doc: GameDocument; update: (f: (d: GameDocument) => vo
               <span class="muted">Maj + clic : ajouter une zone à la sélection</span>
             </div>
           </Show>
-          <div ref={box} class="s-canvas" data-tool={tool()} style={{ "--s": String(scale()) }} onPointerDown={onCanvasDown}>
+          <div ref={setBox} class="s-canvas" data-tool={tool()} style={{ "--s": String(scale()) }} onPointerDown={onCanvasDown}>
             <div ref={stage} class="s-stage">
               <Show when={refHash()}>{(h) => <img class="s-ref" src={mediaUrl(h())} alt="" style={{ opacity: refOpacity() }} />}</Show>
               <Show when={scene()}>{(sc) => <SceneRenderer scene={sc()} theme={p.doc.theme ?? DEFAULT_THEME} view={view()} serverNow={() => Date.now()} />}</Show>
