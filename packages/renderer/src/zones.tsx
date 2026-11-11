@@ -13,10 +13,15 @@ const str = (z: Zone, key: string, fallback: string): string => {
   return typeof v === "string" ? v : fallback;
 };
 
+/** Surfaces: state colour (background-color) under the theme material (doc 06 « matériau des cadres », `--q-mat-*`). */
 const panel: JSX.CSSProperties = {
-  background: "var(--q-color-surface)",
+  "background-color": "var(--q-color-surface)",
+  "background-image": "var(--q-mat-image)",
+  "background-size": "var(--q-mat-size)",
+  border: "var(--q-mat-border)",
+  "backdrop-filter": "var(--q-mat-backdrop)",
   "border-radius": "var(--q-radius)",
-  "box-shadow": "0 10px 30px rgba(0,0,0,.35)",
+  "box-shadow": "var(--q-mat-shadow)",
   "box-sizing": "border-box",
 };
 
@@ -81,7 +86,7 @@ const AnswerListZone: Component<ZoneProps> = (p) => {
                   <div
                     class="q-answer"
                     data-state={state()}
-                    style={{ ...panel, position: "relative", overflow: "hidden", display: "flex", "align-items": "center", gap: "20px", padding: "0 28px", background: bg(), opacity: state() === "wrong" ? 0.45 : state() === "disabled" ? 0.12 : 1, transition: "background var(--q-motion), opacity var(--q-motion)", ...p.zone.states[state()] }}
+                    style={{ ...panel, position: "relative", overflow: "hidden", display: "flex", "align-items": "center", gap: "20px", padding: "0 28px", "background-color": bg(), opacity: state() === "wrong" ? 0.45 : state() === "disabled" ? 0.12 : 1, transition: "background var(--q-motion), opacity var(--q-motion)", ...p.zone.states[state()] }}
                   >
                     <Show when={share() !== null}>
                       <div style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: `${Math.round((share() ?? 0) * 100)}%`, background: "rgba(255,255,255,.12)", transition: "width var(--q-motion)" }} />
@@ -180,7 +185,7 @@ const QuestionMediaZone: Component<ZoneProps> = (p) => {
   return (
     <Show when={media()}>
       {(m) => (
-        <div style={{ ...panel, width: "100%", height: "100%", overflow: "hidden", display: "grid", "place-items": "center", background: "transparent", "box-shadow": "none" }}>
+        <div style={{ ...panel, width: "100%", height: "100%", overflow: "hidden", display: "grid", "place-items": "center", "background-color": "transparent", "background-image": "none", border: "none", "box-shadow": "none" }}>
           <Show when={m().mime.startsWith("image/")}>
             <img src={p.mediaUrl(m().hash)} alt="" style={{ "max-width": "100%", "max-height": "100%", "object-fit": "contain", "border-radius": "var(--q-radius)" }} />
           </Show>
@@ -197,7 +202,15 @@ const QuestionMediaZone: Component<ZoneProps> = (p) => {
   );
 };
 
-const ImageZone: Component<ZoneProps> = (p) => <img src={str(p.zone, "src", "")} alt="" style={{ width: "100%", height: "100%", "object-fit": "contain" }} />;
+/** `src`: URL, media hash, or `logo` (the theme logo, `--q-logo`). */
+const ImageZone: Component<ZoneProps> = (p) => {
+  const src = () => str(p.zone, "src", "");
+  return (
+    <Show when={src() !== "logo"} fallback={<div class="q-logo" style={{ width: "100%", height: "100%", "background-image": "var(--q-logo)", "background-size": "contain", "background-repeat": "no-repeat", "background-position": "center" }} />}>
+      <img src={/^[0-9a-f]{64}$/.test(src()) ? p.mediaUrl(src()) : src()} alt="" style={{ width: "100%", height: "100%", "object-fit": "contain" }} />
+    </Show>
+  );
+};
 
 /** Survey board (« sondage à slots ») : masked slots revealed one by one, strikes, bank. */
 const PollBoardZone: Component<ZoneProps> = (p) => (
@@ -209,7 +222,7 @@ const PollBoardZone: Component<ZoneProps> = (p) => (
           <div style={{ flex: 1, display: "grid", "grid-template-columns": `repeat(${cols()}, 1fr)`, gap: "10px" }}>
             <For each={m().slots}>
               {(slot) => (
-                <div class="q-slot" data-state={slot.revealed ? (slot.found ? "correct" : "revealed") : "masked"} style={{ ...panel, display: "flex", "align-items": "center", gap: "16px", padding: "0 22px", background: slot.found ? "var(--q-color-correct)" : slot.revealed ? "var(--q-color-surface-alt)" : "var(--q-color-surface)", transition: "background var(--q-motion)", "font-size": "30px" }}>
+                <div class="q-slot" data-state={slot.revealed ? (slot.found ? "correct" : "revealed") : "masked"} style={{ ...panel, display: "flex", "align-items": "center", gap: "16px", padding: "0 22px", "background-color": slot.found ? "var(--q-color-correct)" : slot.revealed ? "var(--q-color-surface-alt)" : "var(--q-color-surface)", transition: "background var(--q-motion)", "font-size": "30px" }}>
                   <span style={{ width: "44px", height: "44px", "border-radius": "50%", background: "var(--q-color-primary)", display: "grid", "place-items": "center", "font-size": "24px" }}>{slot.index + 1}</span>
                   <span style={{ flex: 1, overflow: "hidden", "white-space": "nowrap", "text-overflow": "ellipsis" }}>{slot.revealed ? (slot.label ?? "") : ""}</span>
                   <span style={{ "font-variant-numeric": "tabular-nums", color: "var(--q-color-accent)" }}>{slot.revealed ? (slot.value ?? "") : ""}</span>
@@ -235,7 +248,7 @@ const BuzzerZone: Component<ZoneProps> = (p) => (
     {(m) => (
       <Show when={m().winner ?? m().hand}>
         {(id) => (
-          <div style={{ ...panel, width: "100%", height: "100%", display: "flex", "align-items": "center", "justify-content": "center", gap: "18px", "font-size": `${Math.round(p.zone.rect.h * 0.42)}px`, background: m().winner !== null ? "var(--q-color-correct)" : "var(--q-color-primary)" }}>
+          <div style={{ ...panel, width: "100%", height: "100%", display: "flex", "align-items": "center", "justify-content": "center", gap: "18px", "font-size": `${Math.round(p.zone.rect.h * 0.42)}px`, "background-color": m().winner !== null ? "var(--q-color-correct)" : "var(--q-color-primary)" }}>
             <span>{m().winner !== null ? "✓" : "🔔"}</span>
             <span>{nameOf(p.view, id())}</span>
           </div>

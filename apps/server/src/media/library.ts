@@ -77,7 +77,7 @@ export function exportQuiz(game: GameDocument, media: MediaStore): Uint8Array {
   return zipSync(files, { level: 6 });
 }
 
-export async function importQuiz(zip: Uint8Array, media: MediaStore): Promise<{ ok: true; game: GameDocument; media: number } | { ok: false; error: string }> {
+export async function importQuiz(zip: Uint8Array, media: MediaStore): Promise<{ ok: true; game: GameDocument; media: number; missing: number } | { ok: false; error: string }> {
   let files: Record<string, Uint8Array>;
   try {
     files = unzipSync(zip);
@@ -86,20 +86,43 @@ export async function importQuiz(zip: Uint8Array, media: MediaStore): Promise<{ 
   }
   const gameFile = files["game.json"];
   if (gameFile === undefined) return { ok: false, error: "game.json absent de l'archive" };
-  const r = loadGameDocument(JSON.parse(strFromU8(gameFile)));
+  let raw: unknown;
+  try {
+    raw = JSON.parse(strFromU8(gameFile));
+  } catch {
+    return { ok: false, error: "game.json illisible" };
+  }
+  const r = loadGameDocument(raw);
   if (!r.ok) return { ok: false, error: `jeu invalide : ${JSON.stringify(r.error)}` };
   let count = 0;
+  const missing: string[] = [];
   for (const hash of gameMediaHashes(r.value)) {
     const bytes = files[`media/${hash}`];
     const metaRaw = files[`media/${hash}.json`];
-    if (bytes === undefined || metaRaw === undefined) continue;
+    if (bytes === undefined || metaRaw === undefined) {
+      if (media.pathOf(hash) === null) missing.push(hash);
+      continue;
+    }
     // Never trust the archive's file names: the bytes must hash to the name.
     if (createHash("sha256").update(bytes).digest("hex") !== hash) return { ok: false, error: `média corrompu : ${hash.slice(0, 12)}…` };
-    const meta: unknown = JSON.parse(strFromU8(metaRaw));
-    const mime = typeof meta === "object" && meta !== null && "mime" in meta && typeof meta.mime === "string" ? meta.mime : "application/octet-stream";
+    let meta: unknown = null;
+    try {
+      meta = JSON.parse(strFromU8(metaRaw));
+    } catch {
+      // name / type unknown: defaults below
+    }
+    const mime = typeof meta === "object" && meta !== null && "mime" in meta && typeof meta.mime === "string" ? meta.mime : null;
+    if (mime === null) {
+      missing.push(hash); // unreadable meta: this media is skipped, the rest of the game still imports (review R3)
+      continue;
+    }
     const name = typeof meta === "object" && meta !== null && "name" in meta && typeof meta.name === "string" ? meta.name : hash;
-    await media.put(Readable.from([Buffer.from(bytes)]), mime, name);
-    count++;
+    try {
+      await media.put(Readable.from([Buffer.from(bytes)]), mime, name);
+      count++;
+    } catch (err) {
+      return { ok: false, error: `média refusé (${name}) : ${err instanceof Error ? err.message : String(err)}` };
+    }
   }
-  return { ok: true, game: r.value, media: count };
+  return { ok: true, game: r.value, media: count, missing: missing.length };
 }

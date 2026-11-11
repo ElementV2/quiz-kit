@@ -66,7 +66,8 @@ export function Effects(p: { readonly view: View | null; readonly serverNow: () 
             burst(Math.round(n / 3), p.width / 2, p.height * 0.25, Math.PI * 2);
             break;
           case "timer.last5":
-            break; // visual handled by the timer zone (colour); no particles
+          case "answer.wrong":
+            break; // timer zone colour / theme sound; no particles
         }
       };
       let frames = 0;

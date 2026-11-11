@@ -69,3 +69,6 @@
 .s-picked { display: inline-flex; align-items: center; gap: 6px; }
 .s-chip { display: inline-block; width: 22px; height: 22px; border-radius: 4px; border: 1px solid rgba(255, 255, 255, .4); vertical-align: middle; }
 .s-chip-btn { cursor: pointer; padding: 0; margin-right: 4px; }
+
+.s-logo { height: 40px; max-width: 160px; object-fit: contain; background: repeating-conic-gradient(#2a2f55 0 25%, #1a1f3d 0 50%) 0 0 / 12px 12px; border-radius: 6px; }
+.s-sounds { display: grid; gap: 2px; } .s-sounds .s-row { margin: 0; min-height: 40px; } .s-cue { min-width: 190px; }

@@ -44,7 +44,7 @@ Règle : une phase n'est terminée que quand ses critères de sortie passent. Co
 ## Phase 2 — Studio et habillage
 
 - [x] Mode Contenu (tableur), mode Scènes (canvas, zones, bindings, inspecteur d'états, simulation)
-- [x] Thèmes (tokens, motion) + génération depuis 2 couleurs (contraste WCAG) — matériaux, sons et logo : à compléter
+- [x] Thèmes (tokens, motion, matériaux des cadres, logo, pack sonore par moment) + génération depuis 2 couleurs ou depuis le logo (contraste WCAG)
 - [x] Moments + couche PixiJS + niveaux de qualité (`?fx=full|light|off`, défaut `light`) — **bench OBS / vMix à faire par l'équipe** (`?bench=1` affiche les fps)
 - [x] Import de design reçu (calque de référence, tracé de zones, découpe, 9-slice, états dérivés, PSD à calques nommés, pipette, alignement / répartition / duplication)
 - [x] Export gabarit (PNG/SVG/PSD à calques + fiche CSV/PDF) + réimport par nommage

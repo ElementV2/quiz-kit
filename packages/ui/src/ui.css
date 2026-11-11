@@ -34,6 +34,7 @@ h1, h2, h3 { margin: 0; }
 .q-status-reconnecting, .q-status-connecting { background: #78350f; color: #fde68a; }
 .q-status-rejected, .q-status-stopped { background: #7f1d1d; color: #fecaca; }
 input, select { font: inherit; color: var(--ui-text); background: var(--ui-bg); border: 1px solid var(--ui-border); border-radius: 8px; padding: 7px 9px; min-width: 0; }
+input[type="color"] { width: 44px; height: 32px; padding: 2px; cursor: pointer; } input[type="color"]::-webkit-color-swatch-wrapper { padding: 0; } input[type="color"]::-webkit-color-swatch { border: 0; border-radius: 5px; }
 table { border-collapse: collapse; width: 100%; }
 td, th { padding: 6px 8px; border-bottom: 1px solid var(--ui-border); text-align: left; }
 th { color: var(--ui-muted); font-weight: 500; font-size: 12px; }

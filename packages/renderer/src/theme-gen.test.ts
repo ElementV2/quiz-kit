@@ -45,3 +45,25 @@ describe("generateThemes", () => {
     expect(generateThemes("#e11d48", "#facc15")).toEqual(generateThemes("#e11d48", "#facc15"));
   });
 });
+
+const img = (pixels: [number, number, number, number, number][]) => {
+  const out: number[] = [];
+  for (const [r, g, b, a, count] of pixels) for (let i = 0; i < count; i++) out.push(r, g, b, a);
+  return new Uint8ClampedArray(out);
+};
+
+describe("dominantColors (logo → palette)", () => {
+  it("returns the brand hues by frequency, ignoring white background, greys, transparency and same-hue shades", async () => {
+    const { dominantColors } = await import("./theme-gen.ts");
+    const data = img([
+      [255, 255, 255, 255, 5000], // background
+      [0, 0, 0, 0, 3000], // transparent
+      [128, 128, 128, 255, 900], // grey text
+      [230, 30, 60, 255, 800], // red
+      [200, 20, 50, 255, 300], // darker red (same hue)
+      [20, 90, 220, 255, 400], // blue
+    ]);
+    expect(dominantColors(data)).toEqual(["#e61e3c", "#145adc"]);
+    expect(dominantColors(img([[255, 255, 255, 255, 10]]))).toEqual([]);
+  });
+});

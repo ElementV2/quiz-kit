@@ -74,3 +74,11 @@ Un bug trouvé = d'abord un test qui le reproduit.
 - Conventional Commits, branches `feat/…`, `fix/…`.
 - Une PR = une case de roadmap. Le `reviewer` passe sur `engine`, `protocol` et `server`.
 - ADR pour toute décision difficile à défaire (lib structurante, format de données, protocole).
+
+## Versions du document de jeu (`schemaVersion`)
+
+Tant qu'aucune version n'est livrée à une machine de show, un champ **optionnel ou à valeur par défaut** s'ajoute
+sans changer `schemaVersion` (les anciens jeux se relisent : test « Theme backward compatibility »).
+Dès la première version livrée : tout nouveau champ = `CURRENT_SCHEMA_VERSION + 1` et une migration testée, pour
+qu'une machine plus ancienne réponde clairement `future-version` au lieu de « Unrecognized key ».
+Règle d'exploitation en attendant : studio et serveur de show à la même version.

@@ -42,6 +42,9 @@
       compteur fps 5 min. Mesuré en Chromium headless (Playwright) : 60 fps en `full`. Garder `light` par défaut
       tant que le bench réel n'est pas fait.
 - [ ] Version de Chromium dans vMix 29 (non mentionnée dans les notes de version).
+- [ ] Autoplay du son dans OBS Browser Source et dans l'input Web Browser de vMix (sans geste utilisateur) :
+      NON VÉRIFIÉ dans une doc officielle. Test : sortie avec `&sound=on`, déclencher une bonne réponse, vérifier
+      que le son est capté ; sinon `[data-sound="blocked"]` sur la page.
 - [x] ag-psd 34.1 : `readPsd(buffer, { skipLayerImageData, skipThumbnail })` / `writePsd(psd)` vérifiés dans
       `dist/index.d.ts` et `psd.d.ts` (Layer : name, top/left/bottom/right, canvas, children, opened, protected,
       text.style.font.name / fontSize / fillColor). Écriture puis relecture testées (e2e). Constat : un calque
@@ -62,3 +65,5 @@
       une telle option ne se rechargerait plus (aucun cas connu en phase 0 ; à traiter par migration si besoin).
 
 Règle : une question vérifiée devient un ADR ou une ligne dans le doc concerné, et la case est cochée.
+- [ ] Import `.quiz` : plafonner la taille décompressée (par entrée et totale) avant `unzipSync` — archive piégée
+      (zip bomb). Usage interne (jeton régie / studio requis), à faire avant toute ouverture plus large. Revue phase 2, M3.

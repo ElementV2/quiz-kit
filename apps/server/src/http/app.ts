@@ -92,7 +92,8 @@ export function buildHttpApp(deps: HttpDeps, options: FastifyServerOptions): Fas
   const app = Fastify(options);
   // No CORS headers at all: cross-origin reads stay blocked by browsers (doc 10).
   app.addHook("onSend", async (_req, reply, payload) => {
-    for (const [k, v] of Object.entries(SECURITY_HEADERS)) reply.header(k, v);
+    // Defaults only: a route may set a stricter policy (`/media`: sandbox CSP) that must survive this hook.
+    for (const [k, v] of Object.entries(SECURITY_HEADERS)) if (!reply.hasHeader(k)) reply.header(k, v);
     return payload;
   });
   // Fastify's default 404 handler logs the raw URL (token included): replace it, log nothing.
@@ -149,8 +150,12 @@ export function buildHttpApp(deps: HttpDeps, options: FastifyServerOptions): Fas
     if (meta === null || path === null) return reply.code(404).send({ error: "média inconnu" });
     reply.header("cache-control", "public, max-age=31536000");
     reply.header("content-security-policy", "default-src 'none'; style-src 'unsafe-inline'; sandbox");
+    // An SVG opened directly is a document: never render it inline (still fine for <img>, CSS url() and fetch).
+    if (meta.mime === "image/svg+xml") reply.header("content-disposition", "attachment");
     reply.type(meta.mime);
-    return reply.sendFile(req.params.hash, deps.media.dir);
+    // Files are stored by hash, without extension: `send` would replace our type with application/octet-stream
+    // (an SVG logo then never decodes) and our cache header with its own. Both options: @fastify/static SendOptions.
+    return reply.sendFile(req.params.hash, deps.media.dir, { contentType: false, cacheControl: false });
   });
 
   // ── Game library (studio) ──────────────────────────────────────────────────
@@ -197,7 +202,7 @@ export function buildHttpApp(deps: HttpDeps, options: FastifyServerOptions): Fas
     if (!r.ok) return reply.code(400).send({ error: r.error });
     const id = req.query.id !== undefined && GameLibrary.isId(req.query.id) ? req.query.id : `g_${Date.now().toString(36)}`;
     const saved = deps.library.put(id, r.game);
-    return saved.ok ? { id, title: r.game.title, media: r.media } : reply.code(400).send({ error: "jeu invalide" });
+    return saved.ok ? { id, title: r.game.title, media: r.media, missing: r.missing } : reply.code(400).send({ error: "jeu invalide" });
   });
 
   /** Starts a new game from a game document (imported CSV, template). Control token only; journaled. */

@@ -9,7 +9,8 @@ import { buildHttpApp, loggerOptions } from "./http/app.ts";
 import { newId } from "./ids.ts";
 import { buildLinks, lanAddresses, linksFile, type Links } from "./links.ts";
 import { signToken } from "./tokens.ts";
-import { MediaStore, gameMediaHashes } from "./media/media-store.ts";
+import { MediaStore } from "./media/media-store.ts";
+import { PreloadCache } from "./media/preload.ts";
 import { GameLibrary } from "./media/library.ts";
 import { realTimers, SessionRuntime, type Clock, type Timers } from "./runtime/session-runtime.ts";
 import { SqliteEventStore } from "./store/sqlite-event-store.ts";
@@ -95,6 +96,7 @@ async function boot(config: Config, opts: { timers?: Timers; broadcastIntervalMs
     store.setMeta("templates-seeded", "1");
   }
   const media = new MediaStore(dataDir, { ffmpeg: process.env["QUIZ_FFMPEG"] ?? "ffmpeg", ffprobe: process.env["QUIZ_FFPROBE"] ?? "ffprobe" });
+  const preloads = new PreloadCache(media);
 
   let sessionId = config.newSession ? null : store.latestSessionId();
   if (sessionId === null) {
@@ -171,7 +173,7 @@ async function boot(config: Config, opts: { timers?: Timers; broadcastIntervalMs
   // 25 ms broadcast coalescing: a burst of 500 answers becomes a few broadcasts, invisible on screen (40 fps).
   runtime = new SessionRuntime(store, defaultRegistry, session, clock, opts.timers ?? realTimers, http.log, { broadcastIntervalMs: opts.broadcastIntervalMs ?? 25 });
   const firstRuntime = runtime;
-  transport = new WsTransport({ runtime: getRuntime, secret, show: config.show, isRevoked, clock, log: http.log, preload: () => gameMediaHashes(getRuntime().session.game) });
+  transport = new WsTransport({ runtime: getRuntime, secret, show: config.show, isRevoked, clock, log: http.log, preload: (viewer) => preloads.for(viewer, getRuntime().session.game) });
   const runtimeOpts = { broadcastIntervalMs: opts.broadcastIntervalMs ?? 25 };
 
   /**
@@ -231,3 +233,4 @@ async function boot(config: Config, opts: { timers?: Timers; broadcastIntervalMs
     },
   };
 }
+

@@ -4,6 +4,7 @@ import type { Layer, Scene, Theme, View, Zone } from "@quiz/schema";
 import { layerVisible, themeVars } from "./logic.ts";
 import { zoneComponent, type ZoneProps } from "./zones.tsx";
 import { Effects } from "./Effects.tsx";
+import { MomentSounds } from "./MomentSounds.tsx";
 import type { EffectsLevel } from "./moments.ts";
 
 export type SceneRendererProps = {
@@ -22,6 +23,8 @@ export type SceneRendererProps = {
   readonly effects?: EffectsLevel;
   /** Keep emitting particles and show the frame rate (OBS / vMix bench). */
   readonly bench?: boolean;
+  /** Play the theme sound pack on moments (output link `?sound=on`). */
+  readonly sound?: boolean;
 };
 
 /**
@@ -42,7 +45,7 @@ export function SceneRenderer(props: SceneRendererProps): JSX.Element {
   const layers = createMemo(() => props.scene.layers.toSorted((a, b) => a.z - b.z));
   const taken = createMemo<Readonly<Record<string, boolean>>>(() => props.view?.layers ?? {});
   const style = (): JSX.CSSProperties => ({
-    ...themeVars(props.theme),
+    ...themeVars(props.theme, props.mediaUrl ?? defaultMediaUrl),
     position: "relative",
     width: `${props.scene.size.w}px`,
     height: `${props.scene.size.h}px`,
@@ -77,6 +80,9 @@ export function SceneRenderer(props: SceneRendererProps): JSX.Element {
             )}
           </For>
         )}
+      </Show>
+      <Show when={props.sound === true}>
+        <MomentSounds view={props.view} serverNow={props.serverNow} theme={props.theme} mediaUrl={props.mediaUrl ?? defaultMediaUrl} />
       </Show>
       <Show when={props.effects !== undefined && props.effects !== "off"}>
         <Effects view={props.view} serverNow={props.serverNow} level={props.effects ?? "off"} bench={props.bench === true} width={props.scene.size.w} height={props.scene.size.h} accent={props.theme.colors.accent} />

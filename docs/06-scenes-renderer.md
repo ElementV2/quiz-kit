@@ -38,7 +38,16 @@ papier, LED), décor animé, personnalité de mouvement, pack sonore, moments.
 Génération depuis 2 couleurs + logo : palette dérivée, contrôle de contraste, 3 à 4 variantes.
 Thèmes prédéfinis originaux (aucune reprise d'habillage d'émission existante).
 
+**Implémenté** : `material` (aplat, dégradé, verre, métal, néon, papier, LED) = variables `--q-mat-*` peintes
+par-dessus la couleur d'état (bonne / mauvaise / sélection restent lisibles), CSS pur sans `color-mix()`.
+`logo` (hash média) : zone `image` avec `src: "logo"` ; dans le studio, ses 2 teintes dominantes
+(`dominantColors`, gris / transparent ignorés) alimentent le générateur. `sounds` : un son par moment
+(`SoundCue` = bonne / mauvaise réponse, 5 dernières s, buzzer, palier, leader, podium) + `volume`.
+Le logo et les sons sont des médias du jeu : préchargés par les clients et inclus dans l'export `.quiz`.
+
 ## Sorties
 
 Une URL par scène (`/out/<show>/<scene>`), fond transparent, 1920×1080 fixe, lecture seule.
 Son de l'habillage : embarqué dans la sortie (capturé par OBS/vMix) ou coupé, au choix.
+**Implémenté** : coupé par défaut, `&sound=on` sur le lien de sortie pour l'embarquer. Un son refusé par la
+politique d'autoplay du navigateur ne casse rien (`[data-sound="blocked"]` pour le diagnostic).

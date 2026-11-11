@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { Phase } from "./phase.ts";
+import { MediaHash } from "./ids.ts";
 
 /**
  * Scenes & themes (doc 02 "Scène et habillage", doc 06). A scene is a fixed-size canvas of layers of zones;
@@ -68,6 +69,14 @@ export type Scene = z.infer<typeof Scene>;
 
 const Color = z.string().regex(/^#[0-9a-fA-F]{6}([0-9a-fA-F]{2})?$/);
 
+/** Frame material (doc 06): how surfaces (question, answers, panels) are painted from the colour tokens. */
+export const Material = z.enum(["flat", "gradient", "glass", "metal", "neon", "paper", "led"]);
+export type Material = z.infer<typeof Material>;
+
+/** Moments that can carry a sound (doc 06 « pack sonore, moments »), detected by the renderer from projected views. */
+export const SoundCue = z.enum(["answer.correct", "answer.wrong", "timer.last5", "buzzer.won", "ladder.reached", "leader.changed", "podium"]);
+export type SoundCue = z.infer<typeof SoundCue>;
+
 /** Theme tokens (doc 06). Rendered as CSS variables `--q-…`. */
 export const Theme = z.strictObject({
   id: z.string(),
@@ -86,5 +95,11 @@ export const Theme = z.strictObject({
   font: z.strictObject({ family: z.string(), weight: z.number().int().min(100).max(900) }),
   radius: z.number().min(0).max(64),
   motion: z.enum(["snappy", "elegant", "bouncy", "dramatic"]),
+  material: Material.default("flat"),
+  /** Logo (media hash): shown by `image` zones with `src: "logo"`, and used to derive a palette in the studio. */
+  logo: MediaHash.optional(),
+  /** Sound pack: one media hash (WAV 48 kHz after import) per moment. Played by outputs opened with `?sound=on`. */
+  sounds: z.partialRecord(SoundCue, MediaHash).default({}),
+  volume: z.number().min(0).max(1).default(0.8),
 });
 export type Theme = z.infer<typeof Theme>;

@@ -103,8 +103,9 @@ export function secondsLeft(endsAt: number, serverNow: number): number {
 }
 
 /** Theme tokens → CSS custom properties `--q-…` (doc CONVENTIONS "Front"). */
-export function themeVars(t: Theme): Record<string, string> {
-  const vars: Record<string, string> = {};
+export function themeVars(t: Theme, mediaUrl: (hash: string) => string = (h) => `/media/${h}`): Record<string, string> {
+  const vars: Record<string, string> = { ...MATERIALS[t.material] };
+  vars["--q-logo"] = t.logo === undefined ? "none" : `url(${mediaUrl(t.logo)})`;
   for (const [k, v] of Object.entries(t.colors)) vars[`--q-color-${k.replaceAll(/[A-Z]/g, (c) => `-${c.toLowerCase()}`)}`] = v;
   vars["--q-font"] = t.font.family;
   vars["--q-font-weight"] = String(t.font.weight);
@@ -112,6 +113,22 @@ export function themeVars(t: Theme): Record<string, string> {
   vars["--q-motion"] = MOTION_MS[t.motion];
   return vars;
 }
+
+const FLAT = { "--q-mat-image": "none", "--q-mat-size": "auto", "--q-mat-border": "none", "--q-mat-backdrop": "none", "--q-mat-shadow": "0 10px 30px rgba(0,0,0,.35)" };
+
+/**
+ * Frame materials (doc 06), drawn over the state colour so correct / selected / wrong keep working.
+ * CSS only (gradients, borders, shadows): no `color-mix()` — vMix's Chromium version is unknown (OPEN-QUESTIONS).
+ */
+export const MATERIALS: Record<Theme["material"], Record<string, string>> = {
+  flat: FLAT,
+  gradient: { ...FLAT, "--q-mat-image": "linear-gradient(180deg, rgba(255,255,255,.18), rgba(0,0,0,.24))" },
+  glass: { ...FLAT, "--q-mat-image": "linear-gradient(135deg, rgba(255,255,255,.24), rgba(255,255,255,.04) 60%)", "--q-mat-border": "1px solid rgba(255,255,255,.3)", "--q-mat-backdrop": "blur(14px) saturate(1.3)", "--q-mat-shadow": "0 8px 32px rgba(0,0,0,.3), inset 0 1px 0 rgba(255,255,255,.35)" },
+  metal: { ...FLAT, "--q-mat-image": "linear-gradient(180deg, rgba(255,255,255,.38) 0%, rgba(255,255,255,.06) 48%, rgba(0,0,0,.2) 52%, rgba(255,255,255,.14) 100%)", "--q-mat-border": "2px solid rgba(255,255,255,.45)", "--q-mat-shadow": "0 6px 18px rgba(0,0,0,.5), inset 0 1px 0 rgba(255,255,255,.6)" },
+  neon: { ...FLAT, "--q-mat-border": "2px solid var(--q-color-accent)", "--q-mat-shadow": "0 0 10px var(--q-color-accent), 0 0 28px var(--q-color-accent), inset 0 0 14px var(--q-color-accent)" },
+  paper: { ...FLAT, "--q-mat-image": "repeating-linear-gradient(0deg, rgba(0,0,0,.04) 0 2px, transparent 2px 4px), linear-gradient(180deg, rgba(255,255,255,.1), rgba(0,0,0,.1))", "--q-mat-shadow": "0 2px 0 rgba(0,0,0,.3), 0 12px 24px rgba(0,0,0,.25)" },
+  led: { ...FLAT, "--q-mat-image": "radial-gradient(circle, rgba(255,255,255,.16) 1.2px, transparent 1.8px)", "--q-mat-size": "6px 6px", "--q-mat-border": "2px solid rgba(0,0,0,.6)" },
+};
 
 const MOTION_MS: Record<Theme["motion"], string> = { snappy: "180ms", elegant: "420ms", bouncy: "320ms", dramatic: "700ms" };
 

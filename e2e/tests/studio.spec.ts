@@ -110,3 +110,72 @@ test("studio design import: PSD named layers become zones, fonts / colours liste
   expect(errors).toEqual([]);
   await ctx.close();
 });
+
+/** 0.2 s of silence, 48 kHz mono 16-bit PCM WAV. */
+function silentWav(): Buffer {
+  const samples = 9600;
+  const b = Buffer.alloc(44 + samples * 2);
+  b.write("RIFF", 0);
+  b.writeUInt32LE(36 + samples * 2, 4);
+  b.write("WAVEfmt ", 8);
+  b.writeUInt32LE(16, 16);
+  b.writeUInt16LE(1, 20);
+  b.writeUInt16LE(1, 22);
+  b.writeUInt32LE(48_000, 24);
+  b.writeUInt32LE(96_000, 28);
+  b.writeUInt16LE(2, 32);
+  b.writeUInt16LE(16, 34);
+  b.write("data", 36);
+  b.writeUInt32LE(samples * 2, 40);
+  return b;
+}
+
+const LOGO = `<svg xmlns="http://www.w3.org/2000/svg" width="200" height="100"><rect width="200" height="100" fill="#fff"/><rect x="10" y="10" width="110" height="80" fill="#e61e3c"/><rect x="130" y="10" width="60" height="80" fill="#145adc"/></svg>`;
+
+test("studio theme: material, logo palette, sound pack — exported with the game and played on air with &sound=on", async ({ browser, request }) => {
+  const errors: string[] = [];
+  const ctx = await browser.newContext({ viewport: { width: 1600, height: 1000 } });
+  const studio = await ctx.newPage();
+  studio.on("pageerror", (e) => errors.push(e.message));
+  studio.on("console", (m) => { if (m.type() === "error") errors.push(m.text()); });
+  await studio.goto(path("studio"));
+  await studio.getByRole("button", { name: "+ Nouvelle" }).click();
+  await studio.locator(".s-title").fill("Thème e2e");
+  await studio.getByRole("button", { name: "+ QCM" }).click();
+  await studio.getByRole("button", { name: "Thème" }).click();
+  await studio.locator("label", { hasText: "Matériau des cadres" }).locator("select").selectOption("neon");
+  await studio.locator('label:has-text("Logo…") input[type="file"]').setInputFiles({ name: "logo.svg", mimeType: "image/svg+xml", buffer: Buffer.from(LOGO) });
+  await expect(studio.getByText("Couleurs du logo : #e61e3c, #145adc")).toBeVisible();
+  await studio.locator(".s-sounds .s-row", { hasText: "Bonne réponse" }).locator('input[type="file"]').setInputFiles({ name: "bravo.wav", mimeType: "audio/wav", buffer: silentWav() });
+  await expect(studio.locator(".s-sounds .s-row", { hasText: "Bonne réponse" }).getByRole("button", { name: "▶" })).toBeVisible();
+  await studio.screenshot({ path: "screenshots/studio-theme-pack.png" });
+  await studio.getByRole("button", { name: /Enregistrer/ }).click();
+  await expect(studio.getByText("Enregistré", { exact: true }).first()).toBeVisible();
+
+  const games = (await (await request.get(`/api/games?t=${token("studio")}`)).json()) as { games: { id: string; title: string }[] }; // oxlint-disable-line typescript/no-unsafe-type-assertion -- own endpoint
+  const id = games.games.find((x) => x.title === "Thème e2e")?.id ?? "";
+  // The .quiz archive carries the logo and the sound (studio graphics are media too).
+  const archive = await request.get(`/api/games/${id}/export?t=${token("studio")}`);
+  expect(archive.status()).toBe(200);
+  const entries = (await archive.body()).toString("latin1").match(/media\/[0-9a-f]{64}(?=\.json)/g) ?? [];
+  expect(new Set(entries).size).toBe(2);
+
+  expect((await request.post(`/api/games/${id}/launch?t=${token("control")}`)).status()).toBe(200);
+  const output = await ctx.newPage();
+  output.on("pageerror", (e) => errors.push(e.message));
+  await output.goto(`${path("out-program")}&sound=on`);
+  await expect.poll(async () => output.locator(".q-scene").evaluate((el) => getComputedStyle(el).getPropertyValue("--q-mat-border").trim())).toMatch(/^2px solid #/); // neon: accent-coloured border
+  const control = await ctx.newPage();
+  await control.goto(path("control"));
+  await expect(control.getByText("connecté").first()).toBeVisible();
+  for (let i = 0; i < 6; i++) {
+    await control.locator("body").press("Space"); // start, round, present, open, lock, reveal
+    await control.waitForTimeout(120);
+  }
+  await expect(output.locator('.q-answer[data-state="correct"]')).toHaveCount(1);
+  // The correct-answer cue was triggered (played, or refused by the headless autoplay policy — never silent by bug).
+  await expect(output.locator("[data-sound]")).not.toHaveAttribute("data-sound", "ready");
+  await output.screenshot({ path: "screenshots/output-neon.png" });
+  expect(errors).toEqual([]);
+  await ctx.close();
+});

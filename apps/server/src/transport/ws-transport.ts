@@ -19,7 +19,7 @@ export type TransportDeps = {
   readonly monotonic?: () => number;
   readonly log: Log;
   /** Media hashes of the current game, pushed after every welcome so clients preload them (doc 04 `preload`). */
-  readonly preload?: () => string[];
+  readonly preload?: (viewer: Viewer) => string[];
   readonly helloTimeoutMs?: number;
   readonly heartbeatMs?: number;
   /** Pings without pong before a connection is considered dead (Wi-Fi power saving tolerates a few). */
@@ -263,7 +263,7 @@ export class WsTransport {
     conn.stream = stream;
     stream.welcome(runtime.welcomeView(viewer), this.deps.clock(), PROTOCOL_VERSION);
     conn.unsubscribe = runtime.subscribe(stream);
-    const hashes = this.deps.preload?.() ?? [];
+    const hashes = this.deps.preload?.(viewer) ?? [];
     if (hashes.length > 0) this.send(conn, { t: "preload", hashes });
   }
 

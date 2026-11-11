@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { Readable } from "node:stream";
 import { strToU8, unzipSync, zipSync } from "fflate";
 import { afterAll, describe, expect, it } from "vitest";
-import { DEMO_GAME, type GameDocument } from "@quiz/schema";
+import { DEFAULT_THEME, DEMO_GAME, PROGRAM_SCENE, Theme, type GameDocument } from "@quiz/schema";
 import { GameLibrary, exportQuiz, importQuiz } from "./library.ts";
 import { MediaStore } from "./media-store.ts";
 
@@ -48,6 +48,28 @@ describe(".quiz archive", () => {
     const r = await importQuiz(zip, target);
     expect(r).toMatchObject({ ok: true, media: 1 });
     expect(target.pathOf(meta.hash)).not.toBeNull();
+  });
+
+  it("carries studio graphics too: scene asset and theme logo survive the round trip (the bug behind gameMediaHashes)", async () => {
+    const source = new MediaStore(tmp());
+    const asset = await source.put(Readable.from([PNG]), "image/png", "answers_idle@2x.png");
+    const logo = await source.put(Readable.from([Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="2" height="2"/>')]), "image/svg+xml", "logo.svg");
+    const scene = structuredClone(PROGRAM_SCENE);
+    const z = scene.layers[0]?.zones[0];
+    if (z === undefined) throw new Error("fixture");
+    z.states.idle = { "background-image": `url(/media/${asset.hash})` };
+    const game: GameDocument = { ...DEMO_GAME, scenes: [scene], theme: Theme.parse({ ...DEFAULT_THEME, logo: logo.hash }) };
+    const target = new MediaStore(tmp());
+    const r = await importQuiz(exportQuiz(game, source), target);
+    expect(r).toMatchObject({ ok: true, media: 2, missing: 0 });
+    expect(target.pathOf(asset.hash)).not.toBeNull();
+    expect(target.pathOf(logo.hash)).not.toBeNull();
+  });
+
+  it("reports media referenced by the game but absent from the archive", async () => {
+    const game: GameDocument = { ...DEMO_GAME, theme: Theme.parse({ ...DEFAULT_THEME, logo: "9".repeat(64) }) };
+    const r = await importQuiz(exportQuiz(game, new MediaStore(tmp())), new MediaStore(tmp()));
+    expect(r).toMatchObject({ ok: true, media: 0, missing: 1 });
   });
 
   it("refuses an archive whose media bytes do not match their hash", async () => {

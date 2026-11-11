@@ -27,6 +27,8 @@ const params = new URLSearchParams(location.search);
 const effects = parseEffectsLevel(params.get("fx"));
 const bench = params.get("bench") === "1";
 const preview = params.get("preview") === "1";
+/** `?sound=on`: the output plays the theme sound pack (captured by OBS / vMix). Off by default. */
+const sound = params.get("sound") === "on";
 
 function Output() {
   const conn = createQuizConnection({ persist: false, preview: new URLSearchParams(location.search).get("preview") === "1" });
@@ -41,7 +43,7 @@ function Output() {
   const theme = () => presentation()?.theme ?? DEFAULT_THEME;
   return (
     <>
-      <SceneRenderer scene={scene()} theme={theme()} view={conn.view()} serverNow={conn.serverNow} mediaUrl={conn.mediaUrl} effects={preview ? "off" : effects} bench={bench} />
+      <SceneRenderer scene={scene()} theme={theme()} view={conn.view()} serverNow={conn.serverNow} mediaUrl={conn.mediaUrl} effects={preview ? "off" : effects} bench={bench} sound={sound && !preview} />
       {/* Operator hint, only while the link is refused: never shown on air once connected. */}
       <Show when={conn.status() === "rejected"}>
         <div style={{ position: "fixed", left: "20px", bottom: "20px", padding: "10px 16px", background: "#7f1d1d", color: "#fff", font: "600 20px system-ui", "border-radius": "10px" }}>

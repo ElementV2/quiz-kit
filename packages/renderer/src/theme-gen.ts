@@ -126,3 +126,36 @@ export function generateThemes(primaryHex: string, accentHex: string, font = "In
     return { theme, report };
   });
 }
+
+/**
+ * Dominant colours of a logo (doc 06 « génération depuis 2 couleurs + logo »): RGBA bytes → up to `n` distinct hues,
+ * most frequent first. Transparent pixels and greys (low saturation, near black / white) are ignored: a logo on a
+ * white background still yields its brand colours. Buckets of 4 bits per channel; average colour of each bucket.
+ */
+export function dominantColors(data: ArrayLike<number>, n = 2): string[] {
+  const buckets = new Map<number, { count: number; r: number; g: number; b: number }>();
+  for (let i = 0; i + 3 < data.length; i += 4) {
+    const r = data[i] ?? 0;
+    const g = data[i + 1] ?? 0;
+    const b = data[i + 2] ?? 0;
+    if ((data[i + 3] ?? 0) < 128) continue;
+    const hsl = toHsl({ r, g, b });
+    if (hsl.s < 0.25 || hsl.l < 0.08 || hsl.l > 0.94) continue;
+    const key = ((r >> 4) << 8) | ((g >> 4) << 4) | (b >> 4);
+    const k = buckets.get(key) ?? { count: 0, r: 0, g: 0, b: 0 };
+    k.count++;
+    k.r += r;
+    k.g += g;
+    k.b += b;
+    buckets.set(key, k);
+  }
+  const ranked = [...buckets.values()].toSorted((a, b) => b.count - a.count).map((k) => ({ r: k.r / k.count, g: k.g / k.count, b: k.b / k.count }));
+  const out: Rgb[] = [];
+  for (const c of ranked) {
+    const h = toHsl(c).h;
+    // Distinct hues only (≥ 30°), otherwise two shades of the same brand colour.
+    if (out.every((o) => Math.min(Math.abs(toHsl(o).h - h), 360 - Math.abs(toHsl(o).h - h)) >= 30)) out.push(c);
+    if (out.length === n) break;
+  }
+  return out.map((c) => toHex({ r: Math.round(c.r), g: Math.round(c.g), b: Math.round(c.b) }));
+}

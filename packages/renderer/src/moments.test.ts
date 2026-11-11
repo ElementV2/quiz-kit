@@ -41,3 +41,12 @@ describe("detectMoments", () => {
     expect(PARTICLES.off).toBe(0);
   });
 });
+
+const poll = (strikes: number) => base({ phase: "open", mechanic: { mechanic: "poll-board", slots: [], strikes, maxStrikes: 3, stage: "play", controllingTeamId: null, stealingTeamId: null, bank: 0, multiplier: 1, winnerTeamId: null } });
+
+describe("wrong answers", () => {
+  it("poll strike, buzzer lock-out and a wrong ladder answer are answer.wrong", () => {
+    expect(detectMoments(poll(0), poll(1), 0)).toEqual([{ kind: "answer.wrong" }]);
+    expect(detectMoments(poll(1), poll(1), 0)).toEqual([]);
+  });
+});

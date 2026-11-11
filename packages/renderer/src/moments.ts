@@ -1,4 +1,4 @@
-import type { View } from "@quiz/schema";
+import type { SoundCue, View } from "@quiz/schema";
 
 /**
  * Moments (doc 06 « déclenchés par événement moteur ») detected from two consecutive projected views.
@@ -6,11 +6,17 @@ import type { View } from "@quiz/schema";
  */
 export type Moment =
   | { readonly kind: "answer.correct" }
+  | { readonly kind: "answer.wrong" }
   | { readonly kind: "leader.changed"; readonly leader: string }
   | { readonly kind: "podium" }
   | { readonly kind: "ladder.reached"; readonly level: number }
   | { readonly kind: "buzzer.won" }
   | { readonly kind: "timer.last5" };
+
+// Every moment can carry a theme sound: kinds must stay aligned with the schema's `SoundCue`.
+type AssertSame<A, B> = [A] extends [B] ? ([B] extends [A] ? true : never) : never;
+const cuesAligned: AssertSame<Moment["kind"], SoundCue> = true;
+void cuesAligned;
 
 export type EffectsLevel = "full" | "light" | "off";
 
@@ -47,6 +53,10 @@ export function detectMoments(prev: View | null, next: View, serverNow: number):
   if (pm?.mechanic === "buzzer" && nm?.mechanic === "buzzer" && pm.winner === null && nm.winner !== null) out.push({ kind: "buzzer.won" });
   if (pm?.mechanic === "poll-board" && nm?.mechanic === "poll-board" && nm.slots.filter((s) => s.found).length > pm.slots.filter((s) => s.found).length) out.push({ kind: "answer.correct" });
   if (pm?.mechanic === "ladder" && nm?.mechanic === "ladder" && nm.level > pm.level) out.push({ kind: "ladder.reached", level: nm.level });
+  // Wrong answers: a buzzer player locked out, a poll strike, a ladder answer revealed wrong.
+  if (pm?.mechanic === "buzzer" && nm?.mechanic === "buzzer" && (nm.lockedOut?.length ?? 0) > (pm.lockedOut?.length ?? 0)) out.push({ kind: "answer.wrong" });
+  if (pm?.mechanic === "poll-board" && nm?.mechanic === "poll-board" && nm.strikes > pm.strikes) out.push({ kind: "answer.wrong" });
+  if (nm?.mechanic === "ladder" && prev.phase !== "revealed" && next.phase === "revealed" && nm.correct !== null && nm.answer !== null && nm.answer !== nm.correct) out.push({ kind: "answer.wrong" });
   const before = prev.leaderboard[0];
   const after = next.leaderboard[0];
   if (before !== undefined && after !== undefined && before.participantId !== after.participantId && after.total > 0) out.push({ kind: "leader.changed", leader: after.displayName });

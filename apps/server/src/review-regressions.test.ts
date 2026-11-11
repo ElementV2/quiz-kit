@@ -117,6 +117,43 @@ describe("review #2 — tokens never reach the logs", () => {
   });
 });
 
+describe("media are served with their own type and cache header (SVG logo, studio graphics)", () => {
+  it("an extension-less stored SVG keeps image/svg+xml and the long cache", async () => {
+    const { Readable } = await import("node:stream");
+    const media = new MediaStore(mkdtempSync(join(tmpdir(), "quiz-media-")));
+    const m = await media.put(Readable.from([Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="2" height="2"/>')]), "image/svg+xml", "logo.svg");
+    const deps = {
+      runtime: () => { throw new Error("unused"); },
+      links: () => ({ origins: [], secureOrigins: [], entries: [] }),
+      revoke: () => ({ origins: [], secureOrigins: [], entries: [] }),
+      joinCode: () => "123456",
+      newSession: () => ({ id: "ses_x" }),
+      media,
+      library: new GameLibrary(mkdtempSync(join(tmpdir(), "quiz-lib-"))),
+      join: () => ({ ok: false as const, error: "unused" }),
+      secret: "s",
+      show: "main",
+      isRevoked: () => false,
+      clock: () => 0,
+      connections: () => 0,
+      presence: () => ({}),
+      health: () => ({}),
+      dataDir: "",
+    };
+    const app = buildHttpApp(deps, { logger: false });
+    const res = await app.inject({ method: "GET", url: `/media/${m.hash}` });
+    await app.close();
+    expect(res.statusCode).toBe(200);
+    expect(res.headers["content-type"]).toMatch(/^image\/svg\+xml/);
+    expect(res.headers["cache-control"]).toBe("public, max-age=31536000");
+    // The route's sandbox CSP survives the global security-headers hook (review B1).
+    expect(res.headers["content-security-policy"]).toMatch(/sandbox/);
+    expect(res.headers["content-security-policy"]).toMatch(/default-src 'none'/);
+    expect(res.headers["x-content-type-options"]).toBe("nosniff");
+    expect(res.headers["content-disposition"]).toBe("attachment");
+  });
+});
+
 describe("review #4 — revocation works and takes effect immediately", () => {
   it("revoking a seat cuts its open connection, refuses the old link and issues a new one", async () => {
     const s = await boot();

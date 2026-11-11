@@ -25,7 +25,7 @@ export const api = {
     await json(await fetch(withToken(`/api/games/${id}`), { method: "DELETE" }));
   },
   exportUrl: (id: string): string => withToken(`/api/games/${id}/export`),
-  importQuiz: async (file: File): Promise<{ id: string; title: string; media: number }> =>
+  importQuiz: async (file: File): Promise<{ id: string; title: string; media: number; missing: number }> =>
     json(await fetch(withToken("/api/import"), { method: "POST", headers: { "content-type": "application/zip" }, body: file })),
   upload: async (file: File): Promise<Media> => {
     const res = await fetch(withToken(`/api/media?name=${encodeURIComponent(file.name)}`), { method: "POST", headers: { "content-type": file.type || "application/octet-stream" }, body: file });

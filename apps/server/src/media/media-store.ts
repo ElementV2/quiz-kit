@@ -6,7 +6,7 @@ import { pipeline } from "node:stream/promises";
 import { createWriteStream } from "node:fs";
 import type { Readable } from "node:stream";
 import { z } from "zod";
-import { MediaHash, type Media } from "@quiz/schema";
+import { MediaHash, type GameDocument, type Media } from "@quiz/schema";
 
 /**
  * Content-addressed media store (doc 07, ADR-A7): `media/<sha256>` + `<sha256>.json` metadata.
@@ -52,6 +52,8 @@ type ProbeResult = z.infer<typeof Probe>;
 
 export class MediaStore {
   readonly dir: string;
+  /** Incremented when a new media is stored: lets caches (preload lists) know the set changed. */
+  generation = 0;
   private readonly tools: Tools;
 
   constructor(dataDir: string, tools: Tools = { ffmpeg: "ffmpeg", ffprobe: "ffprobe" }) {
@@ -125,6 +127,7 @@ export class MediaStore {
   }
 
   private writeMeta(m: MediaMeta): MediaMeta {
+    this.generation++;
     writeFileSync(join(this.dir, `${m.hash}.json`), JSON.stringify(m));
     return m;
   }
@@ -171,8 +174,43 @@ function dims(p: ProbeResult | null): Pick<MediaMeta, "w" | "h" | "durationMs"> 
   };
 }
 
-/** Every media hash a game references (preload list, doc 04 `preload`). */
-export function gameMediaHashes(game: { questions: readonly { prompt: { media?: { hash: string } | undefined }; answerSpec: unknown }[] }): string[] {
+const MEDIA_REF = /\/media\/([0-9a-f]{64})(?![0-9a-f])/g;
+
+/** Every `/media/<hash>` inside the strings of a JSON-like value (scene styles, states, props). */
+function collectMediaRefs(v: unknown, out: Set<string>): void {
+  if (typeof v === "string") {
+    for (const m of v.matchAll(MEDIA_REF)) if (m[1] !== undefined) out.add(m[1]);
+  } else if (Array.isArray(v)) {
+    for (const x of v) collectMediaRefs(x, out);
+  } else if (typeof v === "object" && v !== null) {
+    for (const x of Object.values(v)) collectMediaRefs(x, out);
+  }
+}
+
+type QuestionsOnly = { questions: readonly { prompt: { media?: { hash: string } | undefined }; answerSpec: unknown }[] };
+
+/** Studio graphics: `/media/<hash>` in scene styles / states / props, theme logo and sound pack (outputs only). */
+export function lookMediaHashes(game: Pick<GameDocument, "scenes" | "theme">): string[] {
+  const out = new Set<string>();
+  collectMediaRefs(game.scenes, out);
+  if (game.theme !== undefined) {
+    collectMediaRefs(game.theme, out);
+    if (game.theme.logo !== undefined) out.add(game.theme.logo);
+    for (const s of Object.values(game.theme.sounds)) if (MediaHash.safeParse(s).success) out.add(s);
+  }
+  return [...out];
+}
+
+/**
+ * Every media hash a game references: questions, studio graphics (scenes) and theme (logo, sounds).
+ * Used for `.quiz` export — missing one means a broken look on another PC.
+ */
+export function gameMediaHashes(game: QuestionsOnly & Partial<Pick<GameDocument, "scenes" | "theme">>): string[] {
+  return [...new Set([...questionMediaHashes(game), ...lookMediaHashes({ scenes: game.scenes ?? [], ...(game.theme !== undefined ? { theme: game.theme } : {}) })])];
+}
+
+/** Media of the questions and their options (what a tablet may display). */
+export function questionMediaHashes(game: QuestionsOnly): string[] {
   const out = new Set<string>();
   for (const q of game.questions) {
     if (q.prompt.media !== undefined) out.add(q.prompt.media.hash);
