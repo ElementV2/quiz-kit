@@ -165,6 +165,11 @@ export const pollBoard = defineMechanic<PollBoardConfig, PollBoardState>({
   stateSchema: PollBoardState,
   ownPoints: true,
 
+  reconfigure(s, cfg) {
+    // Display and flow settings: safe mid-question (the bank / the found answers do not move).
+    return { ...s, steal: cfg.steal, revealAll: cfg.revealAll, maxStrikes: Math.max(cfg.maxStrikes, s.strikes) };
+  },
+
   init(cfg, question) {
     const spec = question.answerSpec;
     if (spec.kind !== "poll") return err("unsupported", `${unsupportedQuestion("poll-board", spec.kind)} (sondages seulement)`);

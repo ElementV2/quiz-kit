@@ -78,7 +78,16 @@ function reduceAllowed(s: GameState, a: Action, ctx: Ctx, registry: Registry): R
       // Stakes set ahead belong to a question: dropped if another question now sits at that place.
       const st = s.stakes;
       const keepStakes = st === null || s.game.format.rounds[st.roundIndex]?.questions[st.questionIndex] === a.game.format.rounds[st.roundIndex]?.questions[st.questionIndex];
-      return ok({ ...s, game: a.game, gameVersion: ctx.seq, studioPatchedAt: ctx.at, stakes: keepStakes ? st : null });
+      // The question on air takes at once the settings that are safe for it (mechanic `reconfigure`).
+      let mechanic = s.mechanic;
+      const round = s.roundIndex === null ? undefined : a.game.format.rounds[s.roundIndex];
+      const qOnAir = round === undefined || s.questionIndex === null ? undefined : a.game.questions.find((q) => q.id === round.questions[s.questionIndex ?? -1]);
+      if (mechanic !== null && round !== undefined && qOnAir !== undefined) {
+        const played = playedBy(round, qOnAir, registry);
+        const pm = played.ok && played.value.mechanic.id === mechanic.id ? played.value.mechanic : null;
+        if (played.ok && pm?.reconfigure !== undefined) mechanic = { id: mechanic.id, state: pm.reconfigure(mechanic.state, played.value.config) };
+      }
+      return ok({ ...s, game: a.game, gameVersion: ctx.seq, studioPatchedAt: ctx.at, stakes: keepStakes ? st : null, mechanic });
     }
 
     case "question.setStakes": {

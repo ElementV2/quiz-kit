@@ -338,3 +338,17 @@ describe("verdict on a survey (points decided by the game)", () => {
   });
 });
 
+describe("live settings change on the survey on air", () => {
+  it("« show the answers nobody found » turned off while the survey is on air applies to it at the reveal", () => {
+    const g = run(reg, [...START, ctl({ type: "question.skip", roundIndex: 0, questionIndex: 0 }), ctl({ type: "question.present" }), ctl({ type: "poll.control", participantId: "p_1" }), ctl({ type: "question.open" })], createGame(makeSession(MIXED)));
+    const patched = structuredClone(g.state.game);
+    const r0 = patched.format.rounds[0];
+    if (r0 === undefined) throw new Error("fixture");
+    r0.mechanicConfig = { kinds: { poll: { revealAll: false, steal: false } } };
+    const after = run(reg, [ctl({ type: "game.patch", baseVersion: g.state.gameVersion, game: patched }), ctl({ type: "question.lock" }), ctl({ type: "question.reveal" })], g);
+    const out = project(after, { role: "output", scene: "program" }, reg).mechanic;
+    expect(out?.mechanic === "poll-board" && out.slots.every((x) => !x.revealed && x.label === null)).toBe(true);
+    expect(replay(after.session, after.events, reg).state).toEqual(after.state);
+  });
+});
+

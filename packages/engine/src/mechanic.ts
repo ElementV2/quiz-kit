@@ -81,6 +81,12 @@ export interface Mechanic<C, S> {
    * goes on air itself; every engine path resolves it through `playedBy` (route.ts).
    */
   route?(config: C, question: Question): { readonly id: string; readonly config: unknown; readonly scoring?: ScoringRule };
+  /**
+   * Live settings change (`game.patch`) while a question is on air: the settings that cannot change any point
+   * already decided (what is shown at the reveal, steal allowed, strikes allowed…) apply to it at once. Absent:
+   * the question keeps the settings it was presented with (they apply from the next one).
+   */
+  reconfigure?(state: S, config: C): S;
   /** Called on `question.present`. Rejects question kinds it cannot run. */
   init(config: C, question: Question, env: MechanicEnv, round: RoundContext<S>): Result<S, Rejection>;
   /** `answer.submit` while phase = open. */
