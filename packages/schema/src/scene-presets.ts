@@ -36,6 +36,7 @@ export const PROGRAM_SCENE: Scene = Scene.parse({
       phases: [...QUESTION_PHASES],
       zones: [
         { id: "round", type: "round-info", rect: { x: 96, y: 60, w: 900, h: 56 } },
+        { id: "media", type: "question-media", rect: { x: 560, y: 130, w: 800, h: 290 }, props: { sound: true } },
         { id: "question", type: "question", rect: { x: 96, y: 560, w: 1728, h: 180 } },
         { id: "answers", type: "answer-list", rect: { x: 96, y: 760, w: 1728, h: 260 }, props: { columns: 2, gap: 20 } },
       ],

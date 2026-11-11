@@ -46,6 +46,8 @@ export type ClientOptions = {
   readonly onView?: (view: View) => void;
   readonly onStatus?: (status: ClientStatus, detail?: string) => void;
   readonly onAck?: (ack: AckMessage, action: Action) => void;
+  /** Media hashes to preload (sent by the server after each welcome). */
+  readonly onPreload?: (hashes: readonly string[]) => void;
 };
 
 const OPEN = 1;
@@ -96,7 +98,7 @@ export class QuizClient {
   private seq = -1;
   private resendScheduled = false;
   private status: ClientStatus = "stopped";
-  private readonly o: Required<Omit<ClientOptions, "onView" | "onStatus" | "onAck">> & Pick<ClientOptions, "onView" | "onStatus" | "onAck">;
+  private readonly o: Required<Omit<ClientOptions, "onView" | "onStatus" | "onAck" | "onPreload">> & Pick<ClientOptions, "onView" | "onStatus" | "onAck" | "onPreload">;
   view: View | null = null;
   viewer: Viewer | null = null;
 
@@ -241,6 +243,7 @@ export class QuizClient {
         this.send({ t: "pong", clientTime: this.o.now(), serverTime: m.serverTime });
         return;
       case "preload":
+        this.o.onPreload?.(m.hashes);
         return;
       case "error":
         if (m.code === "unauthorized" || m.code === "unsupported-version") {

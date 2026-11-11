@@ -14,6 +14,8 @@ export type SceneRendererProps = {
   readonly fit?: boolean;
   /** Draw zone outlines (studio / debug). */
   readonly outline?: boolean;
+  /** Resolves a media hash to a URL (preloaded blob). Default: `/media/<hash>`. */
+  readonly mediaUrl?: (hash: string) => string;
 };
 
 /**
@@ -64,7 +66,7 @@ export function SceneRenderer(props: SceneRendererProps): JSX.Element {
                   "pointer-events": "none",
                 }}
               >
-                <For each={layer.zones}>{(zone: Zone) => <ZoneBox zone={zone} view={view()} serverNow={props.serverNow} outline={props.outline === true} />}</For>
+                <For each={layer.zones}>{(zone: Zone) => <ZoneBox zone={zone} view={view()} serverNow={props.serverNow} mediaUrl={props.mediaUrl ?? defaultMediaUrl} outline={props.outline === true} />}</For>
               </div>
             )}
           </For>
@@ -73,6 +75,8 @@ export function SceneRenderer(props: SceneRendererProps): JSX.Element {
     </div>
   );
 }
+
+const defaultMediaUrl = (hash: string): string => `/media/${hash}`;
 
 function ZoneBox(p: ZoneProps & { readonly outline: boolean }): JSX.Element {
   return (
@@ -89,7 +93,7 @@ function ZoneBox(p: ZoneProps & { readonly outline: boolean }): JSX.Element {
         ...p.zone.style,
       }}
     >
-      <Dynamic component={zoneComponent(p.zone.type)} zone={p.zone} view={p.view} serverNow={p.serverNow} />
+      <Dynamic component={zoneComponent(p.zone.type)} zone={p.zone} view={p.view} serverNow={p.serverNow} mediaUrl={p.mediaUrl} />
     </div>
   );
 }

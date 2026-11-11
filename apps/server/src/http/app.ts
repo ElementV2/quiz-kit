@@ -1,4 +1,5 @@
 import { existsSync, readFileSync } from "node:fs";
+import type { Readable } from "node:stream";
 import { join } from "node:path";
 import fastifyStatic from "@fastify/static";
 import Fastify, { type FastifyInstance, type FastifyRequest, type FastifyServerOptions } from "fastify";
@@ -6,6 +7,7 @@ import { z } from "zod";
 import type { Links } from "../links.ts";
 import type { SessionRuntime } from "../runtime/session-runtime.ts";
 import { loadGameDocument, type GameDocument } from "@quiz/schema";
+import type { MediaStore } from "../media/media-store.ts";
 import { verifyToken } from "../tokens.ts";
 import { PREVIEW_CSS, PREVIEW_HTML, PREVIEW_JS } from "./preview-page.ts";
 
@@ -15,6 +17,7 @@ export type HttpDeps = {
   readonly revoke: (linkId: string) => Links;
   readonly joinCode: () => string;
   readonly newSession: (game: GameDocument) => { id: string };
+  readonly media: MediaStore;
   readonly join: (name: string) => { ok: true; token: string; participantId: string } | { ok: false; error: string };
   readonly secret: string;
   readonly show: string;
@@ -108,6 +111,32 @@ export function buildHttpApp(deps: HttpDeps, options: FastifyServerOptions): Fas
     return { ...deps.health(), presence: deps.presence() };
   });
 
+  // Media upload: raw body streamed to disk while hashed (no multipart, no buffering of big stingers).
+  app.addContentTypeParser(/^(image|video|audio)\/.+$|^application\/octet-stream$/, (_req, payload, done) => done(null, payload));
+  app.post<{ Querystring: { t?: string; name?: string } }>("/api/media", { bodyLimit: 1024 * 1024 * 1024 }, async (req, reply) => {
+    if (!controlToken(deps, req)) return reply.code(401).send({ error: "jeton régie requis" });
+    const mime = (req.headers["content-type"] ?? "application/octet-stream").split(";")[0]?.trim() ?? "application/octet-stream";
+    const body = req.body;
+    if (typeof body !== "object" || body === null || !("pipe" in body)) return reply.code(400).send({ error: "corps binaire attendu" });
+    try {
+      const meta = await deps.media.put(body as Readable, mime, req.query.name ?? "media"); // oxlint-disable-line typescript/no-unsafe-type-assertion -- the content-type parser above hands over the raw request stream
+      return { media: deps.media.asMedia(meta), name: meta.name, size: meta.size, convertedFrom: meta.convertedFrom ?? null };
+    } catch (e) {
+      return reply.code(415).send({ error: e instanceof Error ? e.message : "média refusé" });
+    }
+  });
+
+  /** Media by content hash: immutable bytes → cached a year; SVG / HTML can never run script (sandbox CSP). */
+  app.get<{ Params: { hash: string } }>("/media/:hash", async (req, reply) => {
+    const meta = deps.media.meta(req.params.hash);
+    const path = deps.media.pathOf(req.params.hash);
+    if (meta === null || path === null) return reply.code(404).send({ error: "média inconnu" });
+    reply.header("cache-control", "public, max-age=31536000");
+    reply.header("content-security-policy", "default-src 'none'; style-src 'unsafe-inline'; sandbox");
+    reply.type(meta.mime);
+    return reply.sendFile(req.params.hash, deps.media.dir);
+  });
+
   /** Starts a new game from a game document (imported CSV, template). Control token only; journaled. */
   app.post<{ Querystring: { t?: string } }>("/api/session", async (req, reply) => {
     if (!controlToken(deps, req)) return reply.code(401).send({ error: "jeton régie requis" });
@@ -148,6 +177,8 @@ export function buildHttpApp(deps: HttpDeps, options: FastifyServerOptions): Fas
     }
   });
 
+  // The only decorating instance: gives `reply.sendFile` (ranges, etag) to the /media route.
+  void app.register(fastifyStatic, { root: deps.media.dir, serve: false });
   for (const name of APPS) {
     if (!existsSync(appDist(name))) continue;
     // Hashed file names → long max-age (works over plain HTTP; `immutable` would be ignored there, ADR-0012).

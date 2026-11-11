@@ -8,6 +8,7 @@ import { Phase } from "./views.ts";
 
 export const ZoneType = z.enum([
   "question", // bound: question prompt
+  "question-media", // bound: question.prompt.media (image, video, audio — blind test)
   "answer-list", // repeat over the mechanic options (choice) — item state: idle | selected | correct | wrong
   "timer", // bound: view.timer (countdown from server time)
   "leaderboard", // bound: view.leaderboard

@@ -18,6 +18,8 @@ export type TransportDeps = {
   /** Monotonic clock (ms): rate limiting must not jump when Windows resyncs the wall clock. */
   readonly monotonic?: () => number;
   readonly log: Log;
+  /** Media hashes of the current game, pushed after every welcome so clients preload them (doc 04 `preload`). */
+  readonly preload?: () => string[];
   readonly helloTimeoutMs?: number;
   readonly heartbeatMs?: number;
   /** Pings without pong before a connection is considered dead (Wi-Fi power saving tolerates a few). */
@@ -261,6 +263,8 @@ export class WsTransport {
     conn.stream = stream;
     stream.welcome(runtime.welcomeView(viewer), this.deps.clock(), PROTOCOL_VERSION);
     conn.unsubscribe = runtime.subscribe(stream);
+    const hashes = this.deps.preload?.() ?? [];
+    if (hashes.length > 0) this.send(conn, { t: "preload", hashes });
   }
 
   /** The server stamps the actor from the token, never from the message (non-negotiable #2). */

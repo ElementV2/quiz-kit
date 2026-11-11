@@ -15,7 +15,7 @@ function Output() {
   const scene = () => OUTPUT_SCENES[sceneId()] ?? PROGRAM_SCENE;
   return (
     <>
-      <SceneRenderer scene={scene()} theme={DEFAULT_THEME} view={conn.view()} serverNow={conn.serverNow} />
+      <SceneRenderer scene={scene()} theme={DEFAULT_THEME} view={conn.view()} serverNow={conn.serverNow} mediaUrl={conn.mediaUrl} />
       {/* Operator hint, only while disconnected: never shown on air once connected. */}
       <Show when={conn.status() === "rejected"}>
         <div style={{ position: "fixed", left: "20px", bottom: "20px", padding: "10px 16px", background: "#7f1d1d", color: "#fff", font: "600 20px system-ui", "border-radius": "10px" }}>

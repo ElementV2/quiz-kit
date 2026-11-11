@@ -2,7 +2,7 @@ import { For, Show, createEffect, createSignal, onCleanup, type Component, type 
 import type { View, Zone, ZoneType } from "@quiz/schema";
 import { estimateFontSize, optionLetter, optionShare, optionState, readPath, secondsLeft } from "./logic.ts";
 
-export type ZoneProps = { readonly zone: Zone; readonly view: View; readonly serverNow: () => number };
+export type ZoneProps = { readonly zone: Zone; readonly view: View; readonly serverNow: () => number; readonly mediaUrl: (hash: string) => string };
 
 const num = (z: Zone, key: string, fallback: number): number => {
   const v = z.props[key];
@@ -174,11 +174,35 @@ const TextZone: Component<ZoneProps> = (p) => {
   return <FitText text={text()} max={num(p.zone, "size", 48)} box={{ w: p.zone.rect.w, h: p.zone.rect.h }} />;
 };
 
+/** Question picture / video / sound (blind test). Sound is embedded in the output so OBS / vMix capture it (doc 06). */
+const QuestionMediaZone: Component<ZoneProps> = (p) => {
+  const media = () => p.view.question?.prompt.media;
+  return (
+    <Show when={media()}>
+      {(m) => (
+        <div style={{ ...panel, width: "100%", height: "100%", overflow: "hidden", display: "grid", "place-items": "center", background: "transparent", "box-shadow": "none" }}>
+          <Show when={m().mime.startsWith("image/")}>
+            <img src={p.mediaUrl(m().hash)} alt="" style={{ "max-width": "100%", "max-height": "100%", "object-fit": "contain", "border-radius": "var(--q-radius)" }} />
+          </Show>
+          <Show when={m().mime.startsWith("video/")}>
+            <video src={p.mediaUrl(m().hash)} autoplay muted={p.zone.props["sound"] !== true} loop playsinline style={{ "max-width": "100%", "max-height": "100%", "border-radius": "var(--q-radius)" }} />
+          </Show>
+          <Show when={m().mime.startsWith("audio/") && p.zone.props["sound"] !== false}>
+            <audio src={p.mediaUrl(m().hash)} autoplay />
+            <span style={{ "font-size": "96px" }}>♪</span>
+          </Show>
+        </div>
+      )}
+    </Show>
+  );
+};
+
 const ImageZone: Component<ZoneProps> = (p) => <img src={str(p.zone, "src", "")} alt="" style={{ width: "100%", height: "100%", "object-fit": "contain" }} />;
 
 /** Zone registry (CONVENTIONS « O » : new zone type = new entry, no change to the scene renderer). */
 const REGISTRY: Record<ZoneType, Component<ZoneProps>> = {
   question: QuestionZone,
+  "question-media": QuestionMediaZone,
   "answer-list": AnswerListZone,
   timer: TimerZone,
   leaderboard: LeaderboardZone,

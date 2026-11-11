@@ -13,6 +13,10 @@ export type QuizConnection = {
   readonly serverNow: () => number;
   readonly submit: (action: Action) => Promise<AckMessage>;
   readonly client: QuizClient;
+  /** URL of a media: preloaded blob when ready, server URL otherwise (cached a year by HTTP). */
+  readonly mediaUrl: (hash: string) => string;
+  /** Preloaded / total, for the checklist and the tablet status. */
+  readonly preloaded: Accessor<{ done: number; total: number }>;
 };
 
 /** Token from `?t=` (links printed by the server / pasted in OBS). */
@@ -61,6 +65,25 @@ export function createQuizConnection(opts: { token?: string; persist?: boolean; 
   const storage = storageOrNull();
   const store = opts.persist === false || storage === null ? memoryIntentStore() : localStorageIntentStore(`quiz.intents.${token.slice(-24)}`, storage);
   const scheme = location.protocol === "https:" ? "wss" : "ws";
+  // Media preload into memory (blob URLs): works over plain HTTP — no Service Worker needed (ADR-0012).
+  const blobs = new Map<string, string>();
+  const [preloaded, setPreloaded] = createSignal({ done: 0, total: 0 });
+  const [mediaVersion, setMediaVersion] = createSignal(0);
+  const preload = async (hashes: readonly string[]) => {
+    const todo = hashes.filter((h) => !blobs.has(h));
+    setPreloaded({ done: hashes.length - todo.length, total: hashes.length });
+    for (const h of todo) {
+      try {
+        const res = await fetch(`/media/${h}`);
+        if (!res.ok) continue;
+        blobs.set(h, URL.createObjectURL(await res.blob()));
+        setPreloaded((p) => ({ ...p, done: p.done + 1 }));
+        setMediaVersion((v) => v + 1);
+      } catch {
+        /* network hiccup: the zone falls back to the server URL */
+      }
+    }
+  };
   const client: QuizClient = new QuizClient({
     url: `${scheme}://${location.host}/ws`,
     token,
@@ -78,6 +101,7 @@ export function createQuizConnection(opts: { token?: string; persist?: boolean; 
       setDetail(d);
     },
     onAck: () => setQueued(client.queued.length),
+    onPreload: (hashes) => void preload(hashes),
   });
   client.start();
   onCleanup(() => client.stop());
@@ -94,5 +118,10 @@ export function createQuizConnection(opts: { token?: string; persist?: boolean; 
       return p;
     },
     client,
+    mediaUrl: (hash) => {
+      mediaVersion(); // reactive: re-render when a blob becomes available
+      return blobs.get(hash) ?? `/media/${hash}`;
+    },
+    preloaded,
   };
 }
