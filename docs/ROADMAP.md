@@ -31,7 +31,7 @@ Règle : une phase n'est terminée que quand ses critères de sortie passent. Co
 - [x] `host` : bonne réponse, notes (valider / refuser : avec la mécanique buzzer)
 - [ ] `player` : PWA `/seat/<n>` et `/play/<code>`, Wake Lock, cache médias, « Réponse enregistrée » après ack
 - [x] HTTPS LAN tranché (ADR-0012) : HTTP simple, aucune install sur les tablettes louées — prérequis de `player` (Wake Lock, Service Worker)
-- [ ] Médias minimum : stockage par hash + `preload` (prérequis du cache médias de `player`)
+- [x] Médias minimum : stockage par hash + `preload` (prérequis du cache médias de `player`)
 - [ ] Mécaniques `poll-board` (sondage à slots, 3 erreurs, vol) et `buzzer` (priorité, blocage)
 - [ ] Mécanique `ladder` + jokers 50:50 / sondage public (prérequis du template QCM à paliers)
 - [ ] Joueurs / équipes / sièges : création, import CSV, statuts, échange de tablette
@@ -43,12 +43,12 @@ Règle : une phase n'est terminée que quand ses critères de sortie passent. Co
 
 ## Phase 2 — Studio et habillage
 
-- [ ] Mode Contenu (tableur), mode Scènes (canvas, zones, bindings, inspecteur d'états, simulation)
-- [ ] Thèmes (tokens, matériaux, motion, sons) + génération depuis 2 couleurs + logo
+- [x] Mode Contenu (tableur), mode Scènes (canvas, zones, bindings, inspecteur d'états, simulation)
+- [x] Thèmes (tokens, motion) + génération depuis 2 couleurs (contraste WCAG) — matériaux, sons et logo : à compléter
 - [ ] Moments + couche PixiJS + niveaux de qualité — **bench OBS / vMix**
 - [ ] Import de design reçu (calque de référence, tracé de zones, découpe, 9-slice, états dérivés)
-- [ ] Export gabarit (PNG/SVG + fiche PDF/CSV) + réimport par nommage
-- [ ] Médias : stockage par hash, transcodage ffmpeg, contrôles à l'import
+- [x] Export gabarit (PNG/SVG + fiche CSV) + réimport par nommage — fiche PDF : à faire
+- [x] Médias : stockage par hash, transcodage ffmpeg, contrôles à l'import
 - [x] Export / import de jeu `.quiz` (zip : game.json + médias adressés par hash, vérifiés à l'import)
 
 ## Phase 3 — Formats libres

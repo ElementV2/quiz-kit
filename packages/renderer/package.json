@@ -15,6 +15,7 @@
     "solid-js": "1.9.19"
   },
   "devDependencies": {
+    "fast-check": "4.10.2",
     "vite": "8.3.8",
     "vitest": "5.1.0"
   }

@@ -90,6 +90,8 @@ function ZoneBox(p: ZoneProps & { readonly outline: boolean }): JSX.Element {
         width: `${p.zone.rect.w}px`,
         height: `${p.zone.rect.h}px`,
         outline: p.outline ? "2px dashed rgba(255,255,255,.35)" : "none",
+        // Repeated zones (answer-list) style each cell per state; other zones take their idle look as a whole.
+        ...(p.zone.type === "answer-list" ? {} : p.zone.states["idle"]),
         ...p.zone.style,
       }}
     >

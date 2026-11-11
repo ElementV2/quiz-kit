@@ -55,7 +55,7 @@ export function loggerOptions(level: string, stream?: { write(s: string): void }
 }
 
 /** Front apps built by Vite (`pnpm build`), served from their `dist`. Falls back to the phase-0 preview if not built. */
-const APPS = ["output", "control", "host", "player"] as const;
+const APPS = ["output", "control", "host", "player", "studio"] as const;
 type AppName = (typeof APPS)[number];
 const appDist = (name: AppName): string => join(import.meta.dirname, "..", "..", "..", name, "dist");
 
@@ -252,6 +252,7 @@ export function buildHttpApp(deps: HttpDeps, options: FastifyServerOptions): Fas
   app.get("/out/:scene", page("output"));
   app.get("/seat/:n", page("player"));
   app.get("/play", page("player"));
+  app.get("/studio", page("studio"));
   app.get("/assets/preview.js", async (_req, reply) => reply.type("text/javascript; charset=utf-8").send(PREVIEW_JS));
   app.get("/assets/preview.css", async (_req, reply) => reply.type("text/css; charset=utf-8").send(PREVIEW_CSS));
   app.get("/", async (_req, reply) => reply.type("text/plain; charset=utf-8").send("Quiz — serveur de show. Liens : console du serveur et links.txt dans le dossier de données.\n"));
