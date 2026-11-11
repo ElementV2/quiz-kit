@@ -25,7 +25,6 @@ test("studio: content, scene simulation, generated theme, save, then the output 
   await expect(studio.locator(".s-table tbody tr")).toHaveCount(4);
 
   await studio.getByRole("button", { name: "Scènes" }).click();
-  await studio.getByRole("button", { name: "Personnaliser les scènes" }).click();
   await expect(studio.locator(".s-stage .q-zone-question")).toContainText("capitale de la France");
   await expect(studio.locator('.s-stage .q-answer[data-state="correct"]')).toContainText("Paris"); // simulated "revealed"
   await studio.locator(".s-zone").filter({ hasText: "question" }).first().click();
@@ -80,7 +79,6 @@ test("studio design import: PSD named layers become zones, fonts / colours liste
   await studio.getByRole("button", { name: "+ Nouvelle" }).click();
   await studio.getByRole("menuitem", { name: /Partie vide/ }).click();
   await studio.getByRole("button", { name: "Scènes" }).click();
-  await studio.getByRole("button", { name: "Personnaliser les scènes" }).click();
   // The 1920x1080 stage fills the canvas, also after leaving the tab and coming back (scale bug).
   const fills = () => studio.evaluate(() => {
     const c = document.querySelector(".s-canvas")?.getBoundingClientRect();

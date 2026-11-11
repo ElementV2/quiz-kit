@@ -1,13 +1,16 @@
 import { For, Show, createEffect, createMemo, createSignal, onCleanup, onMount, type JSX } from "solid-js";
 import { DEFAULT_THEME, GameDocument, OUTPUT_SCENES, ZoneState, ZoneType, type Layer, type Scene, type Theme, type Zone } from "@quiz/schema";
 import { SceneRenderer, layerVisible } from "@quiz/renderer";
-import { Button, Panel, confirmDialog, isDialogOpen } from "@quiz/ui";
+import { Button, confirmDialog, isDialogOpen } from "@quiz/ui";
 import { api, download, imageSize, mediaUrl, svgToPng } from "./api.ts";
 import { HANDLES, ZONE_CODE, bandRect, fitScale, intersects, keepInside, moveRects, overflows, removeZones, resizeFrom, toggleRef, type Handle, type Rect, type ZoneRef } from "./canvas-logic.ts";
 import { alignRects, assetSheetHtml, distributeRects, duplicateZone, freeId, pickColor, psdTemplateLayers, rectFromDrag, sceneIds, zonesFromPsd } from "./design-import.ts";
 import { JsonField } from "./fields.tsx";
 import { SAFE_AREAS, SIMULATED_PHASES, assetSheet, assetSheetCsv, deriveStates, longestText, matchDeliveredAssets, outsideSafe, simulateView, snap, templateSvg, type SimulatedPhase } from "./studio-logic.ts";
 import { hex, inField, snapshot, type Update } from "./util.ts";
+
+/** The scenes a game without its own uses (programme, classement, mur). */
+const BUILT_IN_SCENES: readonly Scene[] = Object.values(OUTPUT_SCENES);
 
 const PHASE_LABEL: Record<SimulatedPhase, string> = { idle: "Entre deux questions", presenting: "Question présentée", open: "Réponses ouvertes", locked: "Réponses fermées", revealed: "Réponse révélée", "game.end": "Fin de partie" };
 export const COLOR_LABELS: Record<keyof Theme["colors"], string> = { surface: "Fond des cadres", surfaceAlt: "Fond secondaire", text: "Texte", muted: "Texte secondaire", primary: "Primaire", accent: "Accent", correct: "Bonne réponse", wrong: "Mauvaise réponse", selected: "Sélection" };
@@ -98,13 +101,16 @@ export function SceneEditor(p: { doc: GameDocument; update: Update }): JSX.Eleme
   const [help, setHelp] = createSignal(false);
   const [psdInfo, setPsdInfo] = createSignal<{ fonts: { name: string; size: number | null; layer: string }[]; colors: string[] } | null>(null);
 
-  const scene = (): Scene | undefined => p.doc.scenes[sceneIdx()];
+  // A game without its own scenes shows the built-in ones; the first edit copies them into the game.
+  const scenes = (): readonly Scene[] => (p.doc.scenes.length > 0 ? p.doc.scenes : BUILT_IN_SCENES);
+  const scene = (): Scene | undefined => scenes()[sceneIdx()];
   const size = () => scene()?.size ?? { w: 1920, h: 1080 };
   const zoneAt = (r: ZoneRef): Zone | undefined => scene()?.layers[r.layer]?.zones[r.zone];
   const isSel = (r: ZoneRef) => sel().some((s) => s.layer === r.layer && s.zone === r.zone);
   const layerLocked = (l: Layer) => locked().has(l.id);
   const zoneLocked = (l: Layer, z: Zone) => layerLocked(l) || locked().has(`${l.id}/${z.id}`);
   const editScene = (f: (s: Scene) => void, key?: string) => p.update((d) => {
+    if (d.scenes.length === 0) d.scenes = BUILT_IN_SCENES.map((x) => structuredClone(x));
     const sc = d.scenes[sceneIdx()];
     if (sc !== undefined) f(sc);
   }, key);
@@ -361,7 +367,6 @@ export function SceneEditor(p: { doc: GameDocument; update: Update }): JSX.Eleme
     ro.observe(el);
   };
   onCleanup(() => ro?.disconnect());
-  const ensureScenes = () => p.update((d) => { if (d.scenes.length === 0) d.scenes = Object.values(OUTPUT_SCENES).map((s) => structuredClone(s)); });
   const view = createMemo(() => {
     const v = GameDocument.safeParse(snapshot(p.doc));
     return v.success ? simulateView(v.data, phase(), qIndex()) : null;
@@ -435,7 +440,6 @@ export function SceneEditor(p: { doc: GameDocument; update: Update }): JSX.Eleme
   };
 
   return (
-    <Show when={p.doc.scenes.length > 0} fallback={<Panel title="Scènes"><p>Cette partie utilise les scènes intégrées (programme, classement, mur).</p><Button onClick={ensureScenes}>Personnaliser les scènes</Button></Panel>}>
       <div class="s-scenes">
         {/* ───── Left: layers and zones ───── */}
         <aside class="s-outline">
@@ -505,8 +509,9 @@ export function SceneEditor(p: { doc: GameDocument; update: Update }): JSX.Eleme
         <section class="s-canvas-col">
           <div class="s-toolbar">
             <select value={sceneIdx()} title="Scène" onChange={(e) => { setSceneIdx(Number(e.currentTarget.value)); setSel([]); setLayerSel(null); }}>
-              <For each={p.doc.scenes}>{(s, i) => <option value={i()}>{s.name}</option>}</For>
+              <For each={scenes()}>{(s, i) => <option value={i()}>{s.name}</option>}</For>
             </select>
+            <Show when={p.doc.scenes.length === 0}><span class="muted s-hint" title="Dès la première modification, ces scènes sont copiées dans cette partie (les autres parties ne changent pas).">scènes intégrées</span></Show>
             <select value={phase()} title="Phase simulée" onChange={(e) => { const v = SIMULATED_PHASES.find((x) => x === e.currentTarget.value); if (v !== undefined) setPhase(v); }}>
               <For each={SIMULATED_PHASES}>{(ph) => <option value={ph}>Simuler : {PHASE_LABEL[ph]}</option>}</For>
             </select>
@@ -662,7 +667,6 @@ export function SceneEditor(p: { doc: GameDocument; update: Update }): JSX.Eleme
           </div>
         </aside>
       </div>
-    </Show>
   );
 }
 

@@ -105,7 +105,6 @@ for (const vp of [{ width: 1366, height: 768 }, { width: 1920, height: 1080 }]) 
     await studio.getByRole("button", { name: "+ Nouvelle" }).click();
     await studio.getByRole("menuitem", { name: /Partie vide/ }).click();
     await studio.getByRole("button", { name: "Scènes" }).click();
-    await studio.getByRole("button", { name: "Personnaliser les scènes" }).click();
     await expect(studio.getByText("Cliquez une zone pour la modifier.")).toBeVisible();
 
     // The whole stage is visible (fits width AND height), without page scroll.
