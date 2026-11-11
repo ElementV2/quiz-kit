@@ -37,7 +37,8 @@ apps/control        régie live
 apps/host           vue animateur
 apps/player         tablettes / téléphones (PWA)
 apps/output         sorties 1920×1080 (OBS Browser Source, vMix Web Browser, LED)
-apps/desktop        (phase 4) lanceur Tauri qui supervise le serveur
+apps/hub            accueil `/` : code équipe, postes, sorties, QR tablettes
+apps/desktop        lanceur Tauri 2 qui démarre / relance le serveur (ADR-0014)
 ```
 
 Règles de dépendance (ADR-0007, vérifiées par `pnpm check:deps` + lint) :
@@ -62,7 +63,12 @@ pnpm load           # k6 : 500 clients simulés (k6 doit être installé)
 pnpm chaos          # 50 bots Node : kill -9 serveur, coupure réseau, reload sortie ; journal audité
 pnpm lint && pnpm typecheck
 pnpm check          # lint + typecheck + check:deps + test (CI locale)
+pnpm build && pnpm --filter @quiz/desktop package   # installateur Windows (Tauri, ADR-0014)
 ```
+
+Accueil du serveur : `http://<IP>:7300/` (code équipe affiché sur le PC serveur en `localhost` et dans
+`links.txt`). Variables utiles : `QUIZ_STAFF_CODE`, `QUIZ_OSC_PORT` + `QUIZ_OSC_ALLOW`, `QUIZ_TWITCH_CLIENT_ID`,
+`QUIZ_YOUTUBE_API_KEY`, `QUIZ_STANDBY_OF` + `QUIZ_STANDBY_TOKEN` (doc 05).
 
 ## Façon de travailler
 

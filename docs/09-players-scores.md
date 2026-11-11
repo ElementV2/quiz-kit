@@ -22,9 +22,10 @@ Création, nom, couleur, capitaine, déplacement de joueurs ; score d'équipe = 
 - Correction : +/− rapide ou total saisi (génère une ligne `manual`), motif optionnel.
 - `score.void` annule une ligne ; tout se recalcule.
 - `question.regrade` : on corrige la bonne réponse, le moteur recalcule les points de tous pour cette
-  question (aperçu avant validation).
+  question (aperçu avant validation). **Implémenté** (doc 03, ADR-0013) : aperçu `POST /api/regrade/preview`.
 - Barème modifiable en direct, doublement, question bonus.
-- Départage : règle du format (rapidité cumulée, barrage, décision régie).
+- Départage : règle du format (rapidité cumulée, barrage, décision régie). **Implémenté** : `tieBreak: speed`
+  (temps cumulé des bonnes réponses) ou `control` (même rang ; barrage = une manche `number-answer` `closest`).
 - Classement masquable à l'antenne / sur tablettes, toujours visible en régie.
 
 ## Corrections en direct
@@ -35,3 +36,8 @@ rejouer, rallonger / couper le chrono, rouvrir les réponses, saisir la réponse
 ## Après le show
 
 Export CSV / PDF (classement, détail par question, réponses, gagnants), replay depuis le journal.
+
+**Implémenté** : `GET /api/results?kind=ranking|detail` (CSV pour Excel : `;`, BOM UTF-8, formules
+neutralisées) et `?format=html` (page imprimable → PDF par le navigateur), jeton régie ou scoreur.
+Replay : `GET /api/journal` (jeton régie ou studio) + onglet Replay du studio (rejeu par le moteur, rendu de
+la sortie à chaque étape).

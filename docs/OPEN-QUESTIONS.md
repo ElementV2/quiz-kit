@@ -67,3 +67,26 @@
 Règle : une question vérifiée devient un ADR ou une ligne dans le doc concerné, et la case est cochée.
 - [ ] Import `.quiz` : plafonner la taille décompressée (par entrée et totale) avant `unzipSync` — archive piégée
       (zip bomb). Usage interne (jeton régie / studio requis), à faire avant toute ouverture plus large. Revue phase 2, M3.
+
+### Phase 3 / 4 (2026-11-11)
+
+- [ ] Twitch Device Code flow : l'étape « token » attend `scopes` (tableau des paramètres) ou `scope` (exemple curl) ?
+      La doc se contredit : le code envoie `scopes` ; vérifier au premier essai réel.
+- [ ] Twitch : paramètres exacts du refresh pour un client public (sans secret) — NON VÉRIFIÉ ; le code envoie
+      `client_id`, `grant_type=refresh_token`, `refresh_token`.
+- [ ] Twitch : doublons possibles de notifications sur le transport WebSocket (dédoublonnage par `message_id` en place).
+- [ ] YouTube : une clé d'API suffit-elle pour `liveChatMessages.list` (doc muette ; `streamList` l'accepte) ?
+      Sinon : OAuth à ajouter. Heure de remise à zéro du quota : non trouvée.
+- [ ] Companion « Generic: OSC » en TCP : framing (SLIP ou préfixe de taille) non vérifié — utiliser UDP.
+- [ ] Bots de répétition et vote du chat : jamais testés contre une vraie session de 50 tablettes + chat réel.
+- [ ] Historique des révélations dans les snapshots (`GameState.history`) : ~2–3 Mo en fin de show à 500 joueurs,
+      sérialisés à chaque snapshot (revue phase 3, m2). Mesurer la durée sur la machine show (`pnpm load`).
+- [ ] Sortie `reveal-image` : la sortie (PC OBS / vMix) reçoit l'image complète, masquée par les cases à l'écran.
+      Accepté (poste de confiance, jeton de sortie) ; à revoir si une sortie est un jour exposée au public.
+- [ ] Accès équipe distant : 30 échecs / min toutes IP bloquent l'accès distant 5 min (déni de service possible
+      depuis le Wi-Fi joueurs ; l'accès `localhost` et `links.txt` restent disponibles). Réseau équipe séparé
+      recommandé ; à revoir si gênant (revue 4, m4).
+- [ ] Desktop : la surveillance du lanceur par PID (`QUIZ_PARENT_PID`) peut être trompée par une réutilisation de PID
+      sous Windows ; à la fermeture le serveur est arrêté par `TerminateProcess` (sans perte grâce au journal).
+      Mieux : handle / pipe hérité (revue 4, m5–m6).
+- [ ] `QUIZ_APPS_DIR` lu hors de `config.ts` (module `http/app.ts`) — à rapatrier dans la config validée (revue 4, m8).

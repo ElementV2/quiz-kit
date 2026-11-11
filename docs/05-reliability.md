@@ -11,11 +11,38 @@ Zéro réponse perdue, zéro fuite, aucune panne qui coupe l'antenne.
 | Tablette en veille | Wake Lock API + mode kiosque (Accès guidé iOS / épinglage Android) | check-list pré-show |
 | Sortie OBS/vMix plante ou recharge | Snapshot au welcome, état exact en < 1 s | `e2e:output-reload` |
 | Crash du serveur | Journal SQLite écrit avant diffusion, superviseur relance, reprise par rejeu | `chaos:kill-server` |
-| Machine show HS | Phase 4 : hot standby qui suit le journal, bascule manuelle | `chaos:failover` |
+| Machine show HS | Hot standby qui suit le journal, bascule manuelle (implémenté, voir plus bas) | `standby.test.ts` |
 | Internet coupé | Mode Show 100 % LAN | test réseau isolé |
 | Média lourd | Préchargement + cache Service Worker, check-list rouge si incomplet | `e2e:preload` |
 | Erreur régie | Undo (événement, ADR-0010), overrides, confirmation des actions irréversibles | tests moteur |
 | Spam chat | 1 réponse / compte / question, rate limit, filtre comptes récents | `load:chat` |
+
+## Serveur de secours (hot standby) — implémenté
+
+Deux PC show sur le réseau plateau. Sur le **secours** : copier `secret.key` du principal (tous les liens et
+jetons marchent alors sur les deux), puis démarrer avec
+`QUIZ_STANDBY_OF=http://<IP du principal>:7300` et `QUIZ_STANDBY_TOKEN=<jeton régie du principal>`.
+Le secours lit le journal du principal toutes les 500 ms (`/api/journal`, paginé), l'écrit dans son propre
+journal et le rejoue : même état exact, quelques centaines de ms derrière ; il suit les changements de partie et
+copie les médias manquants. Tant qu'il n'est pas promu : toute action est refusée, aucun chrono n'est armé,
+aucune partie ne peut y être lancée. Régie du secours : `GET /api/standby` (retard en événements, dernier contact,
+erreur) et **« Basculer »** = `POST /api/standby/promote`.
+
+Bascule **manuelle**, jamais automatique : une coupure du seul lien entre les deux PC laisserait sinon deux
+serveurs décider en même temps (split brain). Procédure : constater la panne du principal (écran régie
+« déconnecté », `lag` qui ne bouge plus), cliquer « Basculer » sur la régie du secours, puis faire pointer les
+écrans sur le secours : IP de secours dans OBS / vMix (ou nom DNS / IP virtuelle qui suit le serveur actif), les
+tablettes rouvrent l'accueil du secours. Ne jamais redémarrer l'ancien principal sans `QUIZ_STANDBY_OF` vers
+le nouveau.
+
+Garde-fous : la bascule est refusée si le principal a répondu il y a moins de 8 s (forcer = case « le principal
+est bien arrêté ») ; le secours cesse de suivre et l'affiche (`diverged`) si les deux serveurs n'ont pas la même
+version, si son journal a bifurqué de celui du principal, ou si une action du principal y est refusée — ne pas
+basculer sur un secours en divergence. Les médias manquants sont copiés en tâche de fond (`mediaMissing` dans
+l'état : attendre 0 avant le show). Seul le serveur actif pilote vMix. **Horloges** : les chronos sont en heure
+murale ; synchroniser les deux PC (NTP / heure Windows) avant le show, sinon un chrono repris après bascule part
+trop tôt ou trop tard. Code : `apps/server/src/standby.ts`, test `standby.test.ts` (miroir, refus, changement de partie,
+bascule).
 
 ## Boucle de jeu
 

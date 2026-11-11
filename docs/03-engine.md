@@ -113,6 +113,64 @@ tous) : `fifty` masque 2 mauvaises options tirées par `ctx.rng` ; `audience` : 
 hasard entre les autres options visibles, total 100. Avant révélation, `status`, `level` et `gain` ne
 dépendent pas de la justesse de la réponse (testé).
 
+### Mécaniques de la phase 3 (implémentées)
+
+Capacités optionnelles du contrat : ADR-0013 (`freeOrder`, `hidesPromptMedia`, `projectIdle`, `regrade`,
+`onSkip`, `RoundContext.questions`). Toutes passent `mechanicContractSuite`. Une réponse est conservée sous
+forme texte (`PlayerView.myAnswer`, `ControlView.answers`) : `text` → [texte], `number` → [valeur],
+`order` → ids, `pairs` → ["gauche:droite"], `pin` → ["x,y"], `allocation` → ["id:montant"].
+
+- `text-answer` (question `text`, ou `single` jouée en saisie libre) : comparaison sans accents, casse,
+  ponctuation ni article de tête (le, la, les, l', un, une, des, du, de, d', the, a, an), fautes tolérées
+  selon la longueur (0 jusqu'à 4 lettres, 1 jusqu'à 8, sinon 2 ; `maxDistance` pour forcer), jamais sur
+  les nombres (« 1789 » ≠ « 1788 »). Limite connue : retirer l'article de tête peut accepter un faux positif
+  (« Land » pour « La La Land », « Moines » pour « Des Moines ») — ajouter la réponse exacte comme seule
+  acceptée et `maxDistance: 0` dans ces cas. La régie (ou l'animateur) peut renverser un verdict
+  (`answer.judge { participantId, correct }`) jusqu'à la révélation (liste `review` réservée régie / animateur).
+- `number-answer` : `tolerance` (juste si |écart| ≤ tolérance) ou `closest` (le ou les plus proches gagnent,
+  la tolérance vaut exact). Classement top 10 pour régie / sorties, jamais envoyé aux tablettes.
+- `order` (3 à 8 propositions, affichées mélangées par la seed, jamais dans le bon ordre) : juste = ordre exact.
+- `pairs` : colonne de droite mélangée, identifiants anonymes (`r0`…) ; juste = toutes les paires.
+- `pin` (image obligatoire) : juste = point dans la zone cible (0..1). Épingles anonymes aux sorties à la
+  révélation, jamais aux tablettes (poids).
+- `allocation` (« Money Drop ») : tout le budget réparti, au moins une proposition vide (`keepOneEmpty`) ;
+  points `fixed` = montant resté sur la bonne réponse.
+- `board` (Jeopardy) : grille catégorie (1er tag) × valeur (`values[rang]`), questions `oral`, `text`
+  ou `single` (les autres n'ont pas de case). La régie choisit la case (`question.present { questionIndex }`,
+  ordre libre), buzz + jugement comme `buzzer` ; juste = + valeur, faux = − valeur (`penalty`). Grille
+  projetée entre deux cases (`projectIdle`). Fin de manche quand toutes les cases sont jouées.
+- `hints` : `hints[]` de la question dévoilés un à un (`element.reveal { index = suivant }`, le premier à la
+  présentation) ; points `fixed` de `maxPoints` (1 indice) à `minPoints` (tous), figés à la réponse.
+  Les indices cachés ne quittent jamais le serveur (sauf régie / animateur).
+- `reveal-image` : l'image de la question découpée en `cols × rows` cases dévoilées dans un ordre tiré par la
+  seed ; même barème que `hints`. Les tablettes ne reçoivent jamais l'image (ni vue, ni préchargement).
+
+Rejouer une question à la même place (même manche, même index, y compris en relançant une manche déjà jouée
+avec `round.start { roundIndex }`) annule les points de sa révélation précédente et les remplace ; la même
+question jouée ailleurs garde ses points.
+
+`crowd-vote` : révéler avant la fin de `streamDelayMs` après la fermeture refuse les votes encore en route
+(révéler quelques secondes après, ou réduire le délai). L'animateur reçoit tout le conducteur (réponses et
+notes, pour lire à l'avance) : son écran ne doit pas être visible des caméras ni du public.
+`host.setDrive` ne s'annule jamais (`NEVER_UNDONE`) : reprendre la main = `host.setDrive { enabled: false }`.
+
+### Corrections en direct (phase 3, implémentées)
+
+- `question.replaceFromReserve { reserveId, questionIndex? }` : question à l'antenne → remplacée et
+  représentée de zéro (réponses perdues) ; entre deux questions → remplace la suivante (ou `questionIndex`).
+  Refusé après la révélation (undo ou regrade), ou sur une place déjà révélée ; en ordre libre (plateau),
+  préciser la case.
+- `question.edit { text }` : corrige le texte de la question à l'antenne.
+- `question.regrade { questionId, answerSpec }` (régie, scoreur) : même type de réponse ; chaque révélation
+  de la question dans l'historique est rejugée (mécanique avec `regrade`), ses lignes `auto` / `regrade`
+  annulées et réécrites (`reason: regrade`, équipe figée au moment du score d'origine), les lignes manuelles
+  restent. Une ligne de la question annulée à la main (`score.void`) est réécrite par le regrade, et un verdict
+  renversé à la main (`answer.judge`) reste prioritaire sur la nouvelle réponse. Aperçu sans journal :
+  `POST /api/regrade/preview`. Annulable (undo).
+- Départage (`format.tieBreak`) : `speed` = à total égal, le plus de bonnes réponses passe devant, puis le
+  temps cumulé de ces bonnes réponses le plus court ; `control` = même rang, la régie tranche (manche de barrage
+  `number-answer` en mode `closest`, ou points manuels).
+
 ## Actions (extrait)
 
 - Régie : `game.start`, `round.start`, `question.present`, `question.open`, `question.lock`,

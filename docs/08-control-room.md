@@ -1,5 +1,16 @@
 # 08 — Régie, animateur, sorties (`apps/control`, `apps/host`, `apps/output`)
 
+## Accueil (`/`)
+
+L'adresse du serveur ouverte dans un navigateur (`http://<IP>:7300/`) donne l'accueil : « Jouer » pour les
+joueurs (code de la partie), et pour l'équipe un **code équipe** (6 chiffres) qui déverrouille tous les postes
+(Régie, Animateur, Studio, Régie lecture seule) en un clic, les liens des sorties OBS / vMix à copier, le code
+de la partie avec son QR code pour les tablettes, et les sièges fixes (lien + QR). Personne ne recopie de
+liens à rallonge. Sur le PC du serveur lui-même (`localhost`), l'accès est direct et le code équipe y est
+affiché pour être donné aux autres postes ; il est aussi dans `links.txt`. `QUIZ_STAFF_CODE` le fixe, sinon il
+est tiré une fois et gardé dans la base du journal. Les liens copiés depuis `localhost` utilisent l'IP du réseau
+plateau (jamais `localhost`). Anti-force brute : 10 essais par minute et par IP, comme `/api/join`.
+
 ## Régie (`/control/<show>`)
 
 - Gauche : run-down (manches, questions, statut), saut direct, questions de réserve.
@@ -23,9 +34,10 @@ leaderboard seul, retour plateau. Phase 5 : NDI natif et pilotage des titres vMi
 
 ## API de contrôle externe
 
-HTTP + WebSocket + OSC sur le serveur, mêmes actions que la régie, même jeton.
+HTTP + OSC sur le serveur, mêmes actions que la régie, même jeton.
 Cible : Bitfocus Companion (Stream Deck), MIDI, scripts. Retour d'état pour les couleurs des touches.
-Documenter chaque endpoint / adresse OSC dans `docs/api/control.md` au fur et à mesure.
+**Implémenté** : `docs/api/control.md` (commandes, HTTP `/api/v1/<commande>` + `/api/v1/state`, OSC UDP
+`/quiz/<commande>`, pas-à-pas Companion, buzzers physiques).
 
 ## Check-list pré-antenne
 

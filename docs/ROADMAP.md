@@ -51,24 +51,29 @@ Règle : une phase n'est terminée que quand ses critères de sortie passent. Co
 - [x] Médias : stockage par hash, transcodage ffmpeg, contrôles à l'import
 - [x] Export / import de jeu `.quiz` (zip : game.json + médias adressés par hash, vérifiés à l'import)
 
+## Transverse (2026-11-11)
+
+- [x] Accueil `/` avec code équipe (plus de liens à recopier), QR code tablettes
+- [x] Design system « pupitre de régie » (polices embarquées) ; refonte UX régie, animateur (prompteur, pilotage), tablettes, studio (canevas)
+
 ## Phase 3 — Formats libres
 
-- [ ] Mode Format (manches en cartes, blocs de règles, jokers)
-- [ ] Mécaniques `text-answer`, `number-answer`, `order`, `pairs`, `pin`, `allocation`, `board`, `hints`, `reveal-image`
-- [ ] Questions de réserve, `question.regrade`, départage
-- [ ] Mode Répétition avec bots
-- [ ] Export des résultats, replay
+- [x] Mode Format (manches en cartes, blocs de règles, jokers) — studio, onglet Format
+- [x] Mécaniques `text-answer`, `number-answer`, `order`, `pairs`, `pin`, `allocation`, `board`, `hints`, `reveal-image` (ADR-0013)
+- [x] Questions de réserve, `question.regrade` (+ aperçu), `question.edit`, départage
+- [x] Mode Répétition avec bots
+- [x] Export des résultats (CSV / PDF), replay (studio)
 
 ## Phase 4 — Diffusion élargie
 
-- [ ] Chat Twitch (EventSub) + YouTube, `crowd-vote`, `streamDelayMs`, anti-spam
-- [ ] API de contrôle HTTP / WS / OSC documentée + Companion
-- [ ] Buzzers physiques (USB HID, boîtier réseau)
-- [ ] Packaging Tauri + serveur compilé
-- [ ] Hot standby + bascule
+- [x] Chat Twitch (EventSub) + YouTube, `crowd-vote`, `streamDelayMs`, anti-spam — à valider contre les vrais services
+- [x] API de contrôle HTTP / OSC documentée + Companion (`docs/api/control.md` ; WS = protocole des écrans)
+- [x] Buzzers physiques (USB HID via « Buzzers clavier », boîtier réseau via HTTP / OSC) — latence à mesurer
+- [x] Packaging Tauri + serveur groupé (ADR-0014, installateur NSIS)
+- [x] Hot standby + bascule manuelle (doc 05)
 
 ## Phase 5 — Broadcast avancé
 
-- [ ] Sortie NDI native (module Rust à étudier)
-- [ ] Pilotage des titres vMix par API
+- [ ] Sortie NDI native — étude faite (`docs/studies/ndi.md`) : OBS / vMix émettent le NDI ; module natif seulement sur besoin établi
+- [x] Pilotage des titres vMix par API (`docs/api/vmix.md`)
 - [ ] Éditeur de machine d'états en nodes

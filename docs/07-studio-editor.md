@@ -61,3 +61,9 @@ Jeopardy, quiz chat Twitch, Kahoot-like 50 joueurs. On reprend les mécaniques, 
 ## Mode Répétition
 
 Session simulée avec bots joueurs (nombre, taux de bonnes réponses, latence) pour tester un format et ses scènes.
+
+**Implémenté** (serveur, `apps/server/src/rehearsal.ts`) : `POST /api/rehearsal { bots, accuracy, latencyMs }`
+(jeton régie) ajoute `Bot 1…n` (`p_bot_<n>`) qui répondent par le pipeline normal (journal, acks, vues) à
+chaque ouverture, avec la justesse et la latence demandées ; `DELETE /api/rehearsal` les retire (avec leurs
+points). Les bots buzzent (buzzer, plateau) mais le jugement reste humain ; rien sur le sondage à slots.
+Jamais pendant un vrai show : les bots sont des joueurs du journal.

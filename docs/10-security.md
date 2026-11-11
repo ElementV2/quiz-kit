@@ -20,3 +20,14 @@
   (sinon n'importe qui pourrait signer un jeton). Une installation qui a tourné avant cette version gardait le secret
   dans `journal.db` : avant de transmettre un journal pour une contestation, faire tourner le secret.
 - Un jeton révoqué coupe immédiatement sa connexion (plus aucune vue ni intention, même si le client ignore la fermeture).
+
+## Code équipe (accueil `/`)
+
+Le code équipe donne tous les liens à jetons (régie comprise) : il vaut un jeton régie. 8 caractères sans
+confusion possible (ni 0/O ni 1/I/L, ~10¹² combinaisons). Il ne quitte que le PC du serveur (affiché en
+`localhost`, `links.txt` en 0600), n'est jamais journalisé, comparé en temps constant, limité à 10 essais par
+minute et par IP **et** 30 échecs par minute toutes IP confondues (blocage 5 min). Le renouveler avant chaque
+show ou après une fuite : régie → « Nouveau code équipe » (`POST /api/staff/rotate`), ou `QUIZ_STAFF_CODE`.
+Derrière un proxy local (`X-Forwarded-For` présent), personne n'est « local » : le code est toujours exigé.
+Un poste peut retenir le code (stockage du navigateur) : « Verrouiller ce poste » l'efface.
+
