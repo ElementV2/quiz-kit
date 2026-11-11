@@ -26,7 +26,7 @@ export function StakesBar(p: { view: Pick<BaseView, "phase" | "stakes" | "round"
   const set = (pts: number | null, mult: number | null) => {
     const t = target();
     if (t === null) return;
-    void p.act({ type: "question.setStakes", roundIndex: t.roundIndex, questionIndex: t.questionIndex, points: pts, multiplier: mult }, pts === null && mult === null ? "Mise normale" : `Mise : ${stakesLabel({ points: pts, multiplier: mult }) ?? ""}`);
+    void p.act({ type: "question.setStakes", roundIndex: t.roundIndex, questionIndex: t.questionIndex, points: pts, multiplier: mult }, pts === null && mult === null ? "Mise normale" : `Mise : ${stakesLabel({ points: pts, multiplier: mult, worth: "" }) ?? ""}`);
   };
   const submitPoints = (e: SubmitEvent) => {
     e.preventDefault();
@@ -37,14 +37,14 @@ export function StakesBar(p: { view: Pick<BaseView, "phase" | "stakes" | "round"
   };
   return (
     <div class={`q-stakes ${p.class ?? ""}`} role="group" aria-label={`Mise de ${which()}`} title={usable() ? undefined : "Mise possible sur la question à l'antenne ou la suivante (plateau : choisir la case d'abord ; pas de mise sur les paliers)"}>
-      <span class="q-stakes-label">Mise</span>
-      <button type="button" class="q-stakes-key" data-on={String(cur() === null)} disabled={!usable()} onClick={() => set(null, null)} title={`Barème normal de la manche pour ${which()}`}>Normale</button>
+      <span class="q-stakes-label" title="Mise en direct : pour cette question seulement, par-dessus ses points (question, catégorie ou manche). « Normale » = sans mise.">Mise</span>
+      <button type="button" class="q-stakes-key" data-on={String(cur() === null)} disabled={!usable()} onClick={() => set(null, null)} title={`Sans mise : ${which()} rapporte ses points habituels (question, sinon catégorie, sinon manche)`}>Normale</button>
       <For each={MULTIPLIERS}>
         {(m) => <button type="button" class="q-stakes-key q-mono" data-on={String(cur()?.multiplier === m)} disabled={!usable()} onClick={() => set(cur()?.points ?? null, cur()?.multiplier === m ? null : m)} title={`${which()} compte ×${m}`}>×{m}</button>}
       </For>
       <Show
         when={editing()}
-        fallback={<button type="button" class="q-stakes-key" data-on={String(cur()?.points != null)} disabled={!usable() || !pointsOk()} onClick={() => { setPoints(String(cur()?.points ?? "")); setEditing(true); }} title={`Points fixes pour ${which()}`}>{cur()?.points != null ? `${cur()?.points} pts` : "Points…"}</button>}
+        fallback={<button type="button" class="q-stakes-key" data-on={String(cur()?.points != null)} disabled={!usable() || !pointsOk()} onClick={() => { setPoints(String(cur()?.points ?? "")); setEditing(true); }} title={`Remplacer les points de ${which()} par un nombre fixe (cette fois seulement)`}>{cur()?.points != null ? `${cur()?.points} pts` : "Points…"}</button>}
       >
         <form class="q-stakes-form" onSubmit={submitPoints}>
           <input class="q-mono" type="number" min="0" step="10" inputmode="numeric" aria-label="Points de la question" value={points()} onInput={(e) => setPoints(e.currentTarget.value)} autofocus />

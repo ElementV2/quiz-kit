@@ -62,6 +62,12 @@ export function Prompter(p: {
       <div class="h-strip">
         <span class="q-tally" data-on={MODE_TALLY[r().mode]}>{MODE_LABEL[r().mode]}</span>
         <span class="h-pos">{r().round.title} · <span class="q-mono">Q{r().question.index + 1}/{r().round.questions.length}</span></span>
+        <Show when={r().question.points.summary}>
+          {/* With live stakes on THIS question (the one they target), the staked worth. */}
+          <span class="h-worth" title={r().question.points.why}>
+            vaut {p.view.stakes?.worth !== undefined && p.view.stakes.worth !== "" && p.view.stakesTarget?.roundIndex === r().round.index && p.view.stakesTarget.questionIndex === r().question.index ? `${p.view.stakes.worth} (mise)` : r().question.points.summary}
+          </span>
+        </Show>
         <Show when={r().mode === "preview"}>
           <button type="button" class="q-btn q-btn-ghost h-back" onClick={() => p.onBack()}>Revenir au direct</button>
         </Show>

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { DEMO_BUZZER_GAME, DEMO_EVENING_GAME, DEMO_GAME, DEMO_POLL_GAME, GameDocument, type Question } from "@quiz/schema";
+import { DEMO_BUZZER_GAME, DEMO_EVENING_GAME, DEMO_GAME, DEMO_LADDER_GAME, DEMO_POLL_GAME, GameDocument, type Question } from "@quiz/schema";
 import { createGame, replay } from "../../game.ts";
-import { MIXED_ROUTES, defaultRegistry as reg } from "../../index.ts";
+import { MIXED_ROUTES, defaultRegistry as reg, pointsInfo } from "../../index.ts";
 import { project } from "../../project.ts";
 import { actor, addPlayers, answer, ctl, makeSession, run, type Step } from "../../testing/harness.ts";
 
@@ -266,6 +266,39 @@ describe("every category setting reaches the mechanic that plays the question", 
     expect(() => run(reg, [answer("p_1", b ?? "")], g)).toThrow(/rejected/);
     const poll = run(reg, [...START, ctl({ type: "question.skip", roundIndex: 0, questionIndex: 0 }), ctl({ type: "question.present" }), ctl({ type: "poll.control", participantId: "p_1" }), ctl({ type: "question.open" }), ctl({ type: "answer.judge", correct: false }), ctl({ type: "answer.judge", correct: false })], createGame(makeSession(game)));
     expect(project(poll, { role: "control" }, reg).mechanic).toMatchObject({ stage: "steal", maxStrikes: 2 });
+  });
+});
+
+describe("what a question is worth, in words (studio, control room, host)", () => {
+  it("question > category > round, the mechanic's own points, the live stakes", () => {
+    const doc = structuredClone(MIXED);
+    const r0 = doc.format.rounds[0];
+    const q0 = doc.questions.find((q) => q.id === "q_capital_fr");
+    if (r0 === undefined || q0 === undefined) throw new Error("fixture");
+    r0.scoring = [{ type: "base", points: 200 }];
+    r0.mechanicConfig = { kinds: { text: { scoring: [{ type: "base", points: 300 }, { type: "timeDecay", minPoints: 100 }] } } };
+    q0.scoring = [{ type: "base", points: 1000 }];
+    const game = GameDocument.parse(doc);
+    const round = game.format.rounds[0];
+    if (round === undefined) throw new Error("fixture");
+    const info = (id: string) => pointsInfo(round, game.questions.find((q) => q.id === id) ?? pick(id), reg);
+    expect(info("q_capital_fr")).toMatchObject({ summary: "1000 pts", source: "question" });
+    expect(info("q_txt_1")).toMatchObject({ summary: "300 → 100 pts (dégressif)", source: "category", why: "barème de sa catégorie (réponse libre)" });
+    expect(info("q_num_1")).toMatchObject({ summary: "200 pts", source: "round" });
+    expect(info("q_poll_breakfast")).toMatchObject({ source: "own", summary: "% des réponses trouvées" });
+    const g = run(reg, [...START, ctl({ type: "question.setStakes", roundIndex: 0, questionIndex: 0, points: null, multiplier: 2 })], createGame(makeSession(game)));
+    expect(project(g, { role: "control" }, reg).stakes).toMatchObject({ multiplier: 2, worth: "1000 pts · ×2" });
+    const v = project(g, { role: "host" }, reg);
+    if (v.role !== "host") throw new Error("host");
+    expect(v.rundown[0]?.questions[0]?.points).toEqual({ summary: "1000 pts", why: "points de cette question" });
+  });
+
+  it("a ladder says it scores by its own steps, never a barème", () => {
+    const ladder = DEMO_LADDER_GAME;
+    const round = ladder.format.rounds[0];
+    const q = ladder.questions[0];
+    if (round === undefined || q === undefined) throw new Error("fixture");
+    expect(pointsInfo(round, q, reg)).toMatchObject({ source: "own", summary: "gain du palier atteint" });
   });
 });
 

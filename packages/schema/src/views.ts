@@ -329,7 +329,12 @@ export const BaseView = z.strictObject({
   mechanic: MechanicView.nullable(),
   leaderboard: z.array(LeaderboardRow),
   /** Live stakes of the question on air (or the next one between questions): shown on air as « ×5 » / « 500 pts ». */
-  stakes: z.strictObject({ points: z.number().int().nullable(), multiplier: z.number().nullable() }).nullable().default(null),
+  stakes: z.strictObject({
+    points: z.number().int().nullable(),
+    multiplier: z.number().nullable(),
+    /** What the question is worth with these stakes (« 500 → 250 pts (dégressif) », « ×2 sur … »). */
+    worth: z.string().default(""),
+  }).nullable().default(null),
   /** Bumped by every live edit of the game (`game.patch`): screens refetch the look (theme, scenes) when it moves. */
   gameVersion: z.number().int().default(0),
   /**
@@ -386,6 +391,8 @@ export const Rundown = z.array(
         answerSpec: AnswerSpec,
         /** Host notes of the question (control / host only). */
         notes: z.string().nullable(),
+        /** What it is worth and why (« 300 pts », « barème de sa catégorie (QCM et vrai / faux) »). */
+        points: z.strictObject({ summary: z.string(), why: z.string() }).default({ summary: "", why: "" }),
       })),
       /** Reserve questions of the round (`question.replaceFromReserve`). */
       reserve: z.array(z.strictObject({ id: QuestionId, text: z.string() })),

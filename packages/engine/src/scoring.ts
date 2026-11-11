@@ -51,3 +51,18 @@ export function roundHalfAway(x: number): number {
   const r = Math.sign(x) * Math.round(Math.abs(x));
   return r === 0 ? 0 : r;
 }
+
+/** The round's rule with live stakes: base points replaced (time decay scaled alike), multiplier appended. */
+export function stakedRule(rule: ScoringRule, stakes: { readonly points: number | null; readonly multiplier: number | null } | null): ScoringRule {
+  if (stakes === null) return rule;
+  let out = rule;
+  if (stakes.points !== null) {
+    const base = rule.reduce((sum, c) => (c.type === "base" ? sum + c.points : sum), 0);
+    const ratio = base === 0 ? 1 : stakes.points / base;
+    const withoutBase = rule.filter((c) => c.type !== "base").map((c) => (c.type === "timeDecay" ? { ...c, minPoints: Math.round(c.minPoints * ratio) } : c));
+    out = [{ type: "base", points: stakes.points }, ...withoutBase];
+  }
+  if (stakes.multiplier !== null) out = [...out, { type: "multiplier", factor: stakes.multiplier }];
+  return out;
+}
+

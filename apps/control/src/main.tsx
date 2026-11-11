@@ -324,6 +324,7 @@ function OnAir(p: { readonly view: ControlView; readonly readonly: boolean; read
                 </div>
                 <p class="c-prompt">{q().text}</p>
                 <p class="c-answer"><span class="q-label">Réponse</span> {formatAnswer(q().answerSpec).headline}</p>
+                <Show when={q().points.summary}><p class="c-worth" title={q().points.why}><span class="q-label">Vaut</span> <Show when={p.view.stakes?.worth} fallback={<>{q().points.summary} <span class="muted">· {q().points.why}</span></>}>{(w) => <><b class="c-worth-staked">{w()}</b> <span class="muted">· avec la mise (sans : {q().points.summary}, {q().points.why})</span></>}</Show></p></Show>
                 <Show when={q().notes}>{(n) => <p class="c-notes">{n()}</p>}</Show>
               </section>
             )}
@@ -340,6 +341,9 @@ function OnAir(p: { readonly view: ControlView; readonly readonly: boolean; read
             <Show when={!p.readonly}><QuestionTextEdit text={q().prompt.text} act={p.act} /></Show>
           </div>
           <p class="c-prompt">{q().prompt.text}</p>
+          <Show when={(() => { const t = onAirTarget(p.view); return t === null ? undefined : questionAt(p.view.rundown, t)?.points; })()}>
+            {(pt) => <Show when={pt().summary}><p class="c-worth" title="Priorité des points : la question, sinon sa catégorie, sinon la manche ; la mise (en haut) s'applique par-dessus"><span class="q-label">Vaut</span> <Show when={p.view.stakes?.worth} fallback={<>{pt().summary} <span class="muted">· {pt().why}</span></>}>{(w) => <><b class="c-worth-staked">{w()}</b> <span class="muted">· avec la mise (sans : {pt().summary}, {pt().why})</span></>}</Show></p></Show>}
+          </Show>
           <Show when={asChoice(p.view.mechanic)}>
             {(m) => (
               <ul class="c-opts">
@@ -411,7 +415,7 @@ function Rundown(p: { readonly view: ControlView; readonly readonly: boolean; re
                   const fixingThis = () => p.fixing !== null && p.fixing.round === r.index && p.fixing.question === q.index;
                   return (
                     <div class="c-q-row" data-fixing={String(fixingThis())}>
-                      <button type="button" class="c-q" data-state={state()} data-current={String(state() === "air")} data-played={String(q.played)} title={why() ?? (q.played ? `${q.text} — déjà jouée : cliquer pour la rejouer` : `${q.text} — cliquer pour la présenter`)} disabled={why() !== null} onClick={() => void present()}>
+                      <button type="button" class="c-q" data-state={state()} data-current={String(state() === "air")} data-played={String(q.played)} title={why() ?? `${q.text}${q.points.summary === "" ? "" : ` — vaut ${q.points.summary} (${q.points.why})`} — ${q.played ? "déjà jouée : cliquer pour la rejouer" : "cliquer pour la présenter"}`} disabled={why() !== null} onClick={() => void present()}>
                         <span class="c-q-n q-mono">{q.index + 1}</span>
                         <span class="c-q-t">{q.text}</span>
                         <Show when={q.played}><span class="c-q-ok">✓</span></Show>

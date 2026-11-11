@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { HostView } from "@quiz/schema";
 import { presentOffer, reading, timecode } from "./logic.ts";
 
-const q = (index: number, id: string) => ({ index, id, text: `Texte ${id}`, played: false, answerSpec: { kind: "boolean", correct: true } as const, notes: null });
+const q = (index: number, id: string) => ({ index, id, text: `Texte ${id}`, played: false, answerSpec: { kind: "boolean", correct: true } as const, notes: null, points: { summary: "", why: "" } });
 const view = (over: Partial<HostView>): HostView => ({
   role: "host",
   sessionId: "ses_1",

@@ -1,5 +1,6 @@
-import { PLAYER_LEADERBOARD_ROWS, type BaseView, type ControlView, type HostView, type LeaderboardRow, type OutputView, type Rundown, type PlayerView, type TeamLeaderboardRow, type View, type Viewer } from "@quiz/schema";
-import { playedBy } from "./route.ts";
+import { PLAYER_LEADERBOARD_ROWS, ruleSummary, type BaseView, type ControlView, type HostView, type LeaderboardRow, type OutputView, type Rundown, type PlayerView, type TeamLeaderboardRow, type View, type Viewer } from "@quiz/schema";
+import { playedBy, pointsInfo, scoringOf } from "./route.ts";
+import { stakedRule } from "./scoring.ts";
 import { autoVerdicts } from "./verdicts.ts";
 import type { Game } from "./game.ts";
 import type { AnyMechanic, Audience, Registry } from "./mechanic.ts";
@@ -28,7 +29,7 @@ export function project(game: Game, viewer: Viewer, registry: Registry): View {
         notes: currentQuestion(s)?.notes ?? null,
         nextQuestion: next(s, registry),
         drive: s.hostDrives,
-        rundown: rundownOf(s),
+        rundown: rundownOf(s, registry),
         cursor: s.roundIndex === null ? null : { roundIndex: s.roundIndex, questionIndex: s.questionIndex },
       } satisfies HostView;
     case "control":
@@ -59,7 +60,7 @@ function base(s: GameState, audience: Audience, participantId: string | null, re
     // Players get the top only: a full 500-row board in every tablet view would make each broadcast O(n²).
     leaderboard: audience === "player" ? leaderboard(s).slice(0, PLAYER_LEADERBOARD_ROWS) : leaderboard(s),
     layers: s.layers,
-    stakes: stakesView(s),
+    stakes: stakesView(s, registry),
     gameVersion: s.gameVersion,
     stakesTarget: stakesTargetOf(s, registry),
     teamBoard: teamBoard(s),
@@ -99,11 +100,19 @@ function computeStakesTarget(s: GameState, registry: Registry): BaseView["stakes
 }
 
 /** Stakes of the question the next stakes change would target (on air, or the next one). */
-function stakesView(s: GameState): BaseView["stakes"] {
+function stakesView(s: GameState, registry: Registry): BaseView["stakes"] {
   const st = s.stakes;
   if (st === null || st.roundIndex !== s.roundIndex) return null;
   const target = s.mechanic !== null ? s.questionIndex : s.questionIndex === null ? 0 : s.questionIndex + 1;
-  return st.questionIndex === target ? { points: st.points, multiplier: st.multiplier } : null;
+  if (st.questionIndex !== target) return null;
+  const round = currentRound(s);
+  const q = round === null ? undefined : s.game.questions.find((x) => x.id === round.questions[st.questionIndex]);
+  let worth = "";
+  if (round !== null && q !== undefined) {
+    const info = pointsInfo(round, q, registry);
+    worth = info.source === "own" ? (st.multiplier === null ? info.summary : `×${st.multiplier} sur ${info.summary}`) : ruleSummary(stakedRule(scoringOf(round, q, registry), st));
+  }
+  return { points: st.points, multiplier: st.multiplier, worth };
 }
 
 /** Between two questions of a round whose mechanic shows something meanwhile (board grid). */
@@ -233,7 +242,7 @@ function controlView(game: Game, readonly: boolean, registry: Registry): Control
     answers: m === null || s.mechanic === null ? [] : m.answers(s.mechanic.state).map((x) => ({ ...x, optionIds: [...x.optionIds] })),
     verdicts: m === null || s.mechanic === null ? [] : verdictRows(m.answers(s.mechanic.state).map((x) => x.participantId), autoVerdicts(m.judge(s.mechanic.state)), s.verdicts),
     skipped: [...game.skipped],
-    rundown: rundownOf(s),
+    rundown: rundownOf(s, registry),
     lastSeq: s.lastSeq,
   };
 }
@@ -241,7 +250,8 @@ function controlView(game: Game, readonly: boolean, registry: Registry): Control
 /** Run-down memoised per game document (it only changes with reserve swaps / edits / regrades). */
 const rundownCache = new WeakMap<object, WeakMap<object, Rundown>>();
 
-function rundownOf(s: GameState): Rundown {
+/** One registry per running server (`defaultRegistry`): it is not part of the cache key. */
+function rundownOf(s: GameState, registry: Registry): Rundown {
   let inner = rundownCache.get(s.game);
   if (inner === undefined) {
     inner = new WeakMap();
@@ -256,7 +266,9 @@ function rundownOf(s: GameState): Rundown {
     mechanic: round.mechanic,
     questions: round.questions.flatMap((qid, qi) => {
       const q = byId.get(qid);
-      return q === undefined ? [] : [{ index: qi, id: qid, text: q.prompt.text, played: s.played.includes(qid), answerSpec: q.answerSpec, notes: q.notes ?? null }];
+      if (q === undefined) return [];
+      const info = pointsInfo(round, q, registry);
+      return [{ index: qi, id: qid, text: q.prompt.text, played: s.played.includes(qid), answerSpec: q.answerSpec, notes: q.notes ?? null, points: { summary: info.summary, why: info.why } }];
     }),
     reserve: round.reserve.flatMap((qid) => {
       const q = byId.get(qid);

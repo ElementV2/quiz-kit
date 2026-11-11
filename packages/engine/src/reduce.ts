@@ -5,7 +5,7 @@ import type { AnyMechanic, FixedJudgement, Judgement, MechanicEnv, Registry } fr
 import { assertNever, err, ok, type Rejection, type Result } from "./result.ts";
 import type { Rng } from "./rng.ts";
 import { livePatchProblem } from "./live-patch.ts";
-import { pointsFor, roundHalfAway } from "./scoring.ts";
+import { pointsFor, roundHalfAway, stakedRule } from "./scoring.ts";
 import { currentQuestion, currentRound, participantTotal, teamTotal, type GameState, type QuestionRecord } from "./state.ts";
 
 /** Everything comes from the event (ADR-0010): no clock, no global randomness. */
@@ -485,6 +485,7 @@ function judgementEntries(s: GameState, ctx: Ctx, judgements: readonly Judgement
 }
 
 type Stakes = { readonly points: number | null; readonly multiplier: number | null };
+export { stakedRule };
 
 /** Stakes set for the question on air (null when none, or set for another question). */
 function stakesFor(s: GameState): Stakes | null {
@@ -492,19 +493,6 @@ function stakesFor(s: GameState): Stakes | null {
   return st !== null && st.roundIndex === s.roundIndex && st.questionIndex === s.questionIndex ? { points: st.points, multiplier: st.multiplier } : null;
 }
 
-/** The round's rule with live stakes: base points replaced (time decay scaled alike), multiplier appended. */
-export function stakedRule(rule: Round["scoring"], stakes: Stakes | null): Round["scoring"] {
-  if (stakes === null) return rule;
-  let out = rule;
-  if (stakes.points !== null) {
-    const base = rule.reduce((sum, c) => (c.type === "base" ? sum + c.points : sum), 0);
-    const ratio = base === 0 ? 1 : stakes.points / base;
-    const withoutBase = rule.filter((c) => c.type !== "base").map((c) => (c.type === "timeDecay" ? { ...c, minPoints: Math.round(c.minPoints * ratio) } : c));
-    out = [{ type: "base", points: stakes.points }, ...withoutBase];
-  }
-  if (stakes.multiplier !== null) out = [...out, { type: "multiplier", factor: stakes.multiplier }];
-  return out;
-}
 
 function replaceFromReserve(s: GameState, a: ActionOf<"question.replaceFromReserve">, ctx: Ctx, registry: Registry): R {
   const round = currentRound(s);

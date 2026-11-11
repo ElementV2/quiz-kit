@@ -1,6 +1,6 @@
 import { For, Match, Show, Switch, createMemo, createSignal, type JSX } from "solid-js";
-import { defaultRegistry } from "@quiz/engine";
-import { GameDocument, type Round, type ScoringComponent } from "@quiz/schema";
+import { defaultRegistry, pointsInfo } from "@quiz/engine";
+import { GameDocument, ruleSummary, type Round, type ScoringComponent } from "@quiz/schema";
 import { Button, Panel, confirmDialog } from "@quiz/ui";
 import { JsonField, NumField } from "./fields.tsx";
 import { FlowEditor } from "./flow-editor.tsx";
@@ -175,6 +175,7 @@ function QuestionList(p: { title: string; list: RoundList; doc: GameDocument; ro
                   <span class="q-mono muted">{i() + 1}</span>
                   <span class="s-kind">{q() === undefined ? "?" : kindLabel(q()?.answerSpec.kind ?? "single")}</span>
                   <span class="s-qtext" title={q()?.prompt.text}>{q()?.prompt.text ?? qid}</span>
+                  <Show when={q()}>{(qq) => { const w = () => pointsInfo(p.round, qq(), defaultRegistry); return <span class="s-worth" title={`D'où viennent ses points : ${w().why}`} data-source={w().source}>{w().summary}</span>; }}</Show>
                   <Button kind="ghost" title="Monter" disabled={i() === 0} onClick={() => p.update((d) => { const r = d.format.rounds[p.ri]; if (r !== undefined) moveItem(r[p.list], i(), i() - 1); })}>↑</Button>
                   <Button kind="ghost" title="Descendre" disabled={i() === ids().length - 1} onClick={() => p.update((d) => { const r = d.format.rounds[p.ri]; if (r !== undefined) moveItem(r[p.list], i(), i() + 1); })}>↓</Button>
                   <Button kind="ghost" title={p.list === "questions" ? "Mettre en réserve" : "Jouer cette question"} onClick={() => p.update((d) => swapList(d, p.ri, qid, p.list === "questions" ? "reserve" : "questions"))}>{p.list === "questions" ? "→ réserve" : "→ jouer"}</Button>
@@ -206,12 +207,13 @@ function ScoringBlocks(p: { round: Round; edit: (f: (r: Round) => void, key?: st
       rule={p.round.scoring}
       editRule={(f) => p.edit((r) => { f(r.scoring); normalizeRule(r.scoring); })}
       off={!p.usesScoring}
+      round={p.round}
     />
   );
 }
 
 /** Edits one points rule (the round's, or a category's own in a mixed round). */
-function RuleEditor(p: { title: string; rule: readonly ScoringComponent[]; editRule: (f: (rule: ScoringComponent[]) => void) => void; off?: boolean }): JSX.Element {
+function RuleEditor(p: { title: string; rule: readonly ScoringComponent[]; editRule: (f: (rule: ScoringComponent[]) => void) => void; off?: boolean; round?: Round }): JSX.Element {
   const setValue = (ci: number, v: number) => p.editRule((rule) => {
     const c = rule[ci];
     if (c === undefined) return;
@@ -253,6 +255,9 @@ function RuleEditor(p: { title: string; rule: readonly ScoringComponent[]; editR
         <For each={available()}>{(t) => <option value={t}>{SCORING_LABEL[t]}</option>}</For>
       </select>
       <Show when={p.rule.some((c) => c.type === "timeDecay")}><p class="muted s-hint">Dégressif : les points baissent de la base jusqu'au minimum pendant le temps de réponse.</p></Show>
+      <Show when={p.round?.mechanic === "mixed"}>
+        <p class="s-hint s-priority">Priorité des points, du plus fort au plus faible : <b>1.</b> les points de la question (onglet Contenu) · <b>2.</b> le barème de sa catégorie (ci-dessous) · <b>3.</b> ce barème de la manche. En direct, la <b>mise</b> de la régie (×2, points…) s'applique par-dessus, pour une question.</p>
+      </Show>
     </div>
   );
 }
@@ -282,6 +287,7 @@ function MixedSettings(p: { doc: GameDocument; round: Round; ri: number; update:
                   <input type="checkbox" checked={own() !== null} onChange={(e) => { const on = e.currentTarget.checked; p.update((d) => setMixedScoring(d, p.ri, c.id, on ? clone([...p.round.scoring]) : null)); }} />
                   Barème propre à cette catégorie (sinon celui de la manche)
                 </label>
+                <Show when={own() === null}><p class="muted s-hint">Ces questions rapportent le barème de la manche : {ruleSummary(p.round.scoring)} (sauf celles qui ont leurs propres points).</p></Show>
                 <Show when={own()}>
                   {(rule) => (
                     <RuleEditor

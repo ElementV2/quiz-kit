@@ -187,3 +187,4 @@ body { overscroll-behavior: none; }
 .h-clock-none { font-size: 13px; font-weight: 650; font-stretch: 78%; text-transform: uppercase; letter-spacing: .12em; color: var(--ui-faint); align-self: center; }
 
 .h-stakes { grid-column: 1 / -1; }
+.h-worth { font-size: 13px; color: var(--ui-accent); font-weight: 650; white-space: nowrap; }

@@ -211,3 +211,6 @@ a.q-btn { text-decoration: none; text-align: center; display: inline-flex; align
 
 .c-message-slot { min-height: 1.45em; margin: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .c-keep { display: flex; gap: 8px; align-items: center; font-size: 13px; color: var(--ui-muted); }
+.c-worth { margin: 2px 0 0; font-size: 13px; }
+.c-worth .q-label { margin-right: 6px; }
+.c-worth-staked { color: var(--ui-accent); }

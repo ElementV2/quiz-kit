@@ -27,7 +27,7 @@ export { boardCells } from "./mechanics/board/board.ts";
 import { createRegistry } from "./mechanic.ts";
 import { mixed } from "./mechanics/mixed/mixed.ts";
 export { mixed, MixedConfig, MixedKinds, MIXED_ROUTES, MIXED_CATEGORY, type MixedCategory } from "./mechanics/mixed/mixed.ts";
-export { playedBy, scoringOf, type Played } from "./route.ts";
+export { playedBy, pointsInfo, scoringOf, type Played, type PointsInfo } from "./route.ts";
 import { choice } from "./mechanics/choice/choice.ts";
 import { pollBoard } from "./mechanics/poll-board/poll-board.ts";
 import { buzzer } from "./mechanics/buzzer/buzzer.ts";

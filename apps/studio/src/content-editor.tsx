@@ -1,5 +1,5 @@
 import { For, Match, Show, Switch, createMemo, createSignal, type JSX } from "solid-js";
-import { defaultRegistry } from "@quiz/engine";
+import { defaultRegistry, pointsInfo } from "@quiz/engine";
 import { parseQuestionsCsv, type AnswerKind, type AnswerSpec, type GameDocument, type NormRect, type Question } from "@quiz/schema";
 import { Button, Panel, confirmDialog } from "@quiz/ui";
 import { api, mediaUrl } from "./api.ts";
@@ -91,6 +91,9 @@ export function ContentEditor(p: { doc: GameDocument; update: Update }): JSX.Ele
                     <span class="s-kind">{kindLabel(q.answerSpec.kind)}</span>
                     <textarea rows={2} value={q.prompt.text} onInput={(e) => { const v = e.currentTarget.value; edit((x) => { x.prompt.text = v; }, "text"); }} />
                     <p class="muted s-hint">{roundsOf(p.doc, q.id).join(" · ") || "dans aucune manche"}</p>
+                    <For each={p.doc.format.rounds.filter((r) => r.questions.includes(q.id) || r.reserve.includes(q.id))}>
+                      {(r) => { const w = () => pointsInfo(r, q, defaultRegistry); return <p class="s-worth-line" title="Priorité : points de la question, sinon barème de sa catégorie, sinon barème de la manche (onglet Format)">Vaut <b>{w().summary}</b> <span class="muted">· {w().why}{p.doc.format.rounds.length > 1 ? ` · ${r.title}` : ""}</span></p>; }}
+                    </For>
                     <For each={issuesByQuestion().get(q.id) ?? []}>{(w) => <p class="s-warn-text">⚠ question incompatible : {w}</p>}</For>
                   </td>
                   <td class="s-col-a"><AnswerEditor q={q} edit={edit} /></td>
@@ -437,14 +440,14 @@ function QuestionPointsField(p: { q: Question; edit: (f: (x: Question) => void, 
   const set = (next: QuestionPoints) => p.edit((x) => { const r = pointsRule(next, x.scoring); if (r === undefined) delete x.scoring; else x.scoring = r; }, "points");
   return (
     <div class="s-field s-points">
-      <span class="s-label">Points de cette question</span>
+      <span class="s-label" title="Les points de la question passent avant le barème de sa catégorie et celui de la manche (onglet Format). La mise en direct de la régie s'applique par-dessus.">Points de cette question</span>
       <select value={cur().mode} onChange={(e) => {
         const m = e.currentTarget.value;
         if (m === "round") set({ mode: "round" });
         else if (m === "fixed") set({ mode: "fixed", points: 100 });
         else if (m === "decay") set({ mode: "decay", max: 100, min: 50 });
       }}>
-        <option value="round">selon le barème (manche / catégorie)</option>
+        <option value="round">selon le barème (catégorie, sinon manche)</option>
         <option value="fixed">points fixes</option>
         <option value="decay">dégressif (plus on répond vite, plus on marque)</option>
         <Show when={cur().mode === "custom"}><option value="custom">règle personnalisée (JSON)</option></Show>

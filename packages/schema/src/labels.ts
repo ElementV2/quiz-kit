@@ -116,3 +116,50 @@ export const actionLabel = (t: ActionType): string => ACTION_LABEL_FR[t] ?? t;
 /** « Une manche “remise en ordre” ne peut pas jouer une question “vrai / faux”. » */
 export const unsupportedQuestion = (mechanicId: string, kind: AnswerKind): string =>
   `une manche « ${mechanicLabel(mechanicId)} » ne peut pas jouer une question « ${answerKindLabel(kind)} »`;
+
+/** Where the points of a question come from (shown in the studio, the control room and to the host). */
+export type PointsSource = "question" | "category" | "round" | "own";
+
+export const POINTS_SOURCE_FR: Readonly<Record<PointsSource, string>> = {
+  question: "points de cette question",
+  category: "barème de sa catégorie",
+  round: "barème de la manche",
+  own: "points décidés par le jeu",
+};
+
+/** Question categories of a « Mixte » round, in words. */
+export const CATEGORY_LABEL_FR: Readonly<Record<string, string>> = {
+  choice: "QCM et vrai / faux",
+  poll: "sondage",
+  oral: "réponse orale",
+  text: "réponse libre",
+  number: "nombre",
+  order: "ordre",
+  pairs: "associations",
+  pin: "point sur image",
+  allocation: "répartition",
+};
+
+/** « 200 pts », « 100 → 50 pts (dégressif) », « … · erreur −50 · ×2 ». */
+export function ruleSummary(rule: readonly ({ type: "base"; points: number } | { type: "timeDecay"; minPoints: number } | { type: "penalty"; points: number } | { type: "multiplier"; factor: number })[]): string {
+  const base = rule.reduce((t, c) => (c.type === "base" ? t + c.points : t), 0);
+  const decay = rule.find((c) => c.type === "timeDecay");
+  const penalty = rule.reduce((t, c) => (c.type === "penalty" ? t + c.points : t), 0);
+  const mult = rule.reduce((f, c) => (c.type === "multiplier" ? f * c.factor : f), 1);
+  let out = decay !== undefined && decay.type === "timeDecay" && decay.minPoints !== base ? `${base} → ${decay.minPoints} pts (dégressif)` : `${base} pts`;
+  if (penalty !== 0) out += ` · erreur −${Math.abs(penalty)}`;
+  if (mult !== 1) out += ` · ×${mult}`;
+  return out;
+}
+
+/** Points decided by the mechanic itself, in words. */
+export const OWN_POINTS_FR: Readonly<Record<string, string>> = {
+  "poll-board": "% des réponses trouvées",
+  allocation: "mise posée sur la bonne réponse",
+  ladder: "gain du palier atteint",
+  board: "valeur de la case",
+  hints: "selon le nombre d'indices",
+  "reveal-image": "selon les cases dévoilées",
+  "crowd-vote": "points du vote du chat",
+};
+

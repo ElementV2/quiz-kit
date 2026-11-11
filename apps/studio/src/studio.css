@@ -369,3 +369,8 @@
 .s-cat[open] > summary { margin-bottom: 6px; border-bottom: 1px solid var(--ui-border); padding-bottom: 6px; }
 .s-normal { display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; }
 .s-link { font: inherit; font-size: 12px; background: none; border: 0; padding: 0; color: var(--ui-accent); cursor: pointer; text-decoration: underline; text-underline-offset: 2px; }
+.s-worth { font-size: 11px; font-family: var(--ui-mono); color: var(--ui-muted); white-space: nowrap; padding: 1px 6px; border: 1px solid var(--ui-border); border-radius: var(--ui-radius); }
+.s-worth[data-source="question"] { color: var(--ui-accent); border-color: var(--ui-accent); }
+.s-worth[data-source="category"] { color: var(--ui-text); }
+.s-worth-line { margin: 2px 0 0; font-size: 12px; }
+.s-priority { padding: 8px 10px; border-left: 3px solid var(--ui-accent); background: var(--ui-sunken); border-radius: var(--ui-radius); font-size: 12px; line-height: 1.45; }

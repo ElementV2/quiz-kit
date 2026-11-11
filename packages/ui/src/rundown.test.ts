@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { AnswerSpec, Rundown } from "@quiz/schema";
 import { formatAnswer, nextTarget, onAirTarget, questionAt, zoneWords } from "./rundown.ts";
 
-const q = (index: number, id: string, played = false) => ({ index, id, text: `Q ${id}`, played, answerSpec: { kind: "boolean", correct: true } as const, notes: null });
+const q = (index: number, id: string, played = false) => ({ index, id, text: `Q ${id}`, played, answerSpec: { kind: "boolean", correct: true } as const, notes: null, points: { summary: "", why: "" } });
 const rundown: Rundown = [
   { index: 0, title: "M1", mechanic: "choice", questions: [q(0, "q_a"), q(1, "q_b")], reserve: [] },
   { index: 1, title: "M2", mechanic: "choice", questions: [q(0, "q_c")], reserve: [] },
