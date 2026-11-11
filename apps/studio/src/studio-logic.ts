@@ -1,5 +1,5 @@
 import { createGame, decide, defaultRegistry, project, type Game } from "@quiz/engine";
-import type { Action, Actor, GameDocument, Phase, Scene, View, Zone } from "@quiz/schema";
+import type { Action, Actor, GameDocument, Media, Phase, Scene, View, Zone } from "@quiz/schema";
 
 /**
  * Studio logic, pure and tested (doc 07). The studio is the only front allowed to run the engine (ADR-0007):
@@ -185,4 +185,15 @@ export function deriveStates(z: Zone): Zone["states"] {
     wrong: { ...base, filter: "grayscale(.8) brightness(.7)", ...z.states["wrong"] },
     disabled: { ...base, filter: "grayscale(1) opacity(.5)", ...z.states["disabled"] },
   };
+}
+
+/** What a media is, in words, under its thumbnail: « 1920×1080 · 0:32 » (what the import measured). */
+export function mediaInfo(m: Media): string {
+  const parts: string[] = [];
+  if (m.w !== undefined && m.h !== undefined) parts.push(`${m.w}×${m.h}`);
+  if (m.durationMs !== undefined) {
+    const s = Math.round(m.durationMs / 1000);
+    parts.push(`${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`);
+  }
+  return parts.join(" · ");
 }

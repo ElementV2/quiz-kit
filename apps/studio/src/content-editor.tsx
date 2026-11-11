@@ -5,6 +5,7 @@ import { Button, Panel, confirmDialog } from "@quiz/ui";
 import { api, mediaUrl } from "./api.ts";
 import { NumField } from "./fields.tsx";
 import { deleteQuestion, moveItem, pointsRule, questionPoints, roundIssues, roundsOf, type QuestionPoints } from "./format-logic.ts";
+import { mediaInfo } from "./studio-logic.ts";
 import { QUESTION_TYPES, freeOptionId, kindLabel, newQuestion, normRectFromDrag, splitList } from "./question-factories.ts";
 import { hex, snapshot, type Update } from "./util.ts";
 
@@ -135,6 +136,7 @@ function MediaCell(p: { q: Question; edit: EditQ }): JSX.Element {
       {(m) => (
         <div class="s-media">
           <Show when={m().mime.startsWith("image/")} fallback={<span>{m().mime.split("/")[0] === "audio" ? "son" : "vidéo"}</span>}><img src={mediaUrl(m().hash)} alt="" /></Show>
+          <Show when={mediaInfo(m()) !== ""}><span class="muted s-media-info">{mediaInfo(m())}</span></Show>
           <Button kind="ghost" onClick={() => p.edit((x) => { delete x.prompt.media; })}>retirer</Button>
         </div>
       )}

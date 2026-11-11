@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { DEMO_GAME, PROGRAM_SCENE, View } from "@quiz/schema";
-import { assetSheet, assetSheetCsv, clampRect, deriveStates, matchDeliveredAssets, outsideSafe, simulateView, templateSvg } from "./studio-logic.ts";
+import { assetSheet, mediaInfo, assetSheetCsv, clampRect, deriveStates, matchDeliveredAssets, outsideSafe, simulateView, templateSvg } from "./studio-logic.ts";
 
 describe("simulateView (engine run locally)", () => {
   it.each(["idle", "presenting", "open", "locked", "revealed", "game.end"] as const)("reaches %s with a valid output view", (phase) => {
@@ -62,3 +62,12 @@ describe("designer template", () => {
     expect(states["correct"]).toMatchObject({ background: "green" });
   });
 });
+
+describe("mediaInfo", () => {
+  it("says the size and the length of a media, what is known only", () => {
+    expect(mediaInfo({ hash: "a".repeat(64), mime: "video/mp4", w: 1920, h: 1080, durationMs: 32_400 })).toBe("1920×1080 · 0:32");
+    expect(mediaInfo({ hash: "a".repeat(64), mime: "audio/mpeg", durationMs: 125_000 })).toBe("2:05");
+    expect(mediaInfo({ hash: "a".repeat(64), mime: "image/png" })).toBe("");
+  });
+});
+

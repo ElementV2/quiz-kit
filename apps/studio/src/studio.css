@@ -372,3 +372,4 @@
 .s-worth-line { margin: 2px 0 0; font-size: 12px; }
 .s-priority { padding: 8px 10px; border-left: 3px solid var(--ui-accent); background: var(--ui-sunken); border-radius: var(--ui-radius); font-size: 12px; line-height: 1.45; }
 .s-opt input[type="checkbox"], .s-opt input[type="radio"] { width: 24px; height: 24px; } /* WCAG 2.5.8 target size */
+.s-media-info { font-size: 12px; font-variant-numeric: tabular-nums; }
