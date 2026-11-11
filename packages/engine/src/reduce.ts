@@ -203,6 +203,10 @@ function reduceAllowed(s: GameState, a: Action, ctx: Ctx, registry: Registry): R
       if (a.participantId !== undefined && !s.participants.some((p) => p.id === a.participantId)) return err("not-found", "joueur inconnu");
       return mechanicAction(s, a, ctx, registry);
 
+    case "crowd.setTeam":
+      if (a.teamId !== null && !s.teams.some((t) => t.id === a.teamId)) return err("not-found", "équipe inconnue");
+      return mechanicAction(s, a, ctx, registry);
+
     case "poll.control":
     case "poll.steal":
       if ((a.teamId === undefined) === (a.participantId === undefined)) return err("invalid", "désigner une équipe ou un joueur");
@@ -211,10 +215,6 @@ function reduceAllowed(s: GameState, a: Action, ctx: Ctx, registry: Registry): R
       {
         const r = mechanicAction(s, a, ctx, registry);
         // The hand (or the steal) goes to another side while the answers were closed: they reopen for it — its
-    case "crowd.setTeam":
-      if (a.teamId !== null && !s.teams.some((t) => t.id === a.teamId)) return err("not-found", "équipe inconnue");
-      return mechanicAction(s, a, ctx, registry);
-
         // tablets must not stay on « Réponses fermées ». No timer: the play is oral, the control room judges.
         if (!r.ok || (s.phase !== "locked" && s.phase !== "judging")) return r;
         return ok({ ...r.value, phase: "open", lockedAt: null, timer: null });
