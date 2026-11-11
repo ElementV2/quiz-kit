@@ -3,7 +3,7 @@ import { closeSync, existsSync, fsyncSync, mkdirSync, openSync, readFileSync, re
 import { join, resolve } from "node:path";
 import type { FastifyInstance } from "fastify";
 import { defaultRegistry } from "@quiz/engine";
-import { DEMO_GAME, loadGameDocument, type GameDocument, type Session } from "@quiz/schema";
+import { DEMO_GAME, TEMPLATES, loadGameDocument, type GameDocument, type Session } from "@quiz/schema";
 import type { Config } from "./config.ts";
 import { buildHttpApp, loggerOptions } from "./http/app.ts";
 import { newId } from "./ids.ts";
@@ -88,6 +88,12 @@ export async function startServer(config: Config, opts: { clock?: Clock; timers?
 
 async function boot(config: Config, opts: { timers?: Timers; broadcastIntervalMs?: number }, clock: Clock, dataDir: string, store: SqliteEventStore): Promise<RunningServer> {
   const secret = loadSecret(dataDir, store);
+  // Built-in templates are seeded once into the library (editable copies; deleting one does not bring it back).
+  const library = new GameLibrary(dataDir);
+  if (store.getMeta("templates-seeded") === null) {
+    for (const t of TEMPLATES) if (library.get(t.id) === null) library.put(t.id, t.game);
+    store.setMeta("templates-seeded", "1");
+  }
   const media = new MediaStore(dataDir, { ffmpeg: process.env["QUIZ_FFMPEG"] ?? "ffmpeg", ffprobe: process.env["QUIZ_FFPROBE"] ?? "ffprobe" });
 
   let sessionId = config.newSession ? null : store.latestSessionId();
@@ -149,7 +155,7 @@ async function boot(config: Config, opts: { timers?: Timers; broadcastIntervalMs
     joinCode: () => joinCodeOf(getRuntime().session.id),
     newSession: (game: GameDocument) => switchSession(game),
     media,
-    library: new GameLibrary(dataDir),
+    library,
     join: joinPlayer,
     revoke,
     secret,

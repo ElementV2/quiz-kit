@@ -13,6 +13,7 @@
   },
   "dependencies": {
     "@quiz/protocol": "workspace:*",
+    "@quiz/renderer": "workspace:*",
     "@quiz/schema": "workspace:*",
     "solid-js": "1.9.19"
   },

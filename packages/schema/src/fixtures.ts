@@ -332,3 +332,11 @@ export const DEMO_LADDER_GAME: GameDocument = {
     ],
   },
 };
+
+/** Built-in templates (roadmap phase 1): mechanics only, original look — never a broadcast show's branding. */
+export const TEMPLATES: readonly { readonly id: string; readonly game: GameDocument }[] = [
+  { id: "g_modele_qcm", game: { ...DEMO_GAME, title: "Modèle — QCM rapide (Kahoot-like)" } },
+  { id: "g_modele_paliers", game: { ...DEMO_LADDER_GAME, title: "Modèle — QCM à paliers" } },
+  { id: "g_modele_sondage", game: { ...DEMO_POLL_GAME, title: "Modèle — Sondage à slots" } },
+  { id: "g_modele_buzzer", game: { ...DEMO_BUZZER_GAME, title: "Modèle — Buzzer culture G" } },
+];

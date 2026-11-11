@@ -46,18 +46,55 @@ export const asBuzzer = (m: MechanicView | null | undefined): BuzzerView | null 
 export const asLadder = (m: MechanicView | null | undefined): LadderView | null => (m?.mechanic === "ladder" ? m : null);
 
 /** State of one answer option, for styling (doc 02 ZoneState). */
-export function optionState(m: MechanicView, optionId: string, myAnswer: readonly string[] | null): ZoneState {
-  if (m.mechanic !== "choice") return "idle";
-  if (m.correct !== null && m.counts !== null) return m.correct.includes(optionId) ? "correct" : "wrong";
-  if (myAnswer?.includes(optionId) === true) return "selected";
-  return "idle";
+export function optionState(m: MechanicView, optionId: string, myAnswer: readonly string[] | null, phase?: Phase): ZoneState {
+  switch (m.mechanic) {
+    case "choice":
+      if (m.correct !== null && m.counts !== null) return m.correct.includes(optionId) ? "correct" : "wrong";
+      return myAnswer?.includes(optionId) === true ? "selected" : "idle";
+    case "ladder":
+      // `correct` is public only once revealed (host / control see it earlier but the candidate's answer matters).
+      if (m.hidden.includes(optionId)) return "disabled";
+      // Host / control know `correct` early: only style it once revealed (or once the ladder is over).
+      if (m.correct !== null && (phase === "revealed" || m.status !== "playing")) return m.correct === optionId ? "correct" : m.answer === optionId ? "wrong" : "idle";
+      return m.answer === optionId ? "selected" : "idle";
+    case "buzzer":
+      if (m.correct !== null && m.winner !== null) return m.correct === optionId ? "correct" : "idle";
+      return "idle";
+    case "poll-board":
+      return "idle";
+    default:
+      return "idle";
+  }
+}
+
+/** Options shown as an answer list: choice, ladder, buzzer with options. */
+export function optionsOf(m: MechanicView | null): readonly { id: string; label: string }[] {
+  if (m === null) return [];
+  switch (m.mechanic) {
+    case "choice":
+    case "ladder":
+      return m.options;
+    case "buzzer":
+      return m.options ?? [];
+    case "poll-board":
+      return [];
+    default:
+      return [];
+  }
 }
 
 /** Share of answers per option once counts are public (0..1), null before. */
 export function optionShare(m: MechanicView, optionId: string): number | null {
+  if (m.mechanic === "ladder") return m.audience === null ? null : (m.audience[optionId] ?? 0) / 100; // audience joker (%)
   if (m.mechanic !== "choice" || m.counts === null) return null;
   const total = Object.values(m.counts).reduce((a, b) => a + b, 0);
   return total === 0 ? 0 : (m.counts[optionId] ?? 0) / total;
+}
+
+/** Display name of a participant from the board carried by every view. */
+export function nameOf(v: { leaderboard: readonly { participantId: string; displayName: string }[] }, id: string | null): string {
+  if (id === null) return "";
+  return v.leaderboard.find((r) => r.participantId === id)?.displayName ?? "?";
 }
 
 /** Whole seconds left, never negative. `serverNow` comes from the protocol client clock estimate. */

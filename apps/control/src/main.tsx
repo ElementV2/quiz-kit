@@ -1,8 +1,8 @@
 import { For, Show, createMemo, createResource, createSignal, onCleanup, onMount } from "solid-js";
 import { render } from "solid-js/web";
-import { gameFromQuestions, parseQuestionsCsv, type Action, type ControlView, type Participant } from "@quiz/schema";
+import { OUTPUT_SCENES, gameFromQuestions, parseQuestionsCsv, type Action, type ControlView, type Participant } from "@quiz/schema";
 import { asChoice, optionLetter, secondsLeft } from "@quiz/renderer";
-import { Button, Panel, StatusPill, createQuizConnection, tokenFromUrl } from "@quiz/ui";
+import { Button, MechanicPanel, Panel, StatusPill, createQuizConnection, tokenFromUrl } from "@quiz/ui";
 import "@quiz/ui/ui.css";
 import "./control.css";
 import { checklist, nextStep, parsePlayersCsv } from "./logic.ts";
@@ -135,6 +135,7 @@ function App() {
                           );
                         }}
                       </Show>
+                      <MechanicPanel view={v()} mode={readonly() ? "host" : "control"} act={act} />
                       <Show when={v().notes}>{(n) => <p class="c-notes">📝 {n()}</p>}</Show>
                     </div>
                   )}
@@ -177,6 +178,17 @@ function App() {
                   <For each={checklist(v(), status())}>{(c) => <li data-ok={String(c.ok)}><span>{c.ok ? "✓" : "✗"}</span> {c.label} <span class="muted">— {c.detail}</span></li>}</For>
                 </ul>
               </Panel>
+              <Show when={!readonly()}>
+                <Panel title="Couches à l'antenne (TAKE / OUT)">
+                  <LayersPanel view={v()} act={act} />
+                </Panel>
+                <Panel title="Bibliothèque (parties du studio)">
+                  <LibraryPanel />
+                </Panel>
+                <Panel title="Équipes">
+                  <TeamsPanel view={v()} act={act} />
+                </Panel>
+              </Show>
               <Show when={!readonly()}>
                 <Panel title="Nouvelle partie (import de questions)">
                   <GameImport />
@@ -223,6 +235,86 @@ function ProgramPreview(p: { src: string }) {
   return (
     <div ref={box} class="c-preview" style={{ "--s": String(scale()) }}>
       <iframe title="programme" src={p.src} />
+    </div>
+  );
+}
+
+/** Manual / auto-hold layers of the current game's scenes (or the built-in presets): TAKE puts them on air. */
+function LayersPanel(p: { view: ControlView; act: (a: Action, ok?: string) => Promise<boolean> }) {
+  const [layers] = createResource(
+    () => p.view.sessionId,
+    async () => {
+      const r = await api<{ scenes: { layers: { id: string; name: string; mode: string }[] }[] }>("/api/presentation").catch(() => ({ scenes: [] }));
+      const scenes = r.scenes.length > 0 ? r.scenes : Object.values(OUTPUT_SCENES);
+      const seen = new Map<string, string>();
+      for (const s of scenes) for (const l of s.layers) if (l.mode !== "auto" && !seen.has(l.id)) seen.set(l.id, l.name);
+      return [...seen].map(([id, name]) => ({ id, name }));
+    },
+  );
+  return (
+    <Show when={(layers() ?? []).length > 0} fallback={<p class="muted">Aucune couche manuelle dans les scènes.</p>}>
+      <div class="c-layers">
+        <For each={layers() ?? []}>
+          {(l) => {
+            const onAir = () => p.view.layers[l.id] === true;
+            return (
+              <div class="c-link">
+                <span>{onAir() ? "🔴 " : ""}{l.name}</span>
+                <Button kind={onAir() ? "danger" : "primary"} onClick={() => void p.act(onAir() ? { type: "layer.out", layerId: l.id } : { type: "layer.take", layerId: l.id })}>{onAir() ? "OUT" : "TAKE"}</Button>
+              </div>
+            );
+          }}
+        </For>
+      </div>
+    </Show>
+  );
+}
+
+/** Games prepared in the studio: launch one live (screens follow, links unchanged). */
+function LibraryPanel() {
+  const [games, { refetch }] = createResource(() => api<{ games: { id: string; title: string; questions: number }[] }>("/api/games").then((r) => r.games).catch(() => []));
+  const [msg, setMsg] = createSignal<string | null>(null);
+  const launch = async (id: string, title: string) => {
+    // oxlint-disable-next-line no-alert -- irreversible action confirmation (doc 08)
+    if (!window.confirm(`Lancer « ${title} » maintenant ? La partie en cours reste dans le journal.`)) return;
+    try {
+      const r = await api<{ joinCode: string }>(`/api/games/${id}/launch`, { method: "POST" });
+      setMsg(`« ${title} » lancée · code joueurs ${r.joinCode}`);
+    } catch (e) {
+      setMsg(`Échec : ${e instanceof Error ? e.message : String(e)}`);
+    }
+  };
+  return (
+    <div class="c-links">
+      <For each={games() ?? []} fallback={<p class="muted">Aucune partie enregistrée dans le studio.</p>}>
+        {(g) => (
+          <div class="c-link">
+            <span>{g.title} <span class="muted">({g.questions} q.)</span></span>
+            <Button onClick={() => void launch(g.id, g.title)}>Lancer</Button>
+          </div>
+        )}
+      </For>
+      <Button kind="ghost" onClick={() => void refetch()}>Actualiser</Button>
+      <Show when={msg()}>{(m) => <p class="muted">{m()}</p>}</Show>
+    </div>
+  );
+}
+
+function TeamsPanel(p: { view: ControlView; act: (a: Action, ok?: string) => Promise<boolean> }) {
+  const [name, setName] = createSignal("");
+  const [color, setColor] = createSignal("#7c5cff");
+  const add = async () => {
+    if (name().trim().length === 0) return;
+    if (await p.act({ type: "team.add", teamId: `t_${hex(6)}`, name: name().trim(), color: color() })) setName("");
+  };
+  return (
+    <div class="c-links">
+      <For each={p.view.teamBoard}>{(t) => <div class="c-link"><span><span class="c-dot c-dot-on" style={{ background: t.color }} />{t.name}</span><b>{t.total}</b></div>}</For>
+      <div class="c-add">
+        <input placeholder="Nouvelle équipe" value={name()} onInput={(e) => setName(e.currentTarget.value)} onKeyDown={(e) => { if (e.key === "Enter") void add(); }} />
+        <input type="color" value={color()} onInput={(e) => setColor(e.currentTarget.value)} />
+        <Button onClick={() => void add()}>Ajouter</Button>
+      </div>
     </div>
   );
 }

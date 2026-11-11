@@ -5,7 +5,7 @@ export const ALLOWED_DEPS: Readonly<Record<string, readonly string[]>> = {
   "@quiz/protocol": ["@quiz/schema"],
   "@quiz/server": ["@quiz/schema", "@quiz/engine", "@quiz/protocol"],
   "@quiz/renderer": ["@quiz/schema"],
-  "@quiz/ui": ["@quiz/schema", "@quiz/protocol"],
+  "@quiz/ui": ["@quiz/schema", "@quiz/protocol", "@quiz/renderer"],
   "@quiz/control": ["@quiz/schema", "@quiz/protocol", "@quiz/renderer", "@quiz/ui"],
   "@quiz/host": ["@quiz/schema", "@quiz/protocol", "@quiz/renderer", "@quiz/ui"],
   "@quiz/player": ["@quiz/schema", "@quiz/protocol", "@quiz/renderer", "@quiz/ui"],

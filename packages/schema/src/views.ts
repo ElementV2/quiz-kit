@@ -32,6 +32,8 @@ export const PollBoardSlot = z.strictObject({
   revealed: z.boolean(),
   /** Found by a correct answer: its value counts in the bank. */
   found: z.boolean(),
+  /** SECRET, same rule as `label`: the option to judge (`answer.judge { optionId }`) from the control room / host. */
+  optionId: OptionId.nullable(),
   /** SECRET: null for player / output while the slot is masked. Host / control always see it. */
   label: z.string().nullable(),
   /** SECRET: share (%), same rule as `label`. */
@@ -164,6 +166,8 @@ export const BaseView = z.strictObject({
   timer: z.strictObject({ endsAt: z.number().int(), durationMs: z.number().int() }).nullable(),
   mechanic: MechanicView.nullable(),
   leaderboard: z.array(LeaderboardRow),
+  /** Manual layers TAKEN by the control room (renderer: `manual` / `auto-hold` layers). */
+  layers: z.record(z.string(), z.boolean()).default({}),
   /** Team totals (member points at scoring time + team entries, e.g. poll-board banks), ranked. Empty without teams. */
   teamBoard: z.array(TeamLeaderboardRow).default([]),
 });

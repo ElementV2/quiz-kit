@@ -309,6 +309,9 @@ importers:
       '@quiz/protocol':
         specifier: workspace:*
         version: link:../protocol
+      '@quiz/renderer':
+        specifier: workspace:*
+        version: link:../renderer
       '@quiz/schema':
         specifier: workspace:*
         version: link:../schema

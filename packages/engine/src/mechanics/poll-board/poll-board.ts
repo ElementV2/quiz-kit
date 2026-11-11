@@ -190,7 +190,7 @@ export const pollBoard = defineMechanic<PollBoardConfig, PollBoardState>({
       mechanic: "poll-board",
       slots: s.slots.map((x, index) => {
         const shown = x.revealed || privileged;
-        return { index, revealed: x.revealed, found: x.found, label: shown ? x.label : null, value: shown ? x.value : null };
+        return { index, revealed: x.revealed, found: x.found, optionId: shown ? x.optionId : null, label: shown ? x.label : null, value: shown ? x.value : null };
       }),
       strikes: s.strikes,
       maxStrikes: s.maxStrikes,

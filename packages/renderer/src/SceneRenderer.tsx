@@ -34,7 +34,7 @@ export function SceneRenderer(props: SceneRendererProps): JSX.Element {
     onCleanup(() => ro.disconnect());
   });
   const layers = createMemo(() => props.scene.layers.toSorted((a, b) => a.z - b.z));
-  const taken = createMemo<Readonly<Record<string, boolean>>>(() => (props.view !== null && "layers" in props.view ? (props.view as { layers?: Record<string, boolean> }).layers ?? {} : {})); // oxlint-disable-line typescript/no-unsafe-type-assertion -- optional field until layer TAKE/OUT lands in the view schema
+  const taken = createMemo<Readonly<Record<string, boolean>>>(() => props.view?.layers ?? {});
   const style = (): JSX.CSSProperties => ({
     ...themeVars(props.theme),
     position: "relative",

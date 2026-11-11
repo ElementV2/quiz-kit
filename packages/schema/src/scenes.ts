@@ -9,7 +9,10 @@ import { Phase } from "./phase.ts";
 export const ZoneType = z.enum([
   "question", // bound: question prompt
   "question-media", // bound: question.prompt.media (image, video, audio — blind test)
-  "answer-list", // repeat over the mechanic options (choice) — item state: idle | selected | correct | wrong
+  "answer-list", // repeat over the mechanic options (choice, ladder, buzzer) — item state: idle | selected | correct | wrong | disabled
+  "poll-board", // survey slots (masked / revealed / found), strikes, bank
+  "buzzer", // who has the hand / who won
+  "ladder", // steps, safe steps, jokers
   "timer", // bound: view.timer (countdown from server time)
   "leaderboard", // bound: view.leaderboard
   "round-info", // round title + question index

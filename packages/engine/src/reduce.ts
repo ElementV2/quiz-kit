@@ -192,6 +192,14 @@ function reduceAllowed(s: GameState, a: Action, ctx: Ctx, registry: Registry): R
       return withMechanic(purged, registry, (m, state) => ok(m.removeParticipant(state, a.participantId)));
     }
 
+    case "layer.take":
+      if (s.layers[a.layerId] === true) return err("conflict", "couche déjà à l'antenne");
+      return ok({ ...s, layers: { ...s.layers, [a.layerId]: true } });
+
+    case "layer.out":
+      if (s.layers[a.layerId] !== true) return err("conflict", "couche déjà retirée");
+      return ok({ ...s, layers: { ...s.layers, [a.layerId]: false } });
+
     case "team.add":
       if (s.teams.some((t) => t.id === a.teamId)) return err("conflict", "identifiant d'équipe déjà pris");
       return ok({ ...s, teams: [...s.teams, { id: a.teamId, name: a.name, color: a.color, captainId: null }] });

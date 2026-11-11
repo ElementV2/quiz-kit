@@ -1,6 +1,6 @@
 import { For, Match, Show, Switch, createEffect, createMemo, createSignal, onCleanup } from "solid-js";
 import { render } from "solid-js/web";
-import { asChoice, optionLetter, secondsLeft } from "@quiz/renderer";
+import { asBuzzer, asChoice, asLadder, asPollBoard, nameOf, optionLetter, optionState, secondsLeft } from "@quiz/renderer";
 import type { PlayerView } from "@quiz/schema";
 import { StatusPill, createQuizConnection, tokenFromUrl } from "@quiz/ui";
 import "@quiz/ui/ui.css";
@@ -86,6 +86,17 @@ function Game(props: { token: string }) {
     if (view()?.myAnswer !== null) setSending(null);
   });
 
+  const [buzzing, setBuzzing] = createSignal(false);
+  const buzz = async () => {
+    const v = view();
+    if (v === null || v.me === null || buzzing()) return;
+    setBuzzing(true);
+    navigator.vibrate?.(60);
+    const ack = await conn.submit({ type: "buzz", participantId: v.me.participantId });
+    setBuzzing(false);
+    if (!ack.ok) setLastError(ack.reason);
+  };
+
   const start = async () => {
     setStarted(true);
     await enterFullscreen();
@@ -95,9 +106,9 @@ function Game(props: { token: string }) {
   const answer = async (optionId: string) => {
     const v = view();
     const m = v?.mechanic;
-    if (v === null || !v.canAnswer || v.me === null || m === null || m === undefined || m.mechanic !== "choice") return;
+    if (v === null || !v.canAnswer || v.me === null || m === null || m === undefined || (m.mechanic !== "choice" && m.mechanic !== "ladder")) return;
     let ids = [optionId];
-    if (m.maxPick > 1) {
+    if (m.mechanic === "choice" && m.maxPick > 1) {
       const cur = new Set(v.myAnswer ?? []);
       if (cur.has(optionId)) cur.delete(optionId);
       else cur.add(optionId);
@@ -183,6 +194,53 @@ function Game(props: { token: string }) {
                     </div>
                   );
                 }}
+              </Show>
+              <Show when={asLadder(v().mechanic)}>
+                {(m) => {
+                  const mine = () => m().candidate === null || m().candidate === v().me?.participantId;
+                  return (
+                    <>
+                      <p class="p-ladder">Palier {m().level + 1} / {m().steps.length} · en jeu : {(m().atStake ?? 0).toLocaleString("fr-FR")} · assuré : {m().secured.toLocaleString("fr-FR")}</p>
+                      <Show when={!mine()}><p class="muted">C'est au tour de {nameOf(v(), m().candidate)}.</p></Show>
+                      <div class="p-options" data-count={m().options.length}>
+                        <For each={m().options}>
+                          {(o, i) => (
+                            <button type="button" class="p-option" data-state={sending() === o.id ? "sending" : optionState(m(), o.id, v().myAnswer, v().phase)} disabled={!mine() || !v().canAnswer || m().hidden.includes(o.id) || sending() !== null} onClick={() => void answer(o.id)}>
+                              <span class="p-letter">{optionLetter(i())}</span>
+                              <span class="p-label">{m().hidden.includes(o.id) ? "" : o.label}</span>
+                              <Show when={m().audience}>{(a) => <span class="p-share">{a()[o.id] ?? 0} %</span>}</Show>
+                            </button>
+                          )}
+                        </For>
+                      </div>
+                    </>
+                  );
+                }}
+              </Show>
+              <Show when={asBuzzer(v().mechanic)}>
+                {(m) => (
+                  <div class="p-buzz-wrap">
+                    <Switch>
+                      <Match when={m().winner !== null}><p class="p-big">{m().winner === v().me?.participantId ? "✓ Bravo !" : `✓ ${nameOf(v(), m().winner)}`}</p></Match>
+                      <Match when={m().me?.hasHand === true}><p class="p-big p-hand">🔔 Vous avez la main : répondez !</p></Match>
+                      <Match when={m().me?.lockedOut === true}><p class="p-big muted">Bloqué pour cette question</p></Match>
+                      <Match when={m().me?.queuePosition !== null && m().me?.queuePosition !== undefined}><p class="p-big">En file : n° {(m().me?.queuePosition ?? 0) + 1}</p></Match>
+                      <Match when={true}>
+                        <button type="button" class="p-buzz" disabled={!v().canAnswer || m().me?.canBuzz !== true || buzzing()} onClick={() => void buzz()}>BUZZ</button>
+                      </Match>
+                    </Switch>
+                    <Show when={m().hand !== null && m().hand !== v().me?.participantId && m().winner === null}><p class="muted">Main : {nameOf(v(), m().hand)}</p></Show>
+                  </div>
+                )}
+              </Show>
+              <Show when={asPollBoard(v().mechanic)}>
+                {(m) => (
+                  <div class="p-poll">
+                    <For each={m().slots}>{(s) => <div class="p-slot" data-found={String(s.found)}><span>{s.index + 1}</span><span>{s.revealed ? s.label : "…"}</span><b>{s.revealed ? s.value : ""}</b></div>}</For>
+                    <p class="p-strikes">{"✗".repeat(m().strikes)}<span class="muted">{"✗".repeat(Math.max(0, m().maxStrikes - m().strikes))}</span></p>
+                    <p class="muted">Réponse à l'oral : l'animateur valide.</p>
+                  </div>
+                )}
               </Show>
               <footer class="p-feedback" role="status">
                 <Switch>

@@ -70,6 +70,9 @@ export const Action = z.discriminatedUnion("type", [
   action("player.setTeam", { participantId: ParticipantId, teamId: TeamId.nullable() }),
   action("player.setSeat", { participantId: ParticipantId, seat: z.number().int().min(1).max(999).nullable() }),
   action("player.remove", { participantId: ParticipantId }),
+  /** Manual layers (doc 06 « TAKE / OUT ») : the control room puts a layer on air or takes it off. */
+  action("layer.take", { layerId: z.string().regex(/^[0-9a-z-]+$/).max(64) }),
+  action("layer.out", { layerId: z.string().regex(/^[0-9a-z-]+$/).max(64) }),
   action("team.add", {
     teamId: TeamId,
     name: z.string().trim().min(1).max(40),
@@ -85,7 +88,7 @@ export type ActionOf<T extends ActionType> = Extract<Action, { type: T }>;
 const CONTROL_ONLY: readonly ActionType[] = [
   "game.start", "round.start", "question.present", "question.open", "question.lock", "question.reveal",
   "question.next", "timer.set", "timer.stop", "player.add", "player.rename", "player.setStatus",
-  "player.setTeam", "player.setSeat", "player.remove", "team.add", "undo",
+  "player.setTeam", "player.setSeat", "player.remove", "team.add", "undo", "layer.take", "layer.out",
   "element.reveal", "joker.use", "ladder.stop", "poll.control", "poll.steal",
 ];
 const SCORING: readonly ActionType[] = ["score.adjust", "score.setTotal", "score.void"];

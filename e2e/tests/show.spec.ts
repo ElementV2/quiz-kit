@@ -7,6 +7,13 @@ type Links = { entries: { id: string; path: string }[]; joinCode: string };
 const links = (): Links => JSON.parse(readFileSync(join(import.meta.dirname, "..", ".links.json"), "utf8")) as Links;
 const path = (id: string): string => links().entries.find((e) => e.id === id)?.path ?? "";
 
+const controlToken = (): string => path("control").split("t=")[1] ?? "";
+
+/** Each test starts its own game (tests share one server): the built-in QCM template. */
+test.beforeEach(async ({ request }) => {
+  expect((await request.post(`/api/games/g_modele_qcm/launch?t=${controlToken()}`)).status()).toBe(200);
+});
+
 /** Fails the test on any console error / uncaught exception (e.g. an HTTPS-only API over plain HTTP). */
 function watchErrors(page: Page, errors: string[]): void {
   page.on("console", (m: ConsoleMessage) => {
@@ -88,7 +95,9 @@ test("a player joins with the game code over plain HTTP", async ({ browser }) =>
   const page = await ctx.newPage();
   const errors: string[] = [];
   watchErrors(page, errors);
-  await page.goto(`/play?code=${links().joinCode}`);
+  // The join code is per game: read the current one.
+  const current = (await (await page.request.get(`/api/links?t=${controlToken()}`)).json()) as { joinCode: string }; // oxlint-disable-line typescript/no-unsafe-type-assertion -- own endpoint
+  await page.goto(`/play?code=${current.joinCode}`);
   await page.getByLabel("Ton pseudo").fill("Zoé");
   await page.getByRole("button", { name: "C'est parti" }).click();
   await page.getByText("Touchez l'écran pour commencer").click();

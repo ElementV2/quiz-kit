@@ -1,6 +1,6 @@
 import { For, Show, createEffect, createSignal, onCleanup, type Component, type JSX } from "solid-js";
 import type { View, Zone, ZoneType } from "@quiz/schema";
-import { asChoice, estimateFontSize, optionLetter, optionShare, optionState, readPath, secondsLeft } from "./logic.ts";
+import { asBuzzer, asLadder, asPollBoard, estimateFontSize, nameOf, optionLetter, optionShare, optionState, optionsOf, readPath, secondsLeft } from "./logic.ts";
 
 export type ZoneProps = { readonly zone: Zone; readonly view: View; readonly serverNow: () => number; readonly mediaUrl: (hash: string) => string };
 
@@ -63,9 +63,9 @@ const AnswerListZone: Component<ZoneProps> = (p) => {
   const columns = () => num(p.zone, "columns", 2);
   const gap = () => num(p.zone, "gap", 16);
   return (
-    <Show when={asChoice(m())}>
+    <Show when={optionsOf(m()).length > 0 ? m() : null}>
       {(mech) => {
-        const opts = () => mech().options;
+        const opts = () => optionsOf(mech());
         const rows = () => Math.ceil(opts().length / columns());
         const cellH = () => (p.zone.rect.h - gap() * (rows() - 1)) / Math.max(1, rows());
         const cellW = () => (p.zone.rect.w - gap() * (columns() - 1)) / columns();
@@ -73,7 +73,7 @@ const AnswerListZone: Component<ZoneProps> = (p) => {
           <div style={{ display: "grid", "grid-template-columns": `repeat(${columns()}, 1fr)`, gap: `${gap()}px`, width: "100%", height: "100%" }}>
             <For each={opts()}>
               {(o, i) => {
-                const state = () => optionState(mech(), o.id, myAnswer());
+                const state = () => optionState(mech(), o.id, myAnswer(), p.view.phase);
                 const share = () => optionShare(mech(), o.id);
                 const bg = () =>
                   state() === "correct" ? "var(--q-color-correct)" : state() === "selected" ? "var(--q-color-selected)" : "var(--q-color-surface)";
@@ -81,7 +81,7 @@ const AnswerListZone: Component<ZoneProps> = (p) => {
                   <div
                     class="q-answer"
                     data-state={state()}
-                    style={{ ...panel, position: "relative", overflow: "hidden", display: "flex", "align-items": "center", gap: "20px", padding: "0 28px", background: bg(), opacity: state() === "wrong" ? 0.45 : 1, transition: "background var(--q-motion), opacity var(--q-motion)", ...p.zone.states[state()] }}
+                    style={{ ...panel, position: "relative", overflow: "hidden", display: "flex", "align-items": "center", gap: "20px", padding: "0 28px", background: bg(), opacity: state() === "wrong" ? 0.45 : state() === "disabled" ? 0.12 : 1, transition: "background var(--q-motion), opacity var(--q-motion)", ...p.zone.states[state()] }}
                   >
                     <Show when={share() !== null}>
                       <div style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: `${Math.round((share() ?? 0) * 100)}%`, background: "rgba(255,255,255,.12)", transition: "width var(--q-motion)" }} />
@@ -199,10 +199,90 @@ const QuestionMediaZone: Component<ZoneProps> = (p) => {
 
 const ImageZone: Component<ZoneProps> = (p) => <img src={str(p.zone, "src", "")} alt="" style={{ width: "100%", height: "100%", "object-fit": "contain" }} />;
 
+/** Survey board (« sondage à slots ») : masked slots revealed one by one, strikes, bank. */
+const PollBoardZone: Component<ZoneProps> = (p) => (
+  <Show when={asPollBoard(p.view.mechanic)}>
+    {(m) => {
+      const cols = () => (m().slots.length > 4 ? 2 : 1);
+      return (
+        <div style={{ width: "100%", height: "100%", display: "flex", "flex-direction": "column", gap: "12px" }}>
+          <div style={{ flex: 1, display: "grid", "grid-template-columns": `repeat(${cols()}, 1fr)`, gap: "10px" }}>
+            <For each={m().slots}>
+              {(slot) => (
+                <div class="q-slot" data-state={slot.revealed ? (slot.found ? "correct" : "revealed") : "masked"} style={{ ...panel, display: "flex", "align-items": "center", gap: "16px", padding: "0 22px", background: slot.found ? "var(--q-color-correct)" : slot.revealed ? "var(--q-color-surface-alt)" : "var(--q-color-surface)", transition: "background var(--q-motion)", "font-size": "30px" }}>
+                  <span style={{ width: "44px", height: "44px", "border-radius": "50%", background: "var(--q-color-primary)", display: "grid", "place-items": "center", "font-size": "24px" }}>{slot.index + 1}</span>
+                  <span style={{ flex: 1, overflow: "hidden", "white-space": "nowrap", "text-overflow": "ellipsis" }}>{slot.revealed ? (slot.label ?? "") : ""}</span>
+                  <span style={{ "font-variant-numeric": "tabular-nums", color: "var(--q-color-accent)" }}>{slot.revealed ? (slot.value ?? "") : ""}</span>
+                </div>
+              )}
+            </For>
+          </div>
+          <div style={{ display: "flex", "align-items": "center", gap: "18px", "font-size": "40px" }}>
+            <For each={Array.from({ length: m().maxStrikes }, (_, i) => i)}>
+              {(i) => <span style={{ color: i < m().strikes ? "var(--q-color-wrong)" : "rgba(255,255,255,.18)", "font-weight": 900 }}>✗</span>}
+            </For>
+            <span style={{ "margin-left": "auto", color: "var(--q-color-muted)" }}>Banque <b style={{ color: "var(--q-color-accent)" }}>{m().bank}</b></span>
+          </div>
+        </div>
+      );
+    }}
+  </Show>
+);
+
+/** Buzzer: who has the hand, who won. Names come from the board carried by the view. */
+const BuzzerZone: Component<ZoneProps> = (p) => (
+  <Show when={asBuzzer(p.view.mechanic)}>
+    {(m) => (
+      <Show when={m().winner ?? m().hand}>
+        {(id) => (
+          <div style={{ ...panel, width: "100%", height: "100%", display: "flex", "align-items": "center", "justify-content": "center", gap: "18px", "font-size": `${Math.round(p.zone.rect.h * 0.42)}px`, background: m().winner !== null ? "var(--q-color-correct)" : "var(--q-color-primary)" }}>
+            <span>{m().winner !== null ? "✓" : "🔔"}</span>
+            <span>{nameOf(p.view, id())}</span>
+          </div>
+        )}
+      </Show>
+    )}
+  </Show>
+);
+
+/** Ladder (« paliers ») : steps bottom-up, current level, safe steps, jokers. */
+const LadderZone: Component<ZoneProps> = (p) => (
+  <Show when={asLadder(p.view.mechanic)}>
+    {(m) => {
+      const rows = () => m().steps.map((amount, i) => ({ amount, i })).toReversed();
+      const rowH = () => Math.max(18, Math.min(48, (p.zone.rect.h - 70) / Math.max(1, m().steps.length)));
+      return (
+        <div style={{ ...panel, width: "100%", height: "100%", padding: "14px 18px", display: "flex", "flex-direction": "column", gap: "4px" }}>
+          <div style={{ display: "flex", gap: "12px", "font-size": "22px", "margin-bottom": "6px" }}>
+            <span style={{ opacity: m().jokers.fifty === "available" ? 1 : 0.3 }}>50:50</span>
+            <span style={{ opacity: m().jokers.audience === "available" ? 1 : 0.3 }}>👥</span>
+            <span style={{ "margin-left": "auto", color: "var(--q-color-muted)" }}>{m().status === "playing" ? "" : m().status === "won" ? "Gagné !" : m().status === "stopped" ? "Arrêt" : "Perdu"}</span>
+          </div>
+          <For each={rows()}>
+            {(r) => {
+              const current = () => r.i === m().level;
+              const reached = () => r.i < m().level;
+              return (
+                <div style={{ display: "flex", "justify-content": "space-between", "align-items": "center", height: `${rowH()}px`, padding: "0 12px", "border-radius": "6px", "font-size": `${Math.round(rowH() * 0.6)}px`, background: current() ? "var(--q-color-accent)" : "transparent", color: current() ? "#111" : m().safeSteps.includes(r.i) ? "var(--q-color-text)" : reached() ? "var(--q-color-correct)" : "var(--q-color-muted)", "font-weight": m().safeSteps.includes(r.i) ? 900 : 600 }}>
+                  <span>{r.i + 1}</span>
+                  <span style={{ "font-variant-numeric": "tabular-nums" }}>{r.amount.toLocaleString("fr-FR")}</span>
+                </div>
+              );
+            }}
+          </For>
+        </div>
+      );
+    }}
+  </Show>
+);
+
 /** Zone registry (CONVENTIONS « O » : new zone type = new entry, no change to the scene renderer). */
 const REGISTRY: Record<ZoneType, Component<ZoneProps>> = {
   question: QuestionZone,
   "question-media": QuestionMediaZone,
+  "poll-board": PollBoardZone,
+  buzzer: BuzzerZone,
+  ladder: LadderZone,
   "answer-list": AnswerListZone,
   timer: TimerZone,
   leaderboard: LeaderboardZone,

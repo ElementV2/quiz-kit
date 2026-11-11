@@ -39,6 +39,9 @@ export const PROGRAM_SCENE: Scene = Scene.parse({
         { id: "media", type: "question-media", rect: { x: 560, y: 130, w: 800, h: 290 }, props: { sound: true } },
         { id: "question", type: "question", rect: { x: 96, y: 560, w: 1728, h: 180 } },
         { id: "answers", type: "answer-list", rect: { x: 96, y: 760, w: 1728, h: 260 }, props: { columns: 2, gap: 20 } },
+        { id: "poll", type: "poll-board", rect: { x: 96, y: 760, w: 1728, h: 260 } },
+        { id: "buzzer", type: "buzzer", rect: { x: 96, y: 440, w: 720, h: 100 } },
+        { id: "ladder", type: "ladder", rect: { x: 1520, y: 60, w: 304, h: 300 } },
       ],
     },
     {
@@ -54,6 +57,14 @@ export const PROGRAM_SCENE: Scene = Scene.parse({
       z: 40,
       phases: ["open", "locked"],
       zones: [{ id: "count", type: "answer-count", rect: { x: 96, y: 440, w: 420, h: 100 } }],
+    },
+    {
+      // Manual layer (doc 06 « TAKE / OUT ») : the control room puts the round title on air when it wants.
+      id: "banner",
+      name: "Bandeau titre",
+      z: 40,
+      mode: "manual",
+      zones: [{ id: "banner", type: "text", rect: { x: 96, y: 900, w: 1000, h: 110 }, bind: "round.title", props: { size: 54 }, style: { background: "var(--q-color-primary)", "border-radius": "var(--q-radius)", padding: "0 32px" } }],
     },
     {
       id: "board",

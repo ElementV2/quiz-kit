@@ -41,6 +41,8 @@ export const GameState = z.strictObject({
   lastSeq: z.number().int(),
   /** Questions revealed at least once (run-down status). */
   played: z.array(z.string()),
+  /** Manual layers currently TAKEN (on air), by layer id (doc 06). */
+  layers: z.record(z.string(), z.boolean()),
 });
 export type GameState = z.infer<typeof GameState>;
 
@@ -64,6 +66,7 @@ export function initialState(session: Session): GameState {
     windowMs: null,
     lastSeq: 0,
     played: [],
+    layers: {},
   };
 }
 

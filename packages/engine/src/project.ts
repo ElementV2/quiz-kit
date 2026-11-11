@@ -48,6 +48,7 @@ function base(s: GameState, audience: Audience, participantId: string | null, re
     mechanic: m === null || s.mechanic === null ? null : m.project(s.mechanic.state, { audience, phase: s.phase, participantId }),
     // Players get the top only: a full 500-row board in every tablet view would make each broadcast O(n²).
     leaderboard: audience === "player" ? leaderboard(s).slice(0, PLAYER_LEADERBOARD_ROWS) : leaderboard(s),
+    layers: s.layers,
     teamBoard: teamBoard(s),
   };
 }

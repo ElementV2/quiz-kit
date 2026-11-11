@@ -25,21 +25,21 @@ Règle : une phase n'est terminée que quand ses critères de sortie passent. Co
 
 ## Phase 1 — Un show jouable
 
-- [ ] `renderer` : SceneRenderer, zones question / answer / answer-list / timer / score / leaderboard, états, couches TAKE/OUT
+- [x] `renderer` : SceneRenderer, zones question / answer-list / timer / leaderboard / média / sondage / buzzer / paliers, états, couches TAKE/OUT
 - [x] `output` : sortie 1920×1080 transparente, reprise par snapshot
-- [ ] `control` : run-down, actions contextuelles, couches, scores éditables, undo, raccourcis
-- [x] `host` : bonne réponse, notes (valider / refuser : avec la mécanique buzzer)
-- [ ] `player` : PWA `/seat/<n>` et `/play/<code>`, Wake Lock, cache médias, « Réponse enregistrée » après ack
+- [x] `control` : run-down, actions contextuelles, couches, scores éditables, undo, raccourcis
+- [x] `host` : bonne réponse, notes, valider / refuser (buzzer, sondage)
+- [x] `player` : `/seat/<n>` et `/play` (code), écran allumé sans HTTPS, préchargement médias, « Réponse enregistrée » après ack
 - [x] HTTPS LAN tranché (ADR-0012) : HTTP simple, aucune install sur les tablettes louées — prérequis de `player` (Wake Lock, Service Worker)
 - [x] Médias minimum : stockage par hash + `preload` (prérequis du cache médias de `player`)
-- [ ] Mécaniques `poll-board` (sondage à slots, 3 erreurs, vol) et `buzzer` (priorité, blocage)
-- [ ] Mécanique `ladder` + jokers 50:50 / sondage public (prérequis du template QCM à paliers)
-- [ ] Joueurs / équipes / sièges : création, import CSV, statuts, échange de tablette
+- [x] Mécaniques `poll-board` (sondage à slots, 3 erreurs, vol) et `buzzer` (priorité, blocage)
+- [x] Mécanique `ladder` + jokers 50:50 / sondage public (prérequis du template QCM à paliers)
+- [x] Joueurs / équipes / sièges : création, import CSV, statuts, échange de tablette (changement de siège)
 - [x] Import CSV de questions (régie : coller / fichier → nouvelle partie à chaud)
-- [ ] Templates codés : QCM à paliers (`ladder`), sondage à slots, buzzer culture G
+- [x] Templates codés : QCM rapide, QCM à paliers (`ladder`), sondage à slots, buzzer culture G (bibliothèque)
 - [x] Check-list pré-antenne
 
-**Sortie** : répétition réelle avec 50 tablettes et une sortie dans OBS, sans incident.
+**Sortie** : répétition réelle avec 50 tablettes et une sortie dans OBS, sans incident. — **à faire par l'équipe** (tout est prêt côté logiciel : e2e régie / sortie / tablettes / buzzer / sondage / paliers verts ; charge 500 tablettes et chaos verts).
 
 ## Phase 2 — Studio et habillage
 

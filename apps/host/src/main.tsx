@@ -2,7 +2,7 @@ import { For, Show, createMemo, createSignal, onCleanup } from "solid-js";
 import { render } from "solid-js/web";
 import type { HostView } from "@quiz/schema";
 import { asChoice, optionLetter, secondsLeft } from "@quiz/renderer";
-import { Panel, StatusPill, createQuizConnection } from "@quiz/ui";
+import { MechanicPanel, Panel, StatusPill, createQuizConnection } from "@quiz/ui";
 import "@quiz/ui/ui.css";
 import "./host.css";
 
@@ -59,6 +59,7 @@ function App() {
                 );
               }}
             </Show>
+            <MechanicPanel view={v()} mode="host" act={async (a) => (await conn.submit(a)).ok} />
             <Show when={v().notes}>{(n) => <p class="h-notes">📝 {n()}</p>}</Show>
             <Show when={v().nextQuestion}>{(nq) => <p class="h-next">Ensuite : {nq().text}</p>}</Show>
           </>
