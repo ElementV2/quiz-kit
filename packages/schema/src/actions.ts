@@ -203,7 +203,6 @@ export const actionPermissions: Readonly<Record<Role, ReadonlySet<ActionType>>> 
   // Control may answer / buzz on behalf of a player (no tablet, operator-entered buzzer order).
   control: new Set<ActionType>([...CONTROL_ONLY, ...SCORING, ...PLAYER_ACTIONS, "answer.judge"]),
   "control-readonly": new Set<ActionType>(),
-  scorer: new Set<ActionType>([...SCORING, "answer.judge"]),
   host: new Set<ActionType>(["answer.judge", "chain.bank"]),
   output: new Set<ActionType>(),
   player: new Set<ActionType>(PLAYER_ACTIONS),

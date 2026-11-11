@@ -5,7 +5,11 @@ import { ParticipantId, QuestionId, ScoreEntryId, SessionId, TeamId } from "./id
 import { Actor } from "./roles.ts";
 import { Scene, Theme } from "./scenes.ts";
 
-export const ParticipantStatus = z.enum(["active", "eliminated", "waiting", "substitute", "disconnected"]);
+/**
+ * In play, substitute (kept aside, keeps their place on a relaunch) or eliminated. Older journals / snapshots may
+ * say « waiting » (→ substitute) or « disconnected » (→ active: the connection is shown apart): read as such.
+ */
+export const ParticipantStatus = z.preprocess((v) => (v === "waiting" ? "substitute" : v === "disconnected" ? "active" : v), z.enum(["active", "eliminated", "substitute"]));
 export type ParticipantStatus = z.infer<typeof ParticipantStatus>;
 
 export const Channel = z.enum(["seat", "play", "buzzer", "twitch", "youtube"]);
@@ -25,7 +29,6 @@ export function cleanDisplayName(name: string): string {
 export const Participant = z.strictObject({
   id: ParticipantId,
   displayName: DisplayName,
-  photo: z.string().optional(),
   teamId: TeamId.nullable(),
   seat: z.number().int().min(1).max(999).nullable(),
   status: ParticipantStatus,
@@ -33,12 +36,15 @@ export const Participant = z.strictObject({
 });
 export type Participant = z.infer<typeof Participant>;
 
-export const Team = z.strictObject({
-  id: TeamId,
-  name: z.string().trim().min(1).max(40),
-  color: z.string().regex(/^#[0-9a-fA-F]{6}$/),
-  captainId: ParticipantId.nullable(),
-});
+/** `captainId` (never used) may still be in older snapshots: dropped on read. */
+export const Team = z.preprocess(
+  (v) => (typeof v === "object" && v !== null && !Array.isArray(v) && "captainId" in v ? Object.fromEntries(Object.entries(v).filter(([k]) => k !== "captainId")) : v),
+  z.strictObject({
+    id: TeamId,
+    name: z.string().trim().min(1).max(40),
+    color: z.string().regex(/^#[0-9a-fA-F]{6}$/),
+  }),
+);
 export type Team = z.infer<typeof Team>;
 
 export const ScoreTarget = z.union([

@@ -41,7 +41,6 @@ export function createReplayCursor(session: Session, events: readonly Event[], r
 export const ACTOR_LABEL: Readonly<Record<string, string>> = {
   control: "régie",
   "control-readonly": "régie (lecture)",
-  scorer: "marqueur",
   host: "animateur",
   output: "sortie",
   player: "joueur",

@@ -5,7 +5,7 @@ sont des fonctions pures `vN → vN+1` testées sur des fixtures.
 
 ## Contenu
 
-- `Question` : `id`, `prompt` ({ text, media? }), `answerSpec`, `hints[]`, `tags[]`, `difficulty`, `notes` (fiche animateur).
+- `Question` : `id`, `prompt` ({ text, media? }), `answerSpec`, `hints[]`, `tags[]`, `notes` (fiche animateur).
 - `AnswerSpec` (union discriminée sur `kind`) :
   - `single` / `multi` (`options[]`, `correct: id | id[]`, `minPick`, `maxPick`)
   - `boolean`, `categories` (`categories[]`, mapping option → catégorie)
@@ -49,9 +49,9 @@ sont des fonctions pures `vN → vN+1` testées sur des fixtures.
 
 - `Session` : `id`, `gameSnapshot` (copie figée Contenu+Format+Scènes+Thème au lancement), `seed`,
   `createdAt`, `status`.
-- `Participant` : `id`, `displayName`, `photo?`, `teamId?`, `seat?`, `status`
-  (active | eliminated | waiting | substitute | disconnected), `channel` (seat | play | buzzer | twitch | youtube).
-- `Team` : `id`, `name`, `color`, `captainId?`.
+- `Participant` : `id`, `displayName`, `teamId?`, `seat?`, `status` (active | substitute | eliminated ; les anciens
+  « waiting » / « disconnected » sont lus comme remplaçant / en jeu), `channel` (seat | play | buzzer | twitch | youtube).
+- `Team` : `id`, `name`, `color`.
 - `ScoreEntry` : `id` (dérivé de l'événement : `se_<seq>_<n>`), `target` ({ participantId } | { teamId }),
   `delta`, `questionId?`, `reason` (auto | bonus | penalty | manual | regrade), `by`, `at`, `voided`.
 - `Event` (journal, append-only) : `seq`, `at` (heure murale serveur, ms), `actor` ({ role, id? }), `action`,

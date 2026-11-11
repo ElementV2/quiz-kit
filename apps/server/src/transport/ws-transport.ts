@@ -271,7 +271,7 @@ export class WsTransport {
     const runtime = this.deps.runtime();
     conn.viewer = viewer;
     conn.jti = r.claims.jti;
-    const staff = viewer.role === "control" || viewer.role === "scorer" || viewer.role === "host" || viewer.role === "control-readonly";
+    const staff = viewer.role === "control" || viewer.role === "host" || viewer.role === "control-readonly";
     const budget = staff ? LIMITS.staff : LIMITS.device;
     conn.limiter = new RateLimiter(budget.capacity, budget.perSecond, this.monotonic());
     conn.clientId = clientId;
@@ -320,7 +320,6 @@ export class WsTransport {
         return { role: "output" };
       case "control":
       case "control-readonly":
-      case "scorer":
       case "host":
       case "studio":
         return clientId === null ? { role: viewer.role } : { role: viewer.role, id: clientId };

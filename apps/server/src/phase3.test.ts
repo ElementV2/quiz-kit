@@ -120,10 +120,9 @@ describe("phase 3 HTTP routes", () => {
     for (const url of ["/api/results", "/api/journal", "/api/rehearsal"]) {
       expect((await s.http.inject({ method: "GET", url: `${url}?t=${out}` })).statusCode).toBe(401);
     }
-    // A scorer may export results, never read the journal or drive bots.
-    const scorer = signToken(s.secret, { v: 1, show: "main", jti: "scorer", exp: null, role: "scorer" });
-    expect((await s.http.inject({ method: "GET", url: `/api/results?t=${scorer}` })).statusCode).toBe(200);
-    for (const url of ["/api/journal", "/api/rehearsal"]) expect((await s.http.inject({ method: "GET", url: `${url}?t=${scorer}` })).statusCode).toBe(401);
+    // A host link may not export results, read the journal or drive bots.
+    const host = signToken(s.secret, { v: 1, show: "main", jti: "host-x", exp: null, role: "host" });
+    for (const url of ["/api/results", "/api/journal", "/api/rehearsal"]) expect((await s.http.inject({ method: "GET", url: `${url}?t=${host}` })).statusCode).toBe(401);
     const csv = await s.http.inject({ method: "GET", url: `/api/results?kind=ranking&t=${t}` });
     expect(csv.statusCode).toBe(200);
     expect(csv.headers["content-type"]).toContain("text/csv");

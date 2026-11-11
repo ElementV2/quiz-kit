@@ -1,5 +1,5 @@
 import { For, Show, createMemo, createResource, createSignal, onCleanup, onMount, type JSX } from "solid-js";
-import { OUTPUT_SCENES, gameFromQuestions, parseQuestionsCsv, type Action, type ControlView, type Participant, type Scene } from "@quiz/schema";
+import { OUTPUT_SCENES, STATUS_LABEL_FR, gameFromQuestions, parseQuestionsCsv, type Action, type ControlView, type Participant, type Scene } from "@quiz/schema";
 import { Button, confirmDialog } from "@quiz/ui";
 import { api, hex, lanOrigin, type LinksResponse } from "./api.ts";
 import { copyText } from "./Integrations.tsx";
@@ -196,9 +196,8 @@ export function LinksList(p: { readonly links: LinksResponse }): JSX.Element {
   );
 }
 
-const STATUSES: readonly Participant["status"][] = ["active", "eliminated", "waiting", "substitute", "disconnected"];
+const STATUSES: readonly Participant["status"][] = ["active", "substitute", "eliminated"];
 const asStatus = (v: string): Participant["status"] => STATUSES.find((s) => s === v) ?? "active";
-const STATUS_LABEL: Record<Participant["status"], string> = { active: "actif", eliminated: "éliminé", waiting: "en attente", substitute: "remplaçant", disconnected: "absent" };
 
 /** Players: compact rows (online, rank, name, score ±10); a row opens to edit seat, team, status, total. */
 export function Players(p: { readonly view: ControlView; readonly readonly: boolean; readonly act: Act; readonly connected: Set<number>; readonly connectedPlayers: Set<string> }): JSX.Element {
@@ -281,7 +280,7 @@ export function Players(p: { readonly view: ControlView; readonly readonly: bool
                   <span class="c-player-label">{pl.displayName}</span>
                   <Show when={teamOf(pl.teamId)}>{(t) => <span class="c-swatch" style={{ background: t().color }} title={t().name} />}</Show>
                   <Show when={pl.seat !== null}><span class="muted q-mono">S{pl.seat}</span></Show>
-                  <Show when={pl.status !== "active"}><span class="c-status">{STATUS_LABEL[pl.status]}</span></Show>
+                  <Show when={pl.status !== "active"}><span class="c-status">{STATUS_LABEL_FR[pl.status]}</span></Show>
                 </button>
                 <span class="c-total q-mono">{totals().get(pl.id)?.total ?? 0}</span>
                 <Show when={!p.readonly}>
@@ -302,7 +301,7 @@ export function Players(p: { readonly view: ControlView; readonly readonly: bool
                   </label>
                   <label class="c-field">Statut
                     <select value={pl.status} onChange={(e) => void p.act({ type: "player.setStatus", participantId: pl.id, status: asStatus(e.currentTarget.value) })}>
-                      <For each={STATUSES}>{(s) => <option value={s}>{STATUS_LABEL[s]}</option>}</For>
+                      <For each={STATUSES}>{(s) => <option value={s}>{STATUS_LABEL_FR[s]}</option>}</For>
                     </select>
                   </label>
                   <div class="c-span c-row c-row-tight">

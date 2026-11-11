@@ -10,6 +10,8 @@ import {
   TEMPLATES,
   Event,
   GameDocument,
+  ParticipantStatus,
+  Team,
   QuestionId,
   Viewer,
   View,
@@ -105,6 +107,15 @@ describe("loadGameDocument (versioning)", () => {
     const old = { ...DEMO_GAME, format: { ...DEMO_GAME.format, participants: { mode: "teams", min: 30, max: 20, teamSize: 5 } } };
     const r = loadGameDocument(old);
     expect(r.ok && r.value.format.participants).toEqual({ max: 20 });
+  });
+
+  it("older data still reads: « waiting » / « disconnected » statuses, team captain, question difficulty", () => {
+    expect(ParticipantStatus.parse("waiting")).toBe("substitute");
+    expect(ParticipantStatus.parse("disconnected")).toBe("active");
+    expect(Team.parse({ id: "t_a", name: "A", color: "#112233", captainId: null })).toEqual({ id: "t_a", name: "A", color: "#112233" });
+    const q = DEMO_GAME.questions[0];
+    const r = loadGameDocument({ ...DEMO_GAME, questions: [{ ...q, difficulty: 3 }, ...DEMO_GAME.questions.slice(1)] });
+    expect(r.ok && "difficulty" in (r.value.questions[0] ?? {})).toBe(false);
   });
 
   it("refuses a future version instead of guessing", () => {

@@ -96,7 +96,7 @@ describe("preload of a reveal-image picture (phase 3 review B1)", () => {
     const withOptionMedia = { ...q, prompt: { ...q.prompt, media: pic }, answerSpec: { ...q.answerSpec, options: q.answerSpec.options.map((o, i) => (i === 0 ? { ...o, media: { hash: h("e"), mime: "image/png" } } : o)) } };
     const game = { ...DEMO_HINTS_GAME, questions: [withOptionMedia], format: { ...DEMO_HINTS_GAME.format, rounds: [{ ...DEMO_HINTS_GAME.format.rounds[0]!, mechanic: "reveal-image", questions: [q.id] }] } }; // oxlint-disable-line typescript/no-non-null-assertion -- fixture has a round
     const all = { pathOf: (x: string) => `/x/${x}` };
-    for (const role of ["player", "seat", "scorer"]) expect(preloadFor({ role }, game, all)).toEqual([h("e")]);
+    for (const role of ["player", "seat", "control-readonly"]) expect(preloadFor({ role }, game, all)).toEqual([h("e")]);
     expect(preloadFor({ role: "output" }, game, all).toSorted()).toEqual([h("d"), h("e")]);
   });
 });
@@ -109,7 +109,6 @@ describe("preloadFor (review I1 / I2)", () => {
     expect(preloadFor({ role: "seat" }, game, present)).toEqual([h("a")]);
     expect(preloadFor({ role: "output" }, game, present).toSorted()).toEqual([h("a"), h("b")]); // h("c") absent on disk
     // Allow-list: roles that do not render the look get questions only.
-    expect(preloadFor({ role: "scorer" }, game, present)).toEqual([h("a")]);
     expect(preloadFor({ role: "control-readonly" }, game, present)).toEqual([h("a")]);
   });
 

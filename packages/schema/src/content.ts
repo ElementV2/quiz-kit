@@ -8,8 +8,6 @@ export const Media = z.strictObject({
   w: z.number().int().positive().optional(),
   h: z.number().int().positive().optional(),
   durationMs: z.number().int().nonnegative().optional(),
-  inMs: z.number().int().nonnegative().optional(),
-  outMs: z.number().int().nonnegative().optional(),
 });
 export type Media = z.infer<typeof Media>;
 
@@ -112,19 +110,22 @@ export const AnswerSpec = z.discriminatedUnion("kind", [SingleAnswer, MultiAnswe
 export type AnswerSpec = z.infer<typeof AnswerSpec>;
 export type AnswerKind = AnswerSpec["kind"];
 
-export const Question = z.strictObject({
-  id: QuestionId,
-  prompt: z.strictObject({ text: z.string().min(1).max(2000), media: Media.optional() }),
-  answerSpec: AnswerSpec,
-  hints: z.array(z.string().min(1)).default([]),
-  tags: z.array(z.string().min(1)).default([]),
-  difficulty: z.number().int().min(1).max(5).optional(),
-  /** Host notes: never projected to player / output views. */
-  notes: z.string().max(5000).optional(),
-  /**
-   * This question's own points rule (fixed points, decay…): wins over its category's rule (mixed round) and the
-   * round's barème. Absent: the category's / round's. Mechanics that decide their own points ignore it.
-   */
-  scoring: ScoringRule.optional(),
-});
+/** `difficulty` (never used) may still be in older documents: dropped on read. */
+export const Question = z.preprocess(
+  (v) => (typeof v === "object" && v !== null && !Array.isArray(v) && "difficulty" in v ? Object.fromEntries(Object.entries(v).filter(([k]) => k !== "difficulty")) : v),
+  z.strictObject({
+    id: QuestionId,
+    prompt: z.strictObject({ text: z.string().min(1).max(2000), media: Media.optional() }),
+    answerSpec: AnswerSpec,
+    hints: z.array(z.string().min(1)).default([]),
+    tags: z.array(z.string().min(1)).default([]),
+    /** Host notes: never projected to player / output views. */
+    notes: z.string().max(5000).optional(),
+    /**
+     * This question's own points rule (fixed points, decay…): wins over its category's rule (mixed round) and the
+     * round's barème. Absent: the category's / round's. Mechanics that decide their own points ignore it.
+     */
+    scoring: ScoringRule.optional(),
+  }),
+);
 export type Question = z.infer<typeof Question>;

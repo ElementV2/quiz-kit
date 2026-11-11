@@ -103,7 +103,6 @@ const VIEWERS: readonly Viewer[] = [
   { role: "host" },
   { role: "control" },
   { role: "control-readonly" },
-  { role: "scorer" },
   { role: "studio" },
 ];
 

@@ -10,7 +10,6 @@ import { ParticipantId, SceneName, type Viewer } from "@quiz/schema";
 export const TokenClaims = z.discriminatedUnion("role", [
   z.strictObject({ v: z.literal(1), show: z.string(), jti: z.string(), exp: z.number().int().nullable(), role: z.literal("control") }),
   z.strictObject({ v: z.literal(1), show: z.string(), jti: z.string(), exp: z.number().int().nullable(), role: z.literal("control-readonly") }),
-  z.strictObject({ v: z.literal(1), show: z.string(), jti: z.string(), exp: z.number().int().nullable(), role: z.literal("scorer") }),
   z.strictObject({ v: z.literal(1), show: z.string(), jti: z.string(), exp: z.number().int().nullable(), role: z.literal("host") }),
   z.strictObject({ v: z.literal(1), show: z.string(), jti: z.string(), exp: z.number().int().nullable(), role: z.literal("studio") }),
   z.strictObject({ v: z.literal(1), show: z.string(), jti: z.string(), exp: z.number().int().nullable(), role: z.literal("output"), scene: SceneName }),
@@ -67,7 +66,6 @@ export function viewerOf(c: TokenClaims): Viewer {
       return { role: "player", participantId: c.participantId };
     case "control":
     case "control-readonly":
-    case "scorer":
     case "host":
     case "studio":
       return { role: c.role };

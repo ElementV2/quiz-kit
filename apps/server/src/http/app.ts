@@ -110,11 +110,8 @@ const staffToken = (deps: HttpDeps, req: FastifyRequest<{ Querystring: { t?: str
   return r === "control" || r === "studio";
 };
 
-/** Scores and results: control room or scorer. */
-const scoreToken = (deps: HttpDeps, req: FastifyRequest<{ Querystring: { t?: string } }>): boolean => {
-  const r = roleOf(deps, req);
-  return r === "control" || r === "scorer";
-};
+/** Scores and results: control room. */
+const scoreToken = (deps: HttpDeps, req: FastifyRequest<{ Querystring: { t?: string } }>): boolean => roleOf(deps, req) === "control";
 
 const RegradeBody = z.strictObject({ questionId: QuestionId, answerSpec: AnswerSpec });
 const RehearsalBody = z.strictObject({
@@ -275,7 +272,7 @@ export function buildHttpApp(deps: HttpDeps, options: FastifyServerOptions): Fas
 
   /**
    * After the show (doc 09): `kind=ranking|detail`, `format=csv` (Excel, `;`) or `html` (printable → PDF).
-   * Answers of every player: control room / scorer only.
+   * Answers of every player: control room only.
    */
   app.get<{ Querystring: { t?: string; kind?: string; format?: string } }>("/api/results", async (req, reply) => {
     if (!scoreToken(deps, req)) return reply.code(401).send({ error: "jeton régie requis" });

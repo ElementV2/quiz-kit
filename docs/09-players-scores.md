@@ -4,10 +4,10 @@ Tout est éditable à la main, avant et pendant le show, et tracé dans le journ
 
 ## Joueurs
 
-- Création avant le show (saisie, import CSV : nom, pseudo, photo, équipe, siège), fiches réutilisables.
+- Création avant le show (saisie, import CSV : nom, équipe, siège), fiches réutilisables.
 - Création à l'arrivée via `/play/<code>` (pseudo) ; la régie renomme, refuse, fusionne.
 - Nombre de joueurs borné par `Format.participants` (min / max) ; compteur et alerte en régie.
-- Statuts : active, eliminated, waiting, substitute, disconnected ; changement manuel libre.
+- Statuts : en jeu, remplaçant, éliminé ; changement manuel libre (la connexion est affichée à part).
 - Ajout / retrait en cours de partie sans redémarrer.
 - Sièges : assignation participant ↔ tablette par glisser-déposer ; échange de tablette en direct
   (score et historique conservés, l'ancienne tablette est déconnectée).

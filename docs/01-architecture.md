@@ -59,7 +59,6 @@ pour la **simulation d'états** (aperçu, mode Répétition).
 |---|---|---|---|
 | `control` | `/control/<show>` | `ControlView` (tout) | toutes les actions régie |
 | `control-readonly` | idem | `ControlView` | aucune |
-| `scorer` | idem | `ControlView` | `score.*`, `answer.judge` |
 | `host` | `/host/<show>` | `HostView` (bonne réponse, notes) | `answer.judge` si le format le permet |
 | `output:<scene>` | `/out/<show>/<scene>` | `OutputView` (public) | aucune |
 | `seat:<n>` | `/seat/<n>` | `PlayerView` du participant assis au siège n | réponses, buzz, vote |

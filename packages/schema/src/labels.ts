@@ -51,7 +51,6 @@ export const ANSWER_KIND_LABEL_FR: Readonly<Record<AnswerKind, string>> = {
 export const ROLE_LABEL_FR: Readonly<Record<Role, string>> = {
   control: "la régie",
   "control-readonly": "la régie en lecture seule",
-  scorer: "le poste scores",
   host: "l'animateur",
   output: "une sortie",
   player: "un joueur",
@@ -63,9 +62,7 @@ export const ROLE_LABEL_FR: Readonly<Record<Role, string>> = {
 export const STATUS_LABEL_FR: Readonly<Record<ParticipantStatus, string>> = {
   active: "en jeu",
   eliminated: "éliminé",
-  waiting: "en attente",
   substitute: "remplaçant",
-  disconnected: "déconnecté",
 };
 
 /** What an action does, in words (« présenter la question »). */

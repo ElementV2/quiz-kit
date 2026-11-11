@@ -35,9 +35,8 @@ export function project(game: Game, viewer: Viewer, registry: Registry): View {
       } satisfies HostView;
     case "control":
     case "control-readonly":
-    case "scorer":
     case "studio":
-      return controlView(game, viewer.role !== "control" && viewer.role !== "scorer", registry);
+      return controlView(game, viewer.role !== "control", registry);
     default:
       return assertNever(viewer);
   }

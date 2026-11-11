@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { ParticipantId } from "./ids.ts";
 
-export const Role = z.enum(["control", "control-readonly", "scorer", "host", "output", "player", "seat", "studio", "system"]);
+export const Role = z.enum(["control", "control-readonly", "host", "output", "player", "seat", "studio", "system"]);
 export type Role = z.infer<typeof Role>;
 
 export const SceneName = z.string().min(1).max(64).regex(/^[0-9a-z-]+$/);
@@ -10,7 +10,6 @@ export const SceneName = z.string().min(1).max(64).regex(/^[0-9a-z-]+$/);
 export const Viewer = z.discriminatedUnion("role", [
   z.strictObject({ role: z.literal("control") }),
   z.strictObject({ role: z.literal("control-readonly") }),
-  z.strictObject({ role: z.literal("scorer") }),
   z.strictObject({ role: z.literal("host") }),
   z.strictObject({ role: z.literal("output"), scene: SceneName }),
   z.strictObject({ role: z.literal("player"), participantId: ParticipantId }),

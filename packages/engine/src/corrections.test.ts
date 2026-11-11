@@ -85,11 +85,11 @@ describe("question.regrade", () => {
     expect(() => run(reg, [ctl({ type: "question.regrade", questionId: q.id, answerSpec: q.answerSpec })], buzz)).toThrow(/unsupported/);
   });
 
-  it("is allowed to the scorer, never to a player", () => {
+  it("is allowed to the control room, never to a player", () => {
     const g = run(reg, [...START, ctl({ type: "question.present" }), ctl({ type: "question.open" }), say("p_1", "Monet"), ...REVEAL], createGame(makeSession(DEMO_TEXT_GAME)));
     const regrade: Action = { type: "question.regrade", questionId: "q_txt_1", answerSpec: { kind: "text", accepted: ["Claude Monet", "Monet"] } };
     expect(() => run(reg, [[actor("player", "p_1"), regrade]], g)).toThrow(/forbidden/);
-    const after = run(reg, [[actor("scorer", "s"), regrade]], g);
+    const after = run(reg, [ctl(regrade)], g);
     expect(participantTotal(after.state, "p_1")).toBeGreaterThan(0);
     expect(project(after, { role: "player", participantId: "p_1" }, reg)).toMatchObject({ myResult: "correct" });
   });

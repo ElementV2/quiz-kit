@@ -166,7 +166,7 @@ describe("poll-board scoring", () => {
   it("slots revealed by control count for nobody", () => {
     const g = play([...OPEN, good("a"), ctl({ type: "element.reveal", index: 4 }), ...END]);
     expect(teamTotal(g.state, "t_a")).toBe(38);
-    expect(viewOf(g, { role: "output", scene: "program" }).slots[4]).toEqual({ index: 4, revealed: true, found: false, foundBy: null, optionId: "e", label: "Pamplemousse", value: 6 });
+    expect(viewOf(g, { role: "output", scene: "program" }).slots[4]).toEqual({ index: 4, revealed: true, found: false, optionId: "e", label: "Pamplemousse", value: 6 });
   });
 
   it("undoing a strike restores the play, replay included", () => {

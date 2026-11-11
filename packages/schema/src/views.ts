@@ -41,8 +41,6 @@ export const PollBoardSlot = z.strictObject({
   label: z.string().nullable(),
   /** SECRET: share (%), same rule as `label`. */
   value: z.number().nullable(),
-  /** Team that found it (per-answer scoring). */
-  foundBy: PollSide.nullable().default(null),
 });
 export type PollBoardSlot = z.infer<typeof PollBoardSlot>;
 

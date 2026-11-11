@@ -320,7 +320,7 @@ function reduceAllowed(s: GameState, a: Action, ctx: Ctx, registry: Registry): R
 
     case "team.add":
       if (s.teams.some((t) => t.id === a.teamId)) return err("conflict", "identifiant d'équipe déjà pris");
-      return ok({ ...s, teams: [...s.teams, { id: a.teamId, name: a.name, color: a.color, captainId: null }] });
+      return ok({ ...s, teams: [...s.teams, { id: a.teamId, name: a.name, color: a.color }] });
 
     case "host.setDrive":
       if (s.hostDrives === a.enabled) return err("conflict", a.enabled ? "l'animateur pilote déjà" : "l'animateur ne pilote pas");

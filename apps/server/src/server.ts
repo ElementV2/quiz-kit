@@ -311,7 +311,7 @@ async function boot(config: Config, opts: { timers?: Timers; broadcastIntervalMs
       const acts = taken.flatMap((p) => [
         { action: { type: "player.add", participantId: p.id, displayName: p.displayName, channel: p.channel, ...(p.seat === null ? {} : { seat: p.seat }), ...(p.teamId !== null && created.has(p.teamId) ? { teamId: p.teamId } : {}) } as const, actor: who },
         // Substitutes / waiting players keep that status (eliminated or disconnected ones start again, as active).
-        ...(p.status === "substitute" || p.status === "waiting" ? [{ action: { type: "player.setStatus", participantId: p.id, status: p.status } as const, actor: who }] : []),
+        ...(p.status === "substitute" ? [{ action: { type: "player.setStatus", participantId: p.id, status: p.status } as const, actor: who }] : []),
       ]);
       const acks = rt.submitMany(acts);
       for (const [i, a] of acks.entries()) {

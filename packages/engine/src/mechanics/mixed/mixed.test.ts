@@ -195,7 +195,7 @@ describe("survey played individually — steal, removal", () => {
     const g = run(reg, [...PRESENTED, ctl({ type: "poll.control", participantId: "p_1" }), ctl({ type: "question.open" }), ctl({ type: "answer.judge", correct: true, optionId: ids[0] ?? "" }), ctl({ type: "player.remove", participantId: "p_1" })], createGame(makeSession(MIXED)));
     const v = project(g, { role: "control" }, reg);
     expect(v.mechanic).toMatchObject({ controllingTeamId: null, stage: "play", strikes: 0 });
-    expect(v.mechanic?.mechanic === "poll-board" && v.mechanic.slots.every((x) => x.foundBy === null)).toBe(true);
+    expect(JSON.stringify(g.state.mechanic?.state)).not.toMatch(/"foundBy":"/); // what the removed player found is theirs no more
   });
 });
 
