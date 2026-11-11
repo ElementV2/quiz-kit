@@ -1,6 +1,6 @@
 import { For, Show, createMemo, createResource, createSignal, onCleanup, onMount } from "solid-js";
 import { render } from "solid-js/web";
-import type { Action, ControlView, Participant } from "@quiz/schema";
+import { gameFromQuestions, parseQuestionsCsv, type Action, type ControlView, type Participant } from "@quiz/schema";
 import { optionLetter, secondsLeft } from "@quiz/renderer";
 import { Button, Panel, StatusPill, createQuizConnection, tokenFromUrl } from "@quiz/ui";
 import "@quiz/ui/ui.css";
@@ -177,6 +177,11 @@ function App() {
                   <For each={checklist(v(), status())}>{(c) => <li data-ok={String(c.ok)}><span>{c.ok ? "✓" : "✗"}</span> {c.label} <span class="muted">— {c.detail}</span></li>}</For>
                 </ul>
               </Panel>
+              <Show when={!readonly()}>
+                <Panel title="Nouvelle partie (import de questions)">
+                  <GameImport />
+                </Panel>
+              </Show>
               <Panel title="Liens (OBS / vMix / tablettes)">
                 <Show when={links()} fallback={<p class="muted">…</p>}>{(l) => <LinksList links={l()} />}</Show>
               </Panel>
@@ -218,6 +223,53 @@ function ProgramPreview(p: { src: string }) {
   return (
     <div ref={box} class="c-preview" style={{ "--s": String(scale()) }}>
       <iframe title="programme" src={p.src} />
+    </div>
+  );
+}
+
+const CSV_EXAMPLE = ["type;question;A;B;C;D;E;F;réponse;notes", "qcm;Capitale de l'Italie ?;Milan;Rome;Turin;;;;B;", "vf;Le soleil est une étoile.;;;;;;;vrai;"].join("\n");
+
+const STATUSES: readonly Participant["status"][] = ["active", "eliminated", "waiting", "substitute", "disconnected"];
+const asStatus = (v: string): Participant["status"] => STATUSES.find((s) => s === v) ?? "active";
+
+/** CSV / spreadsheet paste → preview → new game. The screens follow at once, links stay the same. */
+function GameImport() {
+  const [title, setTitle] = createSignal("Ma partie");
+  const [text, setText] = createSignal("");
+  const [seconds, setSeconds] = createSignal(20);
+  const [result, setResult] = createSignal<string | null>(null);
+  const parsed = createMemo(() => parseQuestionsCsv(text()));
+  const loadFile = async (f: File | undefined) => {
+    if (f !== undefined) setText(await f.text());
+  };
+  const launch = async () => {
+    const { questions } = parsed();
+    if (questions.length === 0) return;
+    // oxlint-disable-next-line no-alert -- irreversible action confirmation (doc 08)
+    if (!window.confirm(`Lancer « ${title()} » (${questions.length} questions) ? La partie en cours reste dans le journal.`)) return;
+    try {
+      const game = gameFromQuestions(title().trim() || "Partie", questions, { timerSeconds: seconds(), points: 100, maxPlayers: 1000 });
+      const r = await api<{ sessionId: string; joinCode: string }>("/api/session", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ game }) });
+      setResult(`Nouvelle partie lancée · code joueurs ${r.joinCode}`);
+      setText("");
+    } catch (e) {
+      setResult(`Échec : ${e instanceof Error ? e.message : String(e)}`);
+    }
+  };
+  return (
+    <div class="c-import">
+      <label>Titre <input value={title()} onInput={(e) => setTitle(e.currentTarget.value)} /></label>
+      <label>Chrono (s) <input class="c-num" type="number" min="5" max="600" value={seconds()} onInput={(e) => setSeconds(Number(e.currentTarget.value) || 20)} /></label>
+      <textarea rows={5} placeholder={CSV_EXAMPLE} value={text()} onInput={(e) => setText(e.currentTarget.value)} />
+      <input type="file" accept=".csv,.tsv,.txt,text/csv" onChange={(e) => void loadFile(e.currentTarget.files?.[0])} />
+      <Show when={text().trim().length > 0}>
+        <p class="muted">{parsed().questions.length} question(s) prête(s){parsed().errors.length > 0 ? ` · ${parsed().errors.length} ligne(s) ignorée(s)` : ""}</p>
+        <Show when={parsed().errors.length > 0}>
+          <ul class="c-errors"><For each={parsed().errors.slice(0, 8)}>{(e) => <li>{e}</li>}</For></ul>
+        </Show>
+      </Show>
+      <Button disabled={parsed().questions.length === 0} onClick={() => void launch()}>Lancer cette partie</Button>
+      <Show when={result()}>{(r) => <p class="muted">{r()}</p>}</Show>
     </div>
   );
 }
@@ -318,7 +370,7 @@ function Players(p: { view: ControlView; readonly: boolean; act: (a: Action, ok?
                   </select>
                 </td>
                 <td>
-                  <select value={pl.status} disabled={p.readonly} onChange={(e) => void p.act({ type: "player.setStatus", participantId: pl.id, status: e.currentTarget.value as Participant["status"] })}> {/* oxlint-disable-line typescript/no-unsafe-type-assertion -- options below are exactly the enum */}
+                  <select value={pl.status} disabled={p.readonly} onChange={(e) => void p.act({ type: "player.setStatus", participantId: pl.id, status: asStatus(e.currentTarget.value) })}>
                     <option value="active">actif</option>
                     <option value="eliminated">éliminé</option>
                     <option value="waiting">en attente</option>

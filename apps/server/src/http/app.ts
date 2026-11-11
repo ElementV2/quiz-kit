@@ -5,6 +5,7 @@ import Fastify, { type FastifyInstance, type FastifyRequest, type FastifyServerO
 import { z } from "zod";
 import type { Links } from "../links.ts";
 import type { SessionRuntime } from "../runtime/session-runtime.ts";
+import { loadGameDocument, type GameDocument } from "@quiz/schema";
 import { verifyToken } from "../tokens.ts";
 import { PREVIEW_CSS, PREVIEW_HTML, PREVIEW_JS } from "./preview-page.ts";
 
@@ -13,6 +14,7 @@ export type HttpDeps = {
   readonly links: () => Links;
   readonly revoke: (linkId: string) => Links;
   readonly joinCode: () => string;
+  readonly newSession: (game: GameDocument) => { id: string };
   readonly join: (name: string) => { ok: true; token: string; participantId: string } | { ok: false; error: string };
   readonly secret: string;
   readonly show: string;
@@ -104,6 +106,16 @@ export function buildHttpApp(deps: HttpDeps, options: FastifyServerOptions): Fas
   app.get<{ Querystring: { t?: string } }>("/api/status", async (req, reply) => {
     if (!controlToken(deps, req)) return reply.code(401).send({ error: "jeton régie requis" });
     return { ...deps.health(), presence: deps.presence() };
+  });
+
+  /** Starts a new game from a game document (imported CSV, template). Control token only; journaled. */
+  app.post<{ Querystring: { t?: string } }>("/api/session", async (req, reply) => {
+    if (!controlToken(deps, req)) return reply.code(401).send({ error: "jeton régie requis" });
+    const body = z.strictObject({ game: z.unknown() }).safeParse(req.body);
+    const r = loadGameDocument(body.success ? body.data.game : null);
+    if (!r.ok) return reply.code(400).send({ error: "jeu invalide", detail: r.error });
+    const s = deps.newSession(r.value);
+    return { sessionId: s.id, title: r.value.title, joinCode: deps.joinCode() };
   });
 
   const joinAttempts = new Map<string, { windowStart: number; count: number }>();

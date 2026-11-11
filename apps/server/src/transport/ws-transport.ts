@@ -127,6 +127,19 @@ export class WsTransport {
     return { total: this.conns.size, byRole, seats: [...seats].toSorted((a, b) => a - b), players: [...players] };
   }
 
+  /** After a session switch: every connection gets a fresh welcome from the new runtime (no reconnect). */
+  rewelcomeAll(): void {
+    const runtime = this.deps.runtime();
+    for (const c of this.conns) {
+      if (c.viewer === null) continue;
+      c.unsubscribe?.();
+      const stream = new ViewStream(c.viewer, { send: (d) => c.ws.send(d), get bufferedAmount() { return c.ws.bufferedAmount; } });
+      c.stream = stream;
+      stream.welcome(runtime.welcomeView(c.viewer), this.deps.clock(), PROTOCOL_VERSION);
+      c.unsubscribe = runtime.subscribe(stream);
+    }
+  }
+
   /**
    * Revocation takes effect immediately: the connection stops being served at once (no view, no intent), then is
    * closed — even a hostile client that ignores the close handshake can do nothing more.

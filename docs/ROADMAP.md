@@ -35,7 +35,7 @@ Règle : une phase n'est terminée que quand ses critères de sortie passent. Co
 - [ ] Mécaniques `poll-board` (sondage à slots, 3 erreurs, vol) et `buzzer` (priorité, blocage)
 - [ ] Mécanique `ladder` + jokers 50:50 / sondage public (prérequis du template QCM à paliers)
 - [ ] Joueurs / équipes / sièges : création, import CSV, statuts, échange de tablette
-- [ ] Import CSV de questions
+- [x] Import CSV de questions (régie : coller / fichier → nouvelle partie à chaud)
 - [ ] Templates codés : QCM à paliers (`ladder`), sondage à slots, buzzer culture G
 - [x] Check-list pré-antenne
 

@@ -10,3 +10,4 @@ export * from "./versioning.ts";
 export * from "./fixtures.ts";
 export * from "./scenes.ts";
 export * from "./scene-presets.ts";
+export * from "./import-csv.ts";

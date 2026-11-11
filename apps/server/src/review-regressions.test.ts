@@ -92,6 +92,7 @@ describe("review #2 — tokens never reach the logs", () => {
       links: () => ({ origins: [], secureOrigins: [], entries: [] }),
       revoke: () => ({ origins: [], secureOrigins: [], entries: [] }),
       joinCode: () => "123456",
+      newSession: () => ({ id: "ses_x" }),
       join: () => ({ ok: false as const, error: "unused" }),
       secret: "s",
       show: "main",

@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { WebSocket } from "ws";
 import { applyPatch, decodeServerMessage, type ServerMessage } from "@quiz/protocol";
-import type { Action, View } from "@quiz/schema";
+import { gameFromQuestions, parseQuestionsCsv, type Action, type View } from "@quiz/schema";
 import { Config } from "./config.ts";
 import { startServer, type RunningServer } from "./server.ts";
 
@@ -200,6 +200,28 @@ describe("server over WebSocket (integration)", () => {
     for (let i = 0; i < 60; i++) out.ws.send(JSON.stringify({ t: "intent", key: `k_flood${String(i).padStart(4, "0")}`, action: { type: "game.start" } }));
     const limited = await out.until((m) => m.t === "ack" && !m.ok && m.code === "rate-limited");
     expect(limited).toMatchObject({ key: expect.stringMatching(/^k_flood/) });
+  });
+
+  it("switches to a new game: connected screens follow without reconnecting, the old game stays journaled", async () => {
+    const { server } = await boot();
+    const ctl = await Client.connect(server, "Régie");
+    const out = await Client.connect(server, "Sortie program");
+    await ctl.act({ type: "game.start" });
+    const oldSession = server.runtime.session.id;
+    const game = gameFromQuestions("Nouvelle", parseQuestionsCsv("qcm;Combien font 2+2 ?;3;4;;;;;B").questions, { timerSeconds: 10, points: 100, maxPlayers: 50 });
+    const res = await fetch(`http://127.0.0.1:${server.port}/api/session?t=${token(server, "Régie")}`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ game }) });
+    expect(res.status).toBe(200);
+    expect(server.runtime.session.id).not.toBe(oldSession);
+    await out.until((m) => m.t === "welcome" && m.view.sessionId !== oldSession);
+    expect(out.view?.phase).toBe("lobby");
+    expect(await ctl.act({ type: "game.start" })).toMatchObject({ ok: true, eventSeq: 1 });
+    expect(server.store.events(oldSession)).toHaveLength(1);
+  });
+
+  it("refuses an invalid game document", async () => {
+    const { server } = await boot();
+    const res = await fetch(`http://127.0.0.1:${server.port}/api/session?t=${token(server, "Régie")}`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ game: { title: "x" } }) });
+    expect(res.status).toBe(400);
   });
 
   it("rate-limits a flooding client without affecting others", async () => {

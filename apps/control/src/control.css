@@ -45,3 +45,7 @@ tr[data-status="eliminated"] { opacity: .5; }
 .c-dot-on { background: var(--ui-ok); }
 .c-add { display: flex; gap: 8px; margin-top: 10px; }
 .c-csv { margin-top: 10px; } .c-csv textarea { width: 100%; font: 13px ui-monospace, monospace; background: var(--ui-bg); color: var(--ui-text); border: 1px solid var(--ui-border); border-radius: 8px; margin: 8px 0; padding: 8px; }
+.c-import { display: grid; gap: 8px; }
+.c-import label { display: flex; gap: 8px; align-items: center; color: var(--ui-muted); }
+.c-import textarea { width: 100%; font: 12px ui-monospace, monospace; background: var(--ui-bg); color: var(--ui-text); border: 1px solid var(--ui-border); border-radius: 8px; padding: 8px; }
+.c-errors { margin: 0; padding-left: 18px; color: var(--ui-warn); font-size: 13px; }

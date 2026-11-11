@@ -21,6 +21,8 @@ export type RunningServer = {
   readonly port: number;
   readonly secret: string;
   readonly dataDir: string;
+  /** Replaces the live game by a new session (connected screens follow at once). */
+  newSession(game: GameDocument): Session;
   /** Revokes one link (`control`, `out-program`, `seat-3`…): open connections are cut, a new link is issued. */
   revoke(link: string): Links;
   close(): Promise<void>;
@@ -123,13 +125,14 @@ async function boot(config: Config, opts: { timers?: Timers; broadcastIntervalMs
   };
 
   // Join code for `/play` (doc 09 « création à l'arrivée ») : 6 digits per session, shown in the control room.
-  const joinKey = `join-code:${session.id}`;
-  let joinCode = store.getMeta(joinKey);
-  if (joinCode === null || !/^\d{6}$/.test(joinCode)) {
-    joinCode = String(randomInt(0, 1_000_000)).padStart(6, "0");
-    store.setMeta(joinKey, joinCode);
-  }
-  const code = joinCode;
+  const joinCodeOf = (sid: string): string => {
+    const key = `join-code:${sid}`;
+    const existing = store.getMeta(key);
+    if (existing !== null && /^\d{6}$/.test(existing)) return existing;
+    const fresh = String(randomInt(0, 1_000_000)).padStart(6, "0");
+    store.setMeta(key, fresh);
+    return fresh;
+  };
   const joinPlayer = (name: string): { ok: true; token: string; participantId: string } | { ok: false; error: string } => {
     const participantId = newId("p");
     const ack = getRuntime().submit({ type: "player.add", participantId, displayName: name, channel: "play" }, { role: "control", id: "join" }, null);
@@ -140,7 +143,8 @@ async function boot(config: Config, opts: { timers?: Timers; broadcastIntervalMs
   const deps = {
     runtime: getRuntime,
     links: () => links,
-    joinCode: () => code,
+    joinCode: () => joinCodeOf(getRuntime().session.id),
+    newSession: (game: GameDocument) => switchSession(game),
     join: joinPlayer,
     revoke,
     secret,
@@ -152,13 +156,30 @@ async function boot(config: Config, opts: { timers?: Timers; broadcastIntervalMs
     health: () => ({ sessionId: getRuntime().session.id, lastSeq: getRuntime().current.state.lastSeq, journal: { ...store.pragmas(), ...getRuntime().journalHealth } }),
     dataDir,
   };
-  const http = buildHttpApp(deps, { logger: loggerOptions(config.logLevel), bodyLimit: 64 * 1024 });
+  const http = buildHttpApp(deps, { logger: loggerOptions(config.logLevel), bodyLimit: 4 * 1024 * 1024 });
   // 25 ms broadcast coalescing: a burst of 500 answers becomes a few broadcasts, invisible on screen (40 fps).
   runtime = new SessionRuntime(store, defaultRegistry, session, clock, opts.timers ?? realTimers, http.log, { broadcastIntervalMs: opts.broadcastIntervalMs ?? 25 });
+  const firstRuntime = runtime;
   transport = new WsTransport({ runtime: getRuntime, secret, show: config.show, isRevoked, clock, log: http.log });
+  const runtimeOpts = { broadcastIntervalMs: opts.broadcastIntervalMs ?? 25 };
+
+  /**
+   * Starts a new game (imported questions, template…) without restarting anything: the old session stays in the
+   * journal; every connected screen is re-welcomed on the new one — no link to paste again.
+   */
+  function switchSession(game: GameDocument): Session {
+    const next: Session = { schemaVersion: 1, id: newId("ses"), game, seed: randomInt(0, 0xffff_ffff), createdAt: clock() };
+    store.createSession(next);
+    const old = getRuntime();
+    runtime = new SessionRuntime(store, defaultRegistry, next, clock, opts.timers ?? realTimers, http.log, runtimeOpts);
+    old.close();
+    transport?.rewelcomeAll();
+    http.log.info({ sessionId: next.id, title: game.title }, "nouvelle partie");
+    return next;
+  }
   transport.attach(http.server);
   const tr0 = transport;
-  const rt0 = runtime;
+  const rt0 = firstRuntime;
   const abort = async (): Promise<void> => {
     tr0.close();
     rt0.close();
@@ -176,13 +197,15 @@ async function boot(config: Config, opts: { timers?: Timers; broadcastIntervalMs
   links = makeLinks();
   writeLinks();
 
-  const rt = runtime;
   const tr = transport;
   return {
     get links() {
       return links;
     },
-    runtime: rt,
+    get runtime() {
+      return getRuntime();
+    },
+    newSession: switchSession,
     store,
     http,
     port,
@@ -191,7 +214,7 @@ async function boot(config: Config, opts: { timers?: Timers; broadcastIntervalMs
     revoke,
     async close() {
       tr.close();
-      rt.close();
+      getRuntime().close();
       await http.close();
       store.close();
     },

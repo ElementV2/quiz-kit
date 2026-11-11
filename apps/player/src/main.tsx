@@ -136,6 +136,13 @@ function Game(props: { token: string }) {
         <Match when={view() === null}>
           <div class="p-center">Connexion…</div>
         </Match>
+        <Match when={view()?.me === null && conn.viewer()?.role === "player"}>
+          {/* /play player whose game was replaced by a new one: join the new game. */}
+          <div class="p-center">
+            <p class="p-big">Nouvelle partie</p>
+            <button class="q-btn q-btn-big" type="button" onClick={() => { try { localStorage.removeItem(PLAYER_TOKEN_KEY); } catch { /* ignore */ } location.assign("/play"); }}>Rejoindre</button>
+          </div>
+        </Match>
         <Match when={view()?.me === null}>
           <div class="p-center">
             <p class="p-big">Tablette prête</p>
