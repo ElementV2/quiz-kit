@@ -48,7 +48,36 @@ Mécaniques de base (phase 0 → 3) : `choice` (QCM, vrai/faux, multi), `poll-bo
 `ladder` est une **mécanique de manche** (progression sur paliers) qui s'appuie sur une `ScoringRule` `ladder`.
 
 Toute mécanique passe `mechanicContractSuite` : actions hors phase rejetées, projection sans fuite,
-rejeu déterministe, score cohérent avec le registre.
+rejeu déterministe, score cohérent avec le registre. La suite reçoit un générateur d'actions joueur
+(`answerFor`), un générateur d'actions régie propres à la mécanique (`controlActionFor`) et un contrôle
+de secrets propre à la mécanique (`assertNoLeak`) ; elle exige que ces actions soient souvent acceptées.
+
+Le contrat réel est dans `packages/engine/src/mechanic.ts`. Points notables (phase 1) :
+
+- `judge()` rend des `Judgement` `rule` (points calculés par la `ScoringRule` de la manche) ou `fixed`
+  (points décidés par la mécanique, pour un joueur **ou une équipe** : banque de `poll-board`, gain de `ladder`).
+  Les deux sont écrits au registre à `question.reveal` (raison `auto`), donc remplacés si la question est rejouée.
+- `init()` reçoit le contexte de manche : l'état final de la question précédente de la même manche
+  (`previous`, avec `revealed`) et le nombre de questions restantes. Le cœur le garde dans `GameState.carry`
+  (vidé par `round.start`). Seules les mécaniques de manche (`ladder`) s'en servent.
+- `endsRound()` est consulté à `question.next` : `true` termine la manche tout de suite.
+- Les actions propres aux mécaniques (`buzz`, `answer.judge`, `element.reveal`, `joker.use`, `ladder.stop`,
+  `poll.control`, `poll.steal`) passent par `onAction`. Le cœur vérifie avant : rôle, identité du joueur et
+  statut actif (`buzz`), existence de l'équipe ou du joueur référencé ; la mécanique vérifie la phase.
+
+### `poll-board` (« Une famille en or »)
+
+Question `poll` (chaque option a une `value` en %, sinon refus à la présentation). Cases triées par valeur
+décroissante. Config : `maxStrikes` (3), `multiplier` (1).
+`poll.control { teamId }` donne la main (avant ou pendant les réponses) ; réponses ouvertes, la régie /
+l'animateur valide la réponse orale : `answer.judge { optionId, correct: true }` trouve **et révèle** la case,
+`answer.judge { correct: false }` donne une erreur. Toutes les cases trouvées → fin. À `maxStrikes`,
+`poll.steal { teamId }` désigne l'équipe qui vole, dont la réponse unique est jugée de même.
+Banque = somme des valeurs des cases trouvées × multiplicateur, à l'équipe qui vole si son vol est bon,
+sinon à l'équipe qui a la main (verrouiller plus tôt = banque à l'équipe qui a la main).
+`element.reveal { index }` retourne une case sans la compter (fin de manche « pour le spectacle ») ;
+`question.reveal` ne retourne **pas** les cases restantes. Vue publique : une case masquée a `label` et
+`value` à `null` (testé) ; animateur et régie voient tout.
 
 ## Actions (extrait)
 

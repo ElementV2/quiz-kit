@@ -1,6 +1,6 @@
 import { PLAYER_LEADERBOARD_ROWS, type BaseView, type ControlView, type HostView, type LeaderboardRow, type OutputView, type PlayerView, type View, type Viewer } from "@quiz/schema";
 import type { Game } from "./game.ts";
-import type { Audience, Registry } from "./mechanic.ts";
+import type { Audience, Judgement, Registry } from "./mechanic.ts";
 import { assertNever } from "./result.ts";
 import { currentQuestion, currentRound, nextQuestion, participantTotal, type GameState } from "./state.ts";
 
@@ -57,8 +57,7 @@ function playerView(s: GameState, participantId: string | null, registry: Regist
   const myAnswer = me === undefined || m === null || s.mechanic === null ? null : m.answerOf(s.mechanic.state, me.id);
   let myResult: PlayerView["myResult"] = null;
   if (s.phase === "revealed" && me !== undefined && m !== null && s.mechanic !== null) {
-    const j = m.judge(s.mechanic.state).find((x) => x.participantId === me.id);
-    myResult = j === undefined ? "none" : j.outcome;
+    myResult = resultOf(m.judge(s.mechanic.state), me.id, me.teamId);
   }
   return {
     role: "player",
@@ -68,6 +67,18 @@ function playerView(s: GameState, participantId: string | null, registry: Regist
     myResult,
     canAnswer: s.phase === "open" && me !== undefined && me.status === "active",
   };
+}
+
+/** A player's result: any correct judgement concerning them (or their team) wins over wrong ones. */
+function resultOf(judgements: readonly Judgement[], participantId: string, teamId: string | null): PlayerView["myResult"] {
+  let result: PlayerView["myResult"] = "none";
+  for (const j of judgements) {
+    const mine = j.kind === "rule" ? j.participantId === participantId : "participantId" in j.target ? j.target.participantId === participantId : j.target.teamId === teamId;
+    if (!mine) continue;
+    if (j.outcome === "correct") return "correct";
+    result = "wrong";
+  }
+  return result;
 }
 
 function controlView(game: Game, readonly: boolean, registry: Registry): ControlView {

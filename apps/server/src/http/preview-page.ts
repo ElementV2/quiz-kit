@@ -92,7 +92,7 @@ function render() {
   $("meta").textContent = [PHASES[v.phase] ?? v.phase, v.round ? v.round.title : "", v.question ? "Question " + (v.question.index + 1) + "/" + v.question.count : ""].filter(Boolean).join(" · ");
   $("prompt").textContent = v.question ? v.question.prompt.text : (v.phase === "game.end" ? "Partie terminée !" : "En attente…");
   const opts = $("options"); opts.replaceChildren();
-  if (m) {
+  if (m && m.options) {
     const canPick = v.role === "player" && v.canAnswer;
     for (const o of m.options) {
       const b = el(canPick ? "button" : "div", "opt");

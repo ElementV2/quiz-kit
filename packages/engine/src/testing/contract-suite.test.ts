@@ -24,7 +24,7 @@ function failureOf(f: () => unknown): string {
 
 const answerFor = (view: View, picks: readonly number[]): Action | null => {
   const m = view.mechanic;
-  if (m === null) return null;
+  if (m === null || m.mechanic !== "choice") return null;
   const ids = [...new Set(picks.map((p) => m.options[p % m.options.length]?.id ?? "a"))].slice(0, m.maxPick);
   return { type: "answer.submit", participantId: "p_1", answer: { kind: "choice", optionIds: ids } };
 };
@@ -50,7 +50,7 @@ describe("mechanicContractSuite catches faulty mechanics", () => {
 
   it("a non-deterministic mechanic fails the replay check", () => {
     let calls = 0;
-    const flaky = defineMechanic<C, S>({ ...typed, judge: (s) => typed.judge(s).map((j) => ({ ...j, answeredAt: j.answeredAt + (calls++ % 7) * 1000 })) });
+    const flaky = defineMechanic<C, S>({ ...typed, judge: (s) => typed.judge(s).map((j) => (j.kind === "rule" ? { ...j, answeredAt: j.answeredAt + (calls++ % 7) * 1000 } : j)) });
     const opts = { mechanic: flaky, registry: createRegistry([flaky]), game: DEMO_GAME, answerFor };
     expect(failureOf(() => assertContract(opts, 50))).toMatch(/replay differs/);
   });

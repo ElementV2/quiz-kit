@@ -4,6 +4,7 @@ import {
   ScoringRule,
   AnswerSpec,
   DEMO_GAME,
+  DEMO_POLL_GAME,
   Event,
   GameDocument,
   QuestionId,
@@ -54,8 +55,11 @@ describe("AnswerSpec", () => {
 });
 
 describe("GameDocument", () => {
-  it("accepts the demo game", () => {
-    expect(GameDocument.safeParse(DEMO_GAME).success).toBe(true);
+  it.each([
+    ["choice", DEMO_GAME],
+    ["poll-board", DEMO_POLL_GAME],
+  ])("accepts the %s demo game", (_name, game) => {
+    expect(GameDocument.safeParse(game).success).toBe(true);
   });
 
   it("rejects a round referencing an unknown question", () => {
@@ -138,7 +142,27 @@ describe("permissions", () => {
     expect(isAllowed("control", "timer.expired")).toBe(false);
     expect(isAllowed("system", "timer.expired")).toBe(true);
   });
+  it("players buzz, control drives mechanic actions", () => {
+    expect(isAllowed("player", "buzz")).toBe(true);
+    expect(isAllowed("seat", "buzz")).toBe(true);
+    expect(isAllowed("output", "buzz")).toBe(false);
+    for (const t of ["element.reveal", "joker.use", "ladder.stop", "poll.control", "poll.steal"] as const) {
+      expect(isAllowed("control", t)).toBe(true);
+      expect(isAllowed("player", t)).toBe(false);
+      expect(isAllowed("host", t)).toBe(false);
+    }
+    expect(isAllowed("host", "answer.judge")).toBe(true);
+  });
+  it("parses mechanic actions", () => {
+    expect(Action.safeParse({ type: "answer.judge", correct: false }).success).toBe(true);
+    expect(Action.safeParse({ type: "answer.judge", optionId: "a", correct: true }).success).toBe(true);
+    expect(Action.safeParse({ type: "joker.use", joker: "fifty" }).success).toBe(true);
+    expect(Action.safeParse({ type: "joker.use", joker: "phone" }).success).toBe(false);
+    expect(Action.safeParse({ type: "element.reveal", index: -1 }).success).toBe(false);
+    expect(Action.safeParse({ type: "poll.steal", teamId: "nope" }).success).toBe(false);
+  });
   it("undo never targets player answers by default", () => {
+    expect(isUndoableByDefault("buzz")).toBe(false);
     expect(isUndoableByDefault("answer.submit")).toBe(false);
     expect(isUndoableByDefault("score.adjust")).toBe(true);
     expect(isUndoableByDefault("timer.expired")).toBe(true);

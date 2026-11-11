@@ -1,5 +1,5 @@
 import type { z } from "zod";
-import type { Action, AnswerValue, MechanicView, ParticipantId, Phase, Question } from "@quiz/schema";
+import type { Action, AnswerValue, MechanicView, ParticipantId, Phase, Question, ScoreTarget } from "@quiz/schema";
 import type { Result, Rejection } from "./result.ts";
 import type { Rng } from "./rng.ts";
 
@@ -15,12 +15,36 @@ export type ProjectEnv = {
   readonly participantId: ParticipantId | null;
 };
 
-/** Correctness decided by the mechanic; points are computed by `scoring.ts` from the round's ScoringRule. */
-export type Judgement = {
-  readonly participantId: ParticipantId;
-  readonly outcome: "correct" | "wrong";
-  /** Server time of the accepted answer, used by timeDecay. */
-  readonly answeredAt: number;
+/**
+ * Outcome decided by the mechanic, turned into ledger entries on `question.reveal`.
+ * - `rule`: points computed by `scoring.ts` from the round's ScoringRule (choice, buzzer).
+ * - `fixed`: points decided by the mechanic itself (poll-board bank, ladder gain), for a player or a team.
+ *   A fixed judgement worth 0 writes nothing but still gives the players concerned their result.
+ */
+export type Judgement =
+  | {
+      readonly kind: "rule";
+      readonly participantId: ParticipantId;
+      readonly outcome: "correct" | "wrong";
+      /** Server time of the accepted answer, used by timeDecay. */
+      readonly answeredAt: number;
+    }
+  | {
+      readonly kind: "fixed";
+      readonly target: ScoreTarget;
+      readonly outcome: "correct" | "wrong";
+      readonly points: number;
+    };
+
+/**
+ * What `init` knows about the round. `previous` is the final state of the previous question of the same
+ * round (same mechanic), `revealed` telling whether it was revealed or skipped. Round-level mechanics
+ * (ladder) carry their progression through it; per-question mechanics ignore it.
+ */
+export type RoundContext<S> = {
+  readonly previous: { readonly state: S; readonly revealed: boolean } | null;
+  /** Questions left in the round after this one. */
+  readonly questionsLeft: number;
 };
 
 /**
@@ -32,13 +56,19 @@ export interface Mechanic<C, S> {
   readonly configSchema: z.ZodType<C>;
   readonly stateSchema: z.ZodType<S>;
   /** Called on `question.present`. Rejects question kinds it cannot run. */
-  init(config: C, question: Question, env: MechanicEnv): Result<S, Rejection>;
+  init(config: C, question: Question, env: MechanicEnv, round: RoundContext<S>): Result<S, Rejection>;
   /** `answer.submit` while phase = open. */
   submit(state: S, participantId: ParticipantId, answer: AnswerValue, env: MechanicEnv): Result<S, Rejection>;
-  /** Other mechanic-specific actions (`answer.judge`, later `buzz`…). Return null when not handled. */
+  /**
+   * Mechanic-specific actions (`answer.judge`, `buzz`, `element.reveal`, `joker.use`…). The core has
+   * checked roles, actor identity and referenced teams / players; the mechanic checks `env.phase`.
+   * Return null when not handled (→ `unsupported`).
+   */
   onAction(state: S, action: Action, env: MechanicEnv): Result<S, Rejection> | null;
-  /** Called on `question.reveal`. */
+  /** Called on `question.reveal`, and for players' results afterwards: must not depend on the phase. */
   judge(state: S): readonly Judgement[];
+  /** Asked on `question.next`: true ends the round now (ladder lost, stopped or top step reached). */
+  endsRound(state: S, phase: Phase): boolean;
   /** Accepted answer of a participant, for the player view. */
   answerOf(state: S, participantId: ParticipantId): readonly string[] | null;
   /** Drops a removed participant's answer (ids may be reused later). */

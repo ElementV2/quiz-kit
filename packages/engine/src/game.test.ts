@@ -171,7 +171,7 @@ describe("replay (crash recovery)", () => {
     const steps = [ctl({ type: "game.start" }), ctl({ type: "round.start" }), ctl({ type: "question.present" })];
     const a = run(reg, steps, createGame(makeSession(game, 123)));
     const b = replay(a.session, a.events, reg);
-    expect(project(b, { role: "output", scene: "x" }, reg).mechanic?.options).toEqual(project(a, { role: "output", scene: "x" }, reg).mechanic?.options);
+    expect(project(b, { role: "output", scene: "x" }, reg).mechanic).toEqual(project(a, { role: "output", scene: "x" }, reg).mechanic);
   });
 });
 

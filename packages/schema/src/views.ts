@@ -26,7 +26,40 @@ export const ChoiceMechanicView = z.strictObject({
 });
 export type ChoiceMechanicView = z.infer<typeof ChoiceMechanicView>;
 
-export const MechanicView = z.discriminatedUnion("mechanic", [ChoiceMechanicView]);
+export const PollBoardSlot = z.strictObject({
+  index: z.number().int().min(0),
+  /** Shown to everyone (found by a team, or revealed by control with `element.reveal`). */
+  revealed: z.boolean(),
+  /** Found by a correct answer: its value counts in the bank. */
+  found: z.boolean(),
+  /** SECRET: null for player / output while the slot is masked. Host / control always see it. */
+  label: z.string().nullable(),
+  /** SECRET: share (%), same rule as `label`. */
+  value: z.number().nullable(),
+});
+export type PollBoardSlot = z.infer<typeof PollBoardSlot>;
+
+/** "Une famille en or": slots sorted by value (index 0 = top answer), strikes, hand and steal. */
+export const PollBoardMechanicView = z.strictObject({
+  mechanic: z.literal("poll-board"),
+  slots: z.array(PollBoardSlot),
+  strikes: z.number().int().min(0),
+  maxStrikes: z.number().int().min(1),
+  /** `play`: the team with the hand answers; `steal`: max strikes reached, another team may steal; `done`. */
+  stage: z.enum(["play", "steal", "done"]),
+  /** Team that has the hand (null until control gives it). */
+  controllingTeamId: TeamId.nullable(),
+  /** Team attempting the steal (null outside `steal` / before control designates it). */
+  stealingTeamId: TeamId.nullable(),
+  /** Sum of the values of found slots (public: those slots are revealed). */
+  bank: z.number(),
+  multiplier: z.number(),
+  /** Team that takes the bank, once known (stage done). */
+  winnerTeamId: TeamId.nullable(),
+});
+export type PollBoardMechanicView = z.infer<typeof PollBoardMechanicView>;
+
+export const MechanicView = z.discriminatedUnion("mechanic", [ChoiceMechanicView, PollBoardMechanicView]);
 export type MechanicView = z.infer<typeof MechanicView>;
 
 export const LeaderboardRow = z.strictObject({

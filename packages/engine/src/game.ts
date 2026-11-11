@@ -85,8 +85,8 @@ function isUsableSnapshot(snap: Snapshot, events: readonly Event[], cancelledBy:
   }
   for (const [target, by] of cancelledBy) if (target <= snap.seq && by > snap.seq) return false;
   // The mechanic state inside the snapshot is validated by its own schema (boundary: DB read).
-  const m = snap.state.mechanic;
-  if (m !== null) {
+  for (const m of [snap.state.mechanic, snap.state.carry]) {
+    if (m === null) continue;
     const mech = registry.get(m.id);
     if (mech === null || !mech.stateSchema.safeParse(m.state).success) return false;
   }

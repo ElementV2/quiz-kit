@@ -11,6 +11,9 @@ export const AnswerValue = z.discriminatedUnion("kind", [
 ]);
 export type AnswerValue = z.infer<typeof AnswerValue>;
 
+export const JokerKind = z.enum(["fifty", "audience"]);
+export type JokerKind = z.infer<typeof JokerKind>;
+
 export const Action = z.discriminatedUnion("type", [
   // Flow (control)
   action("game.start", {}),
@@ -22,7 +25,24 @@ export const Action = z.discriminatedUnion("type", [
   action("question.next", {}),
   // Answers
   action("answer.submit", { participantId: ParticipantId, answer: AnswerValue }),
-  action("answer.judge", { participantId: ParticipantId, correct: z.boolean() }),
+  /**
+   * Operator verdict on an oral answer. `participantId` names who answered (buzzer: must hold the hand);
+   * `optionId` names the matched option (poll-board: the slot found). Each mechanic says which it needs.
+   */
+  action("answer.judge", { participantId: ParticipantId.optional(), optionId: OptionId.optional(), correct: z.boolean() }),
+  /** A player takes the hand (buzzer). Arrival order = journal order: the first journaled buzz wins. */
+  action("buzz", { participantId: ParticipantId }),
+  // Mechanic-specific controls (control)
+  /** Reveals one masked element (poll-board slot) without awarding it. */
+  action("element.reveal", { index: z.number().int().min(0).max(99) }),
+  /** One-shot jokers (ladder): `fifty` hides two wrong options, `audience` draws an audience poll. */
+  action("joker.use", { joker: JokerKind }),
+  /** The ladder candidate walks away with the step reached. */
+  action("ladder.stop", {}),
+  /** Gives the hand to a team (poll-board). */
+  action("poll.control", { teamId: TeamId }),
+  /** After the last strike, hands the steal attempt to another team (poll-board). */
+  action("poll.steal", { teamId: TeamId }),
   // Scores (overrides, always accepted)
   action("score.adjust", {
     target: ScoreTarget,
@@ -66,18 +86,20 @@ const CONTROL_ONLY: readonly ActionType[] = [
   "game.start", "round.start", "question.present", "question.open", "question.lock", "question.reveal",
   "question.next", "timer.set", "timer.stop", "player.add", "player.rename", "player.setStatus",
   "player.setTeam", "player.setSeat", "player.remove", "team.add", "undo",
+  "element.reveal", "joker.use", "ladder.stop", "poll.control", "poll.steal",
 ];
 const SCORING: readonly ActionType[] = ["score.adjust", "score.setTotal", "score.void"];
 
 /** Role → allowed actions (doc 01). Checked by the server AND the engine. */
 export const actionPermissions: Readonly<Record<Role, ReadonlySet<ActionType>>> = {
-  control: new Set<ActionType>([...CONTROL_ONLY, ...SCORING, "answer.submit", "answer.judge"]),
+  // Control may answer / buzz on behalf of a player (no tablet, operator-entered buzzer order).
+  control: new Set<ActionType>([...CONTROL_ONLY, ...SCORING, "answer.submit", "answer.judge", "buzz"]),
   "control-readonly": new Set<ActionType>(),
   scorer: new Set<ActionType>([...SCORING, "answer.judge"]),
   host: new Set<ActionType>(["answer.judge"]),
   output: new Set<ActionType>(),
-  player: new Set<ActionType>(["answer.submit"]),
-  seat: new Set<ActionType>(["answer.submit"]),
+  player: new Set<ActionType>(["answer.submit", "buzz"]),
+  seat: new Set<ActionType>(["answer.submit", "buzz"]),
   studio: new Set<ActionType>(),
   system: new Set<ActionType>(["timer.expired"]),
 };
@@ -87,9 +109,9 @@ export function isAllowed(role: Role, type: ActionType): boolean {
 }
 
 /**
- * Actions that `undo` without target may cancel: everything except player answers and undos.
+ * Actions that `undo` without target may cancel: everything except player answers (submit, buzz) and undos.
  * `timer.expired` is included so that "undo" right after an auto-lock simply re-opens answers.
  */
 export function isUndoableByDefault(type: ActionType): boolean {
-  return type !== "answer.submit" && type !== "undo";
+  return type !== "answer.submit" && type !== "buzz" && type !== "undo";
 }

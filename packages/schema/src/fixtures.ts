@@ -71,3 +71,65 @@ export const DEMO_GAME: GameDocument = {
     ],
   },
 };
+
+/**
+ * "Sondage à slots" template (poll-board, "Une famille en or"): two teams, `value` = % of respondents.
+ * The round's ScoringRule is not used by poll-board (points = revealed values × multiplier).
+ */
+export const DEMO_POLL_GAME: GameDocument = {
+  schemaVersion: 1,
+  title: "Démo sondage à slots",
+  questions: [
+    {
+      id: "q_poll_breakfast",
+      prompt: { text: "Citez un fruit que l'on mange au petit-déjeuner." },
+      answerSpec: {
+        kind: "poll",
+        options: [
+          { id: "a", label: "Banane", value: 38 },
+          { id: "b", label: "Pomme", value: 22 },
+          { id: "c", label: "Orange", value: 17 },
+          { id: "d", label: "Kiwi", value: 9 },
+          { id: "e", label: "Pamplemousse", value: 6 },
+        ],
+      },
+      hints: [],
+      tags: ["sondage"],
+      notes: "Sondage réalisé auprès de 100 personnes (réponses fictives).",
+    },
+    {
+      id: "q_poll_beach",
+      prompt: { text: "Citez un objet que l'on emporte à la plage." },
+      answerSpec: {
+        kind: "poll",
+        options: [
+          { id: "a", label: "Serviette", value: 34, synonyms: ["drap de bain"] },
+          { id: "b", label: "Crème solaire", value: 27 },
+          { id: "c", label: "Parasol", value: 15 },
+          { id: "d", label: "Lunettes de soleil", value: 11 },
+          { id: "e", label: "Ballon", value: 5 },
+        ],
+      },
+      hints: [],
+      tags: ["sondage"],
+      notes: "Accepter « maillot » ? Non : absent du sondage.",
+    },
+  ],
+  format: {
+    id: "f_demo_poll",
+    name: "Sondage à slots",
+    participants: { mode: "teams", min: 2, max: 20, teamSize: 5 },
+    tieBreak: "control",
+    rounds: [
+      {
+        id: "r_poll",
+        title: "Sondage",
+        mechanic: "poll-board",
+        mechanicConfig: { maxStrikes: 3, multiplier: 1 },
+        questions: ["q_poll_breakfast", "q_poll_beach"],
+        reserve: [],
+        scoring: [{ type: "base", points: 0 }],
+      },
+    ],
+  },
+};
