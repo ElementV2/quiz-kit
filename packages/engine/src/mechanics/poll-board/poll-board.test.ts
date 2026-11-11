@@ -295,3 +295,19 @@ describe("poll-board — per-answer scoring (each team scores what it finds)", (
   });
 });
 
+const withCfg = (cfg: Record<string, unknown>): GameDocument => ({ ...CONTRACT_GAME, format: { ...CONTRACT_GAME.format, rounds: CONTRACT_GAME.format.rounds.map((r) => ({ ...r, mechanicConfig: { ...(r.mechanicConfig as Record<string, unknown>), ...cfg } })) } }); // oxlint-disable-line typescript/no-unsafe-type-assertion -- fixture settings
+
+describe("poll-board — steal and final board settings", () => {
+  it("without steal, the last strike ends the question for the side with the hand", () => {
+    const g = run(reg, [...OPEN, good("a"), bad, bad, bad], createGame(makeSession(withCfg({ steal: false }))));
+    expect(viewOf(g, { role: "control" })).toMatchObject({ stage: "done", winnerTeamId: "t_a" });
+    expect(rejection(g, { type: "poll.steal", teamId: "t_b" })).not.toBeNull();
+  });
+  it("revealAll off: only the answers found are shown at the reveal", () => {
+    const g = run(reg, [...OPEN, good("a"), ...END], createGame(makeSession(withCfg({ revealAll: false }))));
+    const out = viewOf(g, { role: "output", scene: "program" });
+    expect(out.slots.filter((x) => x.revealed)).toHaveLength(1);
+    expect(out.slots.filter((x) => !x.revealed).every((x) => x.label === null)).toBe(true);
+  });
+});
+

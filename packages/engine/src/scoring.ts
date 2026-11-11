@@ -43,7 +43,7 @@ export function pointsFor(rule: ScoringRule, j: Extract<Judgement, { kind: "rule
     const elapsed = Math.min(Math.max(j.answeredAt - w.openedAt, 0), w.durationMs);
     points = base - ((base - minPoints) * elapsed) / w.durationMs;
   }
-  return roundHalfAway(points * factor);
+  return roundHalfAway(points * factor * (j.share ?? 1));
 }
 
 /** Symmetric rounding (7.5 → 8, -7.5 → -8), never -0. Shared by mechanics computing their own points. */

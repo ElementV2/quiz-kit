@@ -9,13 +9,18 @@ import { answerOfStored, answersOfStored, isPrivileged, Overrule, overrule, show
  * target zone (normalised 0..1). Pins are shown anonymously at the reveal. Answer text form: ["x,y"].
  */
 
-export const PinConfig = z.strictObject({ allowChange: z.boolean().default(true) });
+export const PinConfig = z.strictObject({
+  allowChange: z.boolean().default(true),
+  /** Margin around the target, in % of the image (a near miss still counts). */
+  margin: z.number().min(0).max(50).default(0),
+});
 export type PinConfig = z.infer<typeof PinConfig>;
 
 export const PinState = z.strictObject({
   image: Media.nullable(),
   target: NormRect,
   allowChange: z.boolean(),
+  margin: z.number().default(0),
   answers: z.array(StoredAnswer),
   overrules: z.array(Overrule),
 });
@@ -25,7 +30,12 @@ const point = (a: StoredAnswer): { x: number; y: number } => {
   const [x, y] = (a.value[0] ?? "0,0").split(",").map(Number);
   return { x: x ?? 0, y: y ?? 0 };
 };
-const inside = (t: NormRect, p: { x: number; y: number }): boolean => p.x >= t.x && p.x <= t.x + t.w && p.y >= t.y && p.y <= t.y + t.h;
+const insideRect = (t: NormRect, p: { x: number; y: number }): boolean => p.x >= t.x && p.x <= t.x + t.w && p.y >= t.y && p.y <= t.y + t.h;
+/** Inside the target widened by the margin (% of the image; older snapshots: none). */
+const inside = (t: NormRect, p: { x: number; y: number }, marginPct = 0): boolean => {
+  const m = marginPct / 100;
+  return insideRect({ x: t.x - m, y: t.y - m, w: t.w + 2 * m, h: t.h + 2 * m }, p);
+};
 /** 4 decimals: 0.1 px on a 1920 px image, and a short, stable text form. */
 const round4 = (n: number): number => Math.round(n * 10_000) / 10_000;
 
@@ -34,7 +44,7 @@ const pinsCache = new WeakMap<PinState, { x: number; y: number; hit: boolean }[]
 function pinsOf(s: PinState): { x: number; y: number; hit: boolean }[] {
   let p = pinsCache.get(s);
   if (p === undefined) {
-    p = s.answers.map((a) => ({ ...point(a), hit: verdict(s.overrules, a.participantId, inside(s.target, point(a))) }));
+    p = s.answers.map((a) => ({ ...point(a), hit: verdict(s.overrules, a.participantId, inside(s.target, point(a), s.margin ?? 0)) }));
     pinsCache.set(s, p);
   }
   return p;
@@ -50,7 +60,7 @@ export const pin = defineMechanic<PinConfig, PinState>({
     if (a.kind !== "pin") return err("unsupported", unsupportedQuestion("pin", a.kind));
     const image = question.prompt.media;
     if (image === undefined || !image.mime.startsWith("image/")) return err("invalid", "la question n'a pas d'image sur laquelle viser");
-    return ok({ image: { ...image }, target: { ...a.target }, allowChange: cfg.allowChange, answers: [], overrules: [] });
+    return ok({ image: { ...image }, target: { ...a.target }, allowChange: cfg.allowChange, margin: cfg.margin, answers: [], overrules: [] });
   },
 
   submit(s, participantId, answer, env) {
@@ -69,7 +79,7 @@ export const pin = defineMechanic<PinConfig, PinState>({
   },
 
   judge(s): Judgement[] {
-    return s.answers.map((a) => ({ kind: "rule", participantId: a.participantId, outcome: verdict(s.overrules, a.participantId, inside(s.target, point(a))) ? "correct" : "wrong", answeredAt: a.at }));
+    return s.answers.map((a) => ({ kind: "rule", participantId: a.participantId, outcome: verdict(s.overrules, a.participantId, inside(s.target, point(a), s.margin ?? 0)) ? "correct" : "wrong", answeredAt: a.at }));
   },
 
   endsRound: () => false,

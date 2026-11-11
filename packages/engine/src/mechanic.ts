@@ -34,6 +34,8 @@ export type Judgement =
       readonly outcome: "correct" | "wrong";
       /** Server time of the accepted answer, used by timeDecay. */
       readonly answeredAt: number;
+      /** Partial points (0..1] of the rule for a right answer (order / pairs / several answers / graded number). */
+      readonly share?: number;
     }
   | {
       readonly kind: "fixed";

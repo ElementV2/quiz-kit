@@ -12,12 +12,18 @@ import { matchesText } from "../shared/text-match.ts";
  * (`answer.judge { participantId, correct }`) until the reveal. Points: the round's ScoringRule.
  */
 
-export const TextAnswerConfig = z.strictObject({ allowChange: z.boolean().default(true) });
+export const TextAnswerConfig = z.strictObject({
+  allowChange: z.boolean().default(true),
+  /** Typos tolerated when the question does not say: « auto » (by length) or 0 to 3 letters. */
+  typos: z.enum(["auto", "0", "1", "2", "3"]).default("auto"),
+});
 export type TextAnswerConfig = z.infer<typeof TextAnswerConfig>;
 
 export const TextAnswerState = z.strictObject({
   accepted: z.array(z.string()).min(1),
   maxDistance: z.number().int().nullable(),
+  /** The category's typos setting (null: auto), kept so a regrade judges like the reveal did. */
+  defaultDistance: z.number().int().nullable().default(null),
   allowChange: z.boolean(),
   answers: z.array(StoredAnswer),
   overrules: z.array(Overrule),
@@ -34,11 +40,12 @@ export const textAnswer = defineMechanic<TextAnswerConfig, TextAnswerState>({
 
   init(cfg, question) {
     const a = question.answerSpec;
-    if (a.kind === "text") return ok({ accepted: [...a.accepted], maxDistance: a.maxDistance ?? null, allowChange: cfg.allowChange, answers: [], overrules: [] });
+    const defaultDistance = cfg.typos === "auto" ? null : Number(cfg.typos);
+    if (a.kind === "text") return ok({ accepted: [...a.accepted], maxDistance: a.maxDistance ?? defaultDistance, defaultDistance, allowChange: cfg.allowChange, answers: [], overrules: [] });
     // A single-choice question can be played as free text: the right option's label (and synonyms) is the answer.
     if (a.kind === "single") {
       const right = a.options.find((o) => o.id === a.correct);
-      if (right !== undefined) return ok({ accepted: [right.label, ...(right.synonyms ?? [])], maxDistance: null, allowChange: cfg.allowChange, answers: [], overrules: [] });
+      if (right !== undefined) return ok({ accepted: [right.label, ...(right.synonyms ?? [])], maxDistance: defaultDistance, defaultDistance, allowChange: cfg.allowChange, answers: [], overrules: [] });
     }
     return err("unsupported", unsupportedQuestion("text-answer", a.kind));
   },
@@ -55,7 +62,7 @@ export const textAnswer = defineMechanic<TextAnswerConfig, TextAnswerState>({
 
   regrade(s, question) {
     const a = question.answerSpec;
-    if (a.kind === "text") return ok({ ...s, accepted: [...a.accepted], maxDistance: a.maxDistance ?? null });
+    if (a.kind === "text") return ok({ ...s, accepted: [...a.accepted], maxDistance: a.maxDistance ?? s.defaultDistance ?? null });
     if (a.kind === "single") {
       const right = a.options.find((o) => o.id === a.correct);
       if (right !== undefined) return ok({ ...s, accepted: [right.label, ...(right.synonyms ?? [])] });

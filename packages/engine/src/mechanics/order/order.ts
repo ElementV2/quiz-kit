@@ -4,18 +4,26 @@ import { defineMechanic, type Judgement } from "../../mechanic.ts";
 import { err, ok } from "../../result.ts";
 import { answerOfStored, answersOfStored, isPrivileged, Overrule, overrule, storeAnswer, StoredAnswer, verdict } from "../shared/answers.ts";
 
+/** A setting read from a state that an older snapshot may lack (raw JSON, no defaults applied). */
+const flag = (v: boolean | undefined, byDefault: boolean): boolean => v ?? byDefault;
+
 /**
  * Order (doc 03 `order`): put the options in the right order (dates, sizes, rankings). The options are shown
  * shuffled with the session seed. Right = exact order. Overrule with `answer.judge`. Points: ScoringRule.
  */
 
-export const OrderConfig = z.strictObject({ allowChange: z.boolean().default(true) });
+export const OrderConfig = z.strictObject({
+  allowChange: z.boolean().default(true),
+  /** Partial points: the share of items in their right place, instead of all or nothing. */
+  partial: z.boolean().default(false),
+});
 export type OrderConfig = z.infer<typeof OrderConfig>;
 
 export const OrderState = z.strictObject({
   shown: z.array(z.strictObject({ id: OptionId, label: z.string(), media: Media.optional() })),
   correct: z.array(OptionId),
   allowChange: z.boolean(),
+  partial: z.boolean().default(false),
   answers: z.array(StoredAnswer),
   overrules: z.array(Overrule),
 });
@@ -36,7 +44,7 @@ export const order = defineMechanic<OrderConfig, OrderState>({
     let shown = env.rng.shuffle(options);
     // Never show the answer itself: rotate when the shuffle kept the right order.
     if (sameOrder(shown.map((o) => o.id), correct)) shown = [...shown.slice(1), ...shown.slice(0, 1)];
-    return ok({ shown, correct, allowChange: cfg.allowChange, answers: [], overrules: [] });
+    return ok({ shown, correct, allowChange: cfg.allowChange, partial: cfg.partial, answers: [], overrules: [] });
   },
 
   submit(s, participantId, answer, env) {
@@ -62,7 +70,12 @@ export const order = defineMechanic<OrderConfig, OrderState>({
   },
 
   judge(s): Judgement[] {
-    return s.answers.map((a) => ({ kind: "rule", participantId: a.participantId, outcome: verdict(s.overrules, a.participantId, sameOrder(a.value, s.correct)) ? "correct" : "wrong", answeredAt: a.at }));
+    return s.answers.map((a): Judgement => {
+      const whole = sameOrder(a.value, s.correct);
+      if (!flag(s.partial, false) || whole || s.overrules.some((o) => o.participantId === a.participantId)) return { kind: "rule", participantId: a.participantId, outcome: verdict(s.overrules, a.participantId, whole) ? "correct" : "wrong", answeredAt: a.at };
+      const share = s.correct.filter((id, i) => a.value[i] === id).length / s.correct.length;
+      return share > 0 ? { kind: "rule", participantId: a.participantId, outcome: "correct", answeredAt: a.at, share } : { kind: "rule", participantId: a.participantId, outcome: "wrong", answeredAt: a.at };
+    });
   },
 
   endsRound: () => false,

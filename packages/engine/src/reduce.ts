@@ -457,7 +457,7 @@ function correctTimes(m: AnyMechanic, state: unknown, openedAt: number): { parti
   const at = new Map(m.answers(state).map((x) => [x.participantId, x.at]));
   const out: { participantId: string; ms: number }[] = [];
   for (const j of m.judge(state)) {
-    if (j.outcome !== "correct") continue;
+    if (j.outcome !== "correct" || (j.kind === "rule" && j.share !== undefined && j.share < 1)) continue; // whole right answers only
     const pid = j.kind === "rule" ? j.participantId : "participantId" in j.target ? j.target.participantId : null;
     if (pid === null || out.some((x) => x.participantId === pid)) continue;
     const t = j.kind === "rule" ? j.answeredAt : at.get(pid);

@@ -3,7 +3,7 @@ import { playedBy, pointsInfo, scoringOf } from "./route.ts";
 import { stakedRule } from "./scoring.ts";
 import { autoVerdicts } from "./verdicts.ts";
 import type { Game } from "./game.ts";
-import type { AnyMechanic, Audience, Registry } from "./mechanic.ts";
+import type { AnyMechanic, Audience, Judgement, Registry } from "./mechanic.ts";
 import { assertNever } from "./result.ts";
 import { currentQuestion, currentRound, nextQuestion, participantTotal, teamTotal, type GameState } from "./state.ts";
 
@@ -193,10 +193,14 @@ function playerView(s: GameState, participantId: string | null, registry: Regist
   };
 }
 
-/** Any correct judgement wins over wrong ones. */
-function mark(map: Map<string, "correct" | "wrong">, id: string, outcome: "correct" | "wrong"): void {
-  if (map.get(id) !== "correct") map.set(id, outcome);
+type Mark = "correct" | "partial" | "wrong";
+const RANK: Readonly<Record<Mark, number>> = { wrong: 0, partial: 1, correct: 2 };
+/** The best result wins (a whole right answer over a partial one over a wrong one). */
+function mark(map: Map<string, Mark>, id: string, outcome: Mark): void {
+  const cur = map.get(id);
+  if (cur === undefined || RANK[outcome] > RANK[cur]) map.set(id, outcome);
 }
+const markOf = (j: Judgement): Mark => (j.outcome === "wrong" ? "wrong" : j.kind === "rule" && j.share !== undefined && j.share < 1 ? "partial" : "correct");
 
 type Results = { of(participantId: string, teamId: string | null): PlayerView["myResult"] };
 /** judge() once per mechanic state, then an O(1) lookup per player (500 tablets: no O(n²) per broadcast). */
@@ -206,18 +210,20 @@ function resultsOf(m: AnyMechanic, state: unknown): Results {
   const key = typeof state === "object" && state !== null ? state : null;
   const cached = key === null ? undefined : resultsCache.get(key);
   if (cached !== undefined) return cached;
-  const byPlayer = new Map<string, "correct" | "wrong">();
-  const byTeam = new Map<string, "correct" | "wrong">();
+  const byPlayer = new Map<string, Mark>();
+  const byTeam = new Map<string, Mark>();
   for (const j of m.judge(state)) {
-    if (j.kind === "rule") mark(byPlayer, j.participantId, j.outcome);
-    else if ("participantId" in j.target) mark(byPlayer, j.target.participantId, j.outcome);
-    else mark(byTeam, j.target.teamId, j.outcome);
+    if (j.kind === "rule") mark(byPlayer, j.participantId, markOf(j));
+    else if ("participantId" in j.target) mark(byPlayer, j.target.participantId, markOf(j));
+    else mark(byTeam, j.target.teamId, markOf(j));
   }
   const r: Results = {
     of(participantId, teamId) {
       const own = byPlayer.get(participantId);
       const team = teamId === null ? undefined : byTeam.get(teamId);
-      return own === "correct" || team === "correct" ? "correct" : (own ?? team ?? "none");
+      if (own === "correct" || team === "correct") return "correct";
+      if (own === "partial" || team === "partial") return "partial";
+      return own ?? team ?? "none";
     },
   };
   if (key !== null) resultsCache.set(key, r);

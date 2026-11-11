@@ -17,7 +17,8 @@ export function applyVerdicts(judgements: readonly Judgement[], forced: readonly
     if (j.kind === "rule") {
       const f = byId.get(j.participantId);
       seen.add(j.participantId);
-      return f === undefined ? j : { ...j, outcome: f ? "correct" : "wrong" };
+      // A forced verdict is a whole one (no partial share).
+      return f === undefined ? j : { kind: "rule", participantId: j.participantId, outcome: f ? "correct" : "wrong", answeredAt: j.answeredAt };
     }
     if (!("participantId" in j.target)) return j;
     const f = byId.get(j.target.participantId);

@@ -371,7 +371,8 @@ export const PlayerView = BaseView.extend({
    */
   myAnswer: z.array(z.string().max(200)).nullable(),
   /** Only after reveal. */
-  myResult: z.enum(["correct", "wrong", "none"]).nullable(),
+  /** `partial`: right in part (partial points: order, pairs, several answers, graded number). */
+  myResult: z.enum(["correct", "partial", "wrong", "none"]).nullable(),
   canAnswer: z.boolean(),
 });
 export type PlayerView = z.infer<typeof PlayerView>;

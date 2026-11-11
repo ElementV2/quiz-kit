@@ -308,7 +308,17 @@ const change: ConfigField = { key: "allowChange", kind: "boolean", label: "Le jo
 
 /** One block per category in Format (order = how often they are used). */
 export const MIXED_CATEGORIES: readonly MixedCategoryInfo[] = [
-  { id: "choice", label: "QCM et vrai / faux", kinds: ["single", "multi", "boolean"], explain: "Réponse sur la tablette ; points selon le barème.", fields: [{ key: "shuffleOptions", kind: "boolean", label: "Mélanger l'ordre des réponses" }, change] },
+  {
+    id: "choice",
+    label: "QCM et vrai / faux",
+    kinds: ["single", "multi", "boolean"],
+    explain: "Réponse sur la tablette ; points selon le barème.",
+    fields: [
+      { key: "shuffleOptions", kind: "boolean", label: "Mélanger l'ordre des réponses (même ordre pour tout le monde)" },
+      change,
+      { key: "partialMulti", kind: "boolean", label: "Plusieurs bonnes réponses : points partiels (bonnes cochées − mauvaises cochées), sinon tout ou rien" },
+    ],
+  },
   {
     id: "poll",
     label: "Sondage",
@@ -317,16 +327,36 @@ export const MIXED_CATEGORIES: readonly MixedCategoryInfo[] = [
     ownPoints: true,
     fields: [
       { key: "mode", kind: "enum", label: "Qui marque", options: [{ value: "per-answer", label: "chacun marque les réponses qu'il trouve" }, { value: "bank", label: "la banque entière à qui gagne la question (règle télé)" }] },
-      { key: "maxStrikes", kind: "number", label: "Erreurs avant de passer la main", min: 1, max: 10 },
+      { key: "maxStrikes", kind: "number", label: "Erreurs permises (ensuite : vol par l'autre camp, ou fin de la question sans vol)", min: 1, max: 10 },
       { key: "multiplier", kind: "number", label: "Multiplicateur (manche double, triple…)", min: 0.5, max: 100, step: 0.5 },
+      { key: "steal", kind: "boolean", label: "Vol possible après la dernière erreur (une seule réponse pour l'autre camp)" },
+      { key: "revealAll", kind: "boolean", label: "À la révélation, montrer aussi les réponses non trouvées" },
     ],
   },
   { id: "oral", label: "Réponse orale (buzzer)", kinds: ["oral"], explain: "Le premier qui buzze répond à voix haute ; l'animateur ou la régie juge.", fields: [{ key: "lockoutOnWrong", kind: "boolean", label: "Qui se trompe ne peut plus buzzer sur la question" }] },
-  { id: "text", label: "Réponse libre", kinds: ["text"], explain: "Réponse tapée ; accents, majuscules et petites fautes tolérés.", fields: [change] },
-  { id: "number", label: "Nombre (estimation)", kinds: ["number"], explain: "Un nombre : juste dans la tolérance, ou seuls les plus proches gagnent.", fields: [{ key: "mode", kind: "enum", label: "Qui gagne", options: [{ value: "tolerance", label: "toute réponse dans la tolérance" }, { value: "closest", label: "le ou les plus proches" }] }, change] },
-  { id: "order", label: "Remettre dans l'ordre", kinds: ["order"], explain: "Classer les éléments.", fields: [change] },
-  { id: "pairs", label: "Associations", kinds: ["pairs"], explain: "Relier chaque élément à son partenaire.", fields: [change] },
-  { id: "pin", label: "Point sur image", kinds: ["pin"], explain: "Poser un point dans la zone cible de l'image.", fields: [change] },
+  {
+    id: "text",
+    label: "Réponse libre",
+    kinds: ["text"],
+    explain: "Réponse tapée ; accents et majuscules ignorés. Une question peut fixer ses propres fautes tolérées (onglet Contenu).",
+    fields: [change, { key: "typos", kind: "enum", label: "Fautes de frappe tolérées par défaut", options: [{ value: "auto", label: "auto (0 jusqu'à 4 lettres, 1 jusqu'à 8, sinon 2)" }, { value: "0", label: "aucune (orthographe exacte)" }, { value: "1", label: "1 lettre" }, { value: "2", label: "2 lettres" }, { value: "3", label: "3 lettres" }] }],
+  },
+  {
+    id: "number",
+    label: "Nombre (estimation)",
+    kinds: ["number"],
+    explain: "Un nombre. La tolérance de chaque question se règle dans Contenu ; ici, ce qui vaut pour toute la catégorie.",
+    fields: [
+      { key: "mode", kind: "enum", label: "Qui gagne", options: [{ value: "tolerance", label: "toute réponse dans la tolérance" }, { value: "closest", label: "les plus proches" }] },
+      { key: "tolerancePercent", kind: "number", label: "Tolérance en % de la bonne réponse (en plus de celle de la question ; 0 = non)", min: 0, max: 100 },
+      { key: "winners", kind: "number", label: "Mode « les plus proches » : nombre de gagnants (égalités comprises)", min: 1, max: 100 },
+      { key: "graded", kind: "boolean", label: "Mode tolérance : points selon la précision (100 % pile, 50 % à la limite)" },
+      change,
+    ],
+  },
+  { id: "order", label: "Remettre dans l'ordre", kinds: ["order"], explain: "Classer les éléments.", fields: [change, { key: "partial", kind: "boolean", label: "Points partiels : part des éléments à la bonne place (sinon tout ou rien)" }] },
+  { id: "pairs", label: "Associations", kinds: ["pairs"], explain: "Relier chaque élément à son partenaire.", fields: [change, { key: "partial", kind: "boolean", label: "Points partiels : part des paires justes (sinon tout ou rien)" }] },
+  { id: "pin", label: "Point sur image", kinds: ["pin"], explain: "Poser un point dans la zone cible de l'image (zone réglée par question dans Contenu).", fields: [change, { key: "margin", kind: "number", label: "Marge autour de la zone cible (% de l'image : un point juste à côté compte)", min: 0, max: 50 }] },
   { id: "allocation", label: "Répartition de mise", kinds: ["allocation"], explain: "Répartir une mise entre les réponses ; on garde ce qui est posé sur la bonne.", ownPoints: true, fields: [change, { key: "keepOneEmpty", kind: "boolean", label: "Obligation de laisser au moins une réponse vide" }] },
 ];
 

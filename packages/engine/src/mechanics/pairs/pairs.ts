@@ -4,13 +4,20 @@ import { defineMechanic, type Judgement } from "../../mechanic.ts";
 import { err, ok } from "../../result.ts";
 import { answerOfStored, answersOfStored, isPrivileged, Overrule, overrule, storeAnswer, StoredAnswer, verdict } from "../shared/answers.ts";
 
+/** A setting read from a state that an older snapshot may lack (raw JSON, no defaults applied). */
+const flag = (v: boolean | undefined, byDefault: boolean): boolean => v ?? byDefault;
+
 /**
  * Pairs (doc 03 `pairs`): match each left item with its right item. The right column is shuffled and gets
  * anonymous ids (`r0`, `r1`…) so that no id betrays its partner. Right = every pair matched.
  * Answer text form: ["leftId:rightId", …]. Overrule with `answer.judge`. Points: ScoringRule.
  */
 
-export const PairsConfig = z.strictObject({ allowChange: z.boolean().default(true) });
+export const PairsConfig = z.strictObject({
+  allowChange: z.boolean().default(true),
+  /** Partial points: the share of right pairs, instead of all or nothing. */
+  partial: z.boolean().default(false),
+});
 export type PairsConfig = z.infer<typeof PairsConfig>;
 
 export const PairsState = z.strictObject({
@@ -18,6 +25,7 @@ export const PairsState = z.strictObject({
   right: z.array(z.strictObject({ id: OptionId, label: z.string() })),
   correct: z.array(z.strictObject({ left: OptionId, right: OptionId })),
   allowChange: z.boolean(),
+  partial: z.boolean().default(false),
   answers: z.array(StoredAnswer),
   overrules: z.array(Overrule),
 });
@@ -38,7 +46,7 @@ export const pairs = defineMechanic<PairsConfig, PairsState>({
       left: a.pairs.map((p) => ({ id: p.id, label: p.left })),
       right: shuffled.map(({ id, label }) => ({ id, label })),
       correct: a.pairs.map((p) => ({ left: p.id, right: shuffled.find((r) => r.pair === p.id)?.id ?? "" })),
-      allowChange: cfg.allowChange,
+      allowChange: cfg.allowChange, partial: cfg.partial,
       answers: [],
       overrules: [],
     });
@@ -77,7 +85,12 @@ export const pairs = defineMechanic<PairsConfig, PairsState>({
 
   judge(s): Judgement[] {
     const right = new Set(s.correct.map(encode));
-    return s.answers.map((a) => ({ kind: "rule", participantId: a.participantId, outcome: verdict(s.overrules, a.participantId, a.value.length === right.size && a.value.every((v) => right.has(v))) ? "correct" : "wrong", answeredAt: a.at }));
+    return s.answers.map((a): Judgement => {
+      const whole = a.value.length === right.size && a.value.every((v) => right.has(v));
+      if (!flag(s.partial, false) || whole || s.overrules.some((o) => o.participantId === a.participantId)) return { kind: "rule", participantId: a.participantId, outcome: verdict(s.overrules, a.participantId, whole) ? "correct" : "wrong", answeredAt: a.at };
+      const share = a.value.filter((v) => right.has(v)).length / right.size;
+      return share > 0 ? { kind: "rule", participantId: a.participantId, outcome: "correct", answeredAt: a.at, share } : { kind: "rule", participantId: a.participantId, outcome: "wrong", answeredAt: a.at };
+    });
   },
 
   endsRound: () => false,

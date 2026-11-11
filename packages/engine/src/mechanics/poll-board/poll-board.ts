@@ -4,6 +4,9 @@ import { defineMechanic, type Judgement, type MechanicEnv } from "../../mechanic
 import { assertNever, err, ok, type Rejection, type Result } from "../../result.ts";
 import { roundHalfAway } from "../../scoring.ts";
 
+/** A setting read from a state that an older snapshot may lack (raw JSON, no defaults applied). */
+const flag = (v: boolean | undefined, byDefault: boolean): boolean => v ?? byDefault;
+
 /**
  * "Une famille en or" (doc 03). The team with the hand answers orally; control matches the answer to a
  * slot (`answer.judge { optionId, correct: true }`, which reveals it) or gives a strike
@@ -25,6 +28,10 @@ export const PollBoardConfig = z.strictObject({
    * Default `bank` so journals written before replay identically; new rounds are created `per-answer`.
    */
   scoring: z.enum(["per-answer", "bank"]).default("bank"),
+  /** After the last strike, another side may try to steal. Off: the question ends there. */
+  steal: z.boolean().default(true),
+  /** At the reveal, show the answers nobody found. Off: only the found ones stay on the board. */
+  revealAll: z.boolean().default(true),
 });
 export type PollBoardConfig = z.infer<typeof PollBoardConfig>;
 
@@ -49,6 +56,8 @@ export const PollBoardState = z.strictObject({
   maxStrikes: z.number().int().min(1),
   multiplier: z.number().positive(),
   scoring: z.enum(["per-answer", "bank"]).default("bank"),
+  steal: z.boolean().default(true),
+  revealAll: z.boolean().default(true),
   strikes: z.number().int().min(0),
   stage: z.enum(["play", "steal", "done"]),
   controllingTeamId: Side.nullable(),
@@ -117,7 +126,9 @@ function judgeAnswer(s: S, a: ActionOf<"answer.judge">, env: MechanicEnv): R {
       if (s.controllingTeamId === null) return err("conflict", "donner la main à une équipe d'abord (poll.control)");
       if (!a.correct) {
         const strikes = s.strikes + 1;
-        return ok({ ...s, strikes, stage: strikes >= s.maxStrikes ? "steal" : "play" });
+        if (strikes < s.maxStrikes) return ok({ ...s, strikes, stage: "play" });
+        // Last strike: the steal — or, without steal, the end (the side with the hand keeps what it found).
+        return ok(!flag(s.steal, true) ? { ...s, strikes, stage: "done", winnerTeamId: s.controllingTeamId } : { ...s, strikes, stage: "steal" });
       }
       const i = find(s, a.optionId);
       if (!i.ok) return i;
@@ -167,6 +178,8 @@ export const pollBoard = defineMechanic<PollBoardConfig, PollBoardState>({
       maxStrikes: cfg.maxStrikes,
       multiplier: cfg.multiplier,
       scoring: cfg.scoring,
+      steal: cfg.steal,
+      revealAll: cfg.revealAll,
       strikes: 0,
       stage: "play",
       controllingTeamId: null,
@@ -236,7 +249,7 @@ export const pollBoard = defineMechanic<PollBoardConfig, PollBoardState>({
     const privileged = env.audience === "host" || env.audience === "control";
     // « Révéler » shows the whole board, as on TV: answers found stay marked (found), the others appear at the end.
     // Projection only: the bank still counts found answers.
-    const end = env.phase === "revealed";
+    const end = env.phase === "revealed" && flag(s.revealAll, true);
     return {
       mechanic: "poll-board",
       slots: s.slots.map((x, index) => {

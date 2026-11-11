@@ -243,6 +243,7 @@ function Game(props: { token: string }) {
               <footer class="p-feedback" role="status" data-tone={feedbackTone(v(), sending() !== null, lastError() !== null)}>
                 <Switch>
                   <Match when={v().myResult === "correct"}>✓ Bonne réponse !</Match>
+                  <Match when={v().myResult === "partial"}>◐ En partie juste</Match>
                   <Match when={v().myResult === "wrong"}>✗ Raté…</Match>
                   <Match when={v().myResult === "none" && v().phase === "revealed"}>Pas de réponse</Match>
                   <Match when={sending() !== null}>Envoi…</Match>
@@ -264,7 +265,7 @@ function Game(props: { token: string }) {
 
 /** Colour of the status line: amber while sending / your turn, green saved or right, red wrong or refused. */
 function feedbackTone(v: PlayerView, sending: boolean, error: boolean): string {
-  if (v.myResult === "correct") return "ok";
+  if (v.myResult === "correct" || v.myResult === "partial") return "ok";
   if (v.myResult === "wrong") return "no";
   if (v.phase === "revealed") return "idle";
   if (sending) return "busy";

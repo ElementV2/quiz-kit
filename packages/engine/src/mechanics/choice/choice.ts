@@ -3,11 +3,16 @@ import { Media, OptionId, ParticipantId, type ChoiceMechanicView, unsupportedQue
 import { defineMechanic, type Judgement } from "../../mechanic.ts";
 import { assertNever, err, ok } from "../../result.ts";
 
+/** A setting read from a state that an older snapshot may lack (raw JSON, no defaults applied). */
+const flag = (v: boolean | undefined, byDefault: boolean): boolean => v ?? byDefault;
+
 export const ChoiceConfig = z.strictObject({
   /** Shuffle option order at presentation (seeded RNG, identical for every viewer). */
   shuffleOptions: z.boolean().default(false),
   /** A player may change their answer until lock. */
   allowChange: z.boolean().default(true),
+  /** Several right answers: partial points (right ticks − wrong ticks) / right answers, instead of all or nothing. */
+  partialMulti: z.boolean().default(false),
 });
 export type ChoiceConfig = z.infer<typeof ChoiceConfig>;
 
@@ -18,6 +23,7 @@ export const ChoiceState = z.strictObject({
   minPick: z.number().int(),
   maxPick: z.number().int(),
   allowChange: z.boolean(),
+  partialMulti: z.boolean().default(false),
   answers: z.array(z.strictObject({ participantId: ParticipantId, optionIds: z.array(OptionId), at: z.number().int() })),
 });
 export type ChoiceState = z.infer<typeof ChoiceState>;
@@ -31,7 +37,7 @@ export const choice = defineMechanic<ChoiceConfig, ChoiceState>({
 
   init(cfg, question, env) {
     const spec = question.answerSpec;
-    let base: Omit<ChoiceState, "allowChange" | "answers">;
+    let base: Omit<ChoiceState, "allowChange" | "answers" | "partialMulti">;
     switch (spec.kind) {
       case "single":
         base = { kind: "single", options: spec.options.map(({ id, label, media }) => (media ? { id, label, media } : { id, label })), correct: [spec.correct], minPick: 1, maxPick: 1 };
@@ -61,7 +67,7 @@ export const choice = defineMechanic<ChoiceConfig, ChoiceState>({
         return assertNever(spec);
     }
     const options = cfg.shuffleOptions && base.kind !== "boolean" ? env.rng.shuffle(base.options) : base.options;
-    return ok({ ...base, options, allowChange: cfg.allowChange, answers: [] });
+    return ok({ ...base, options, allowChange: cfg.allowChange, partialMulti: cfg.partialMulti, answers: [] });
   },
 
   submit(s, participantId, answer, env) {
@@ -110,7 +116,12 @@ export const choice = defineMechanic<ChoiceConfig, ChoiceState>({
   },
 
   judge(s): Judgement[] {
-    return s.answers.map((a) => ({ kind: "rule", participantId: a.participantId, outcome: sameSet(a.optionIds, s.correct) ? "correct" : "wrong", answeredAt: a.at }));
+    return s.answers.map((a): Judgement => {
+      if (s.kind !== "multi" || !flag(s.partialMulti, false) || sameSet(a.optionIds, s.correct)) return { kind: "rule", participantId: a.participantId, outcome: sameSet(a.optionIds, s.correct) ? "correct" : "wrong", answeredAt: a.at };
+      const good = a.optionIds.filter((x) => s.correct.includes(x)).length;
+      const share = Math.max(0, (good - (a.optionIds.length - good)) / s.correct.length);
+      return share > 0 ? { kind: "rule", participantId: a.participantId, outcome: "correct", answeredAt: a.at, share } : { kind: "rule", participantId: a.participantId, outcome: "wrong", answeredAt: a.at };
+    });
   },
 
   removeParticipant(s, participantId) {

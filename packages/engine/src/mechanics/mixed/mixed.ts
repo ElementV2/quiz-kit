@@ -19,14 +19,14 @@ const scoring = ScoringRule.optional();
  * round's). Survey and allocation decide their own points (no rule).
  */
 export const MixedKinds = z.strictObject({
-  choice: z.strictObject({ shuffleOptions: z.boolean().optional(), allowChange, scoring }).optional(),
-  poll: z.strictObject({ mode: z.enum(["per-answer", "bank"]).optional(), maxStrikes: z.number().int().min(1).max(10).optional(), multiplier: z.number().positive().max(100).optional() }).optional(),
+  choice: z.strictObject({ shuffleOptions: z.boolean().optional(), allowChange, partialMulti: z.boolean().optional(), scoring }).optional(),
+  poll: z.strictObject({ mode: z.enum(["per-answer", "bank"]).optional(), maxStrikes: z.number().int().min(1).max(10).optional(), multiplier: z.number().positive().max(100).optional(), steal: z.boolean().optional(), revealAll: z.boolean().optional() }).optional(),
   oral: z.strictObject({ lockoutOnWrong: z.boolean().optional(), scoring }).optional(),
-  text: z.strictObject({ allowChange, scoring }).optional(),
-  number: z.strictObject({ mode: z.enum(["tolerance", "closest"]).optional(), allowChange, scoring }).optional(),
-  order: z.strictObject({ allowChange, scoring }).optional(),
-  pairs: z.strictObject({ allowChange, scoring }).optional(),
-  pin: z.strictObject({ allowChange, scoring }).optional(),
+  text: z.strictObject({ allowChange, typos: z.enum(["auto", "0", "1", "2", "3"]).optional(), scoring }).optional(),
+  number: z.strictObject({ mode: z.enum(["tolerance", "closest"]).optional(), allowChange, tolerancePercent: z.number().min(0).max(100).optional(), winners: z.number().int().min(1).max(100).optional(), graded: z.boolean().optional(), scoring }).optional(),
+  order: z.strictObject({ allowChange, partial: z.boolean().optional(), scoring }).optional(),
+  pairs: z.strictObject({ allowChange, partial: z.boolean().optional(), scoring }).optional(),
+  pin: z.strictObject({ allowChange, margin: z.number().min(0).max(50).optional(), scoring }).optional(),
   allocation: z.strictObject({ allowChange, keepOneEmpty: z.boolean().optional() }).optional(),
 });
 export type MixedKinds = z.infer<typeof MixedKinds>;
@@ -89,20 +89,34 @@ function routedConfig(cat: MixedCategory, c: MixedConfig): Record<string, unknow
   const k = c.kinds ?? {};
   switch (cat) {
     case "choice":
-      return { shuffleOptions: k.choice?.shuffleOptions ?? c.shuffleOptions, allowChange: k.choice?.allowChange ?? c.allowChange };
+      return { shuffleOptions: k.choice?.shuffleOptions ?? c.shuffleOptions, allowChange: k.choice?.allowChange ?? c.allowChange, ...(k.choice?.partialMulti === undefined ? {} : { partialMulti: k.choice.partialMulti }) };
     case "number":
-      return { allowChange: k.number?.allowChange ?? c.allowChange, mode: k.number?.mode ?? c.numberMode };
+      return {
+        allowChange: k.number?.allowChange ?? c.allowChange,
+        mode: k.number?.mode ?? c.numberMode,
+        ...(k.number?.tolerancePercent === undefined ? {} : { tolerancePercent: k.number.tolerancePercent }),
+        ...(k.number?.winners === undefined ? {} : { winners: k.number.winners }),
+        ...(k.number?.graded === undefined ? {} : { graded: k.number.graded }),
+      };
     case "poll":
-      return { maxStrikes: k.poll?.maxStrikes ?? c.pollMaxStrikes, multiplier: k.poll?.multiplier ?? c.pollMultiplier, scoring: k.poll?.mode ?? c.pollScoring };
+      return {
+        maxStrikes: k.poll?.maxStrikes ?? c.pollMaxStrikes,
+        multiplier: k.poll?.multiplier ?? c.pollMultiplier,
+        scoring: k.poll?.mode ?? c.pollScoring,
+        ...(k.poll?.steal === undefined ? {} : { steal: k.poll.steal }),
+        ...(k.poll?.revealAll === undefined ? {} : { revealAll: k.poll.revealAll }),
+      };
     case "allocation":
       return { allowChange: k.allocation?.allowChange ?? c.allowChange, keepOneEmpty: k.allocation?.keepOneEmpty ?? c.allocationKeepOneEmpty };
     case "oral":
       return { lockoutOnWrong: k.oral?.lockoutOnWrong ?? c.buzzerLockout };
     case "text":
+      return { allowChange: k.text?.allowChange ?? c.allowChange, ...(k.text?.typos === undefined ? {} : { typos: k.text.typos }) };
     case "order":
     case "pairs":
+      return { allowChange: k[cat]?.allowChange ?? c.allowChange, ...(k[cat]?.partial === undefined ? {} : { partial: k[cat].partial }) };
     case "pin":
-      return { allowChange: k[cat]?.allowChange ?? c.allowChange };
+      return { allowChange: k.pin?.allowChange ?? c.allowChange, ...(k.pin?.margin === undefined ? {} : { margin: k.pin.margin }) };
     default:
       return assertNever(cat);
   }

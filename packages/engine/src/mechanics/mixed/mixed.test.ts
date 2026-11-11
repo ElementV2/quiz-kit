@@ -252,6 +252,12 @@ describe("every category setting reaches the mechanic that plays the question", 
     expect(routeOf(kinds, "number")).toEqual({ id: "number-answer", config: { allowChange: false, mode: "closest" }, scoring: rule });
     expect(routeOf(kinds, "order")).toEqual({ id: "order", config: { allowChange: false }, scoring: rule });
     expect(routeOf({ pairs: { allowChange: false }, pin: { allowChange: false }, allocation: { allowChange: false, keepOneEmpty: false } }, "allocation")).toEqual({ id: "allocation", config: { allowChange: false, keepOneEmpty: false } });
+    // the newer keys travel too
+    expect(routeOf({ choice: { partialMulti: true } }, "single")?.config).toMatchObject({ partialMulti: true });
+    expect(routeOf({ number: { tolerancePercent: 5, winners: 3, graded: true } }, "number")?.config).toMatchObject({ tolerancePercent: 5, winners: 3, graded: true });
+    expect(routeOf({ text: { typos: "2" } }, "text")?.config).toMatchObject({ typos: "2" });
+    expect(routeOf({ order: { partial: true } }, "order")?.config).toMatchObject({ partial: true });
+    expect(routeOf({ poll: { steal: false, revealAll: false } }, "poll")?.config).toMatchObject({ steal: false, revealAll: false });
   });
 
   it("and they change the game: no answer change on a QCM, the steal after 2 strikes on a survey", () => {
