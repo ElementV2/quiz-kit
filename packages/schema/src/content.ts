@@ -56,7 +56,55 @@ export const OralAnswer = z.strictObject({
   expected: z.string().min(1).max(500),
 });
 
-export const AnswerSpec = z.discriminatedUnion("kind", [SingleAnswer, MultiAnswer, BooleanAnswer, PollAnswer, OralAnswer]);
+/** Free text (text-answer, hints, reveal-image): accent / case / punctuation-insensitive, small typos tolerated. */
+export const TextAnswer = z.strictObject({
+  kind: z.literal("text"),
+  /** First = canonical answer (shown at reveal); the others are accepted synonyms. */
+  accepted: z.array(z.string().trim().min(1).max(200).regex(/[0-9\p{L}]/u, "une réponse acceptée doit contenir une lettre ou un chiffre")).min(1).max(20),
+  /** Typos tolerated (Levenshtein). Absent: 0 up to 4 letters, 1 up to 8, else 2. */
+  maxDistance: z.number().int().min(0).max(3).optional(),
+});
+
+/** Number (number-answer): right within `tolerance`, or closest players win (mechanic config). */
+export const NumberAnswer = z
+  .strictObject({
+    kind: z.literal("number"),
+    correct: z.number(),
+    tolerance: z.number().min(0).default(0),
+    unit: z.string().max(20).optional(),
+    min: z.number().optional(),
+    max: z.number().optional(),
+  })
+  .refine((a) => (a.min ?? -Infinity) <= a.correct && a.correct <= (a.max ?? Infinity), "la bonne réponse doit être entre min et max");
+
+/** Order (order): options listed in the right order; shown shuffled. */
+export const OrderAnswer = z.strictObject({ kind: z.literal("order"), options: options(3, 8) }); // 2 items: "the reverse of what is shown" would always win
+
+/** Pairs (pairs): each left item goes with its right item; the right column is shown shuffled. */
+export const PairsAnswer = z
+  .strictObject({
+    kind: z.literal("pairs"),
+    pairs: z.array(z.strictObject({ id: OptionId, left: z.string().min(1).max(200), right: z.string().min(1).max(200) })).min(2).max(8),
+  })
+  .refine((a) => new Set(a.pairs.map((p) => p.id)).size === a.pairs.length, "identifiants de paires en double")
+  // Two identical labels on one side cannot be told apart by a player.
+  .refine((a) => new Set(a.pairs.map((p) => p.left)).size === a.pairs.length && new Set(a.pairs.map((p) => p.right)).size === a.pairs.length, "libellés en double dans une colonne");
+
+/** Normalised rectangle (0..1) on the question image. */
+export const NormRect = z
+  .strictObject({ x: z.number().min(0).max(1), y: z.number().min(0).max(1), w: z.number().gt(0).max(1), h: z.number().gt(0).max(1) })
+  .refine((r) => r.x + r.w <= 1.000001 && r.y + r.h <= 1.000001, "zone hors de l'image");
+export type NormRect = z.infer<typeof NormRect>;
+
+/** Pin (pin): click on the question image (`prompt.media`), right inside `target`. */
+export const PinAnswer = z.strictObject({ kind: z.literal("pin"), target: NormRect });
+
+/** Allocation (allocation, "Money Drop"): spread a budget over options; what sits on the right one is won. */
+export const AllocationAnswer = z
+  .strictObject({ kind: z.literal("allocation"), options: options(2, 6), correct: OptionId, budget: z.number().int().min(1).max(10_000_000) })
+  .refine((a) => a.options.some((o) => o.id === a.correct), "la bonne réponse doit être une des options");
+
+export const AnswerSpec = z.discriminatedUnion("kind", [SingleAnswer, MultiAnswer, BooleanAnswer, PollAnswer, OralAnswer, TextAnswer, NumberAnswer, OrderAnswer, PairsAnswer, PinAnswer, AllocationAnswer]);
 export type AnswerSpec = z.infer<typeof AnswerSpec>;
 export type AnswerKind = AnswerSpec["kind"];
 

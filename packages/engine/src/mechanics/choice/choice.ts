@@ -50,7 +50,15 @@ export const choice = defineMechanic<ChoiceConfig, ChoiceState>({
         break;
       case "poll":
       case "oral":
+      case "text":
+      case "number":
+      case "order":
+      case "pairs":
+      case "pin":
+      case "allocation":
         return err("unsupported", `la mécanique choice ne gère pas les questions ${spec.kind}`);
+      default:
+        return assertNever(spec);
     }
     const options = cfg.shuffleOptions && base.kind !== "boolean" ? env.rng.shuffle(base.options) : base.options;
     return ok({ ...base, options, allowChange: cfg.allowChange, answers: [] });
@@ -68,13 +76,29 @@ export const choice = defineMechanic<ChoiceConfig, ChoiceState>({
         const rest = s.answers.filter((a) => a.participantId !== participantId);
         return ok({ ...s, answers: [...rest, { participantId, optionIds: [...ids], at: env.at }] });
       }
+      case "text":
+      case "number":
+      case "order":
+      case "pairs":
+      case "pin":
+      case "allocation":
+        return err("invalid", "réponse à choix attendue");
       default:
-        return assertNever(answer.kind);
+        return assertNever(answer);
     }
   },
 
   onAction() {
     return null;
+  },
+
+  regrade(s, question) {
+    const a = question.answerSpec;
+    const shown = (ids: readonly string[]) => ids.every((id) => s.options.some((o) => o.id === id));
+    if (a.kind === "single") return shown([a.correct]) ? ok({ ...s, correct: [a.correct] }) : err("invalid", "la bonne réponse doit être une des propositions affichées");
+    if (a.kind === "multi") return shown(a.correct) && a.correct.length <= s.maxPick ? ok({ ...s, correct: [...a.correct] }) : err("invalid", "les bonnes réponses doivent être des propositions affichées");
+    if (a.kind === "boolean") return ok({ ...s, correct: [String(a.correct)] });
+    return err("invalid", "type de réponse différent");
   },
 
   endsRound() {

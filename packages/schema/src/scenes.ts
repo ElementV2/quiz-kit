@@ -20,6 +20,7 @@ export const ZoneType = z.enum([
   "answer-count", // live number of answers (outputs / host)
   "text", // static text (props.text) or bound value
   "image", // static image (props.src) — media store arrives in phase 2
+  "board-grid", // board rounds (Jeopardy-like): the category × value grid between two cells, nothing otherwise
 ]);
 export type ZoneType = z.infer<typeof ZoneType>;
 

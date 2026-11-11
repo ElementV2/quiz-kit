@@ -11,6 +11,26 @@ export const TimerState = z.strictObject({
 export type TimerState = z.infer<typeof TimerState>;
 
 /**
+ * What a reveal decided for one question of one round: kept for `question.regrade`, the speed tie-break and
+ * the results export (answers per question). Replaced when the same question is revealed again in the round.
+ */
+export const QuestionRecord = z.strictObject({
+  roundIndex: z.number().int().min(0),
+  questionIndex: z.number().int().min(0),
+  questionId: z.string(),
+  mechanicId: z.string(),
+  /** Final mechanic state at the reveal (validated by the mechanic's stateSchema when read back). */
+  state: z.unknown(),
+  openedAt: z.number().int().nullable(),
+  windowMs: z.number().int().nullable(),
+  /** Ledger entries written by this reveal (voided and rewritten by a regrade). */
+  entryIds: z.array(z.string()),
+  /** Response time (ms after opening) of every right answer: the `speed` tie-break sums them. */
+  correctMs: z.array(z.strictObject({ participantId: z.string(), ms: z.number().int().min(0) })).default([]),
+});
+export type QuestionRecord = z.infer<typeof QuestionRecord>;
+
+/**
  * Full authoritative state. Never sent to clients as-is: use `project()`.
  * Schema-backed so persisted snapshots are validated when read back (CONVENTIONS: every boundary).
  */
@@ -43,6 +63,10 @@ export const GameState = z.strictObject({
   played: z.array(z.string()),
   /** Manual layers currently TAKEN (on air), by layer id (doc 06). */
   layers: z.record(z.string(), z.boolean()),
+  /** One record per revealed (round, question). Default: snapshots written before phase 3 stay readable. */
+  history: z.array(QuestionRecord).default([]),
+  /** The host may drive the question flow from their tablet (`host.setDrive`, HOST_DRIVE_ACTIONS). */
+  hostDrives: z.boolean().default(false),
 });
 export type GameState = z.infer<typeof GameState>;
 
@@ -67,6 +91,8 @@ export function initialState(session: Session): GameState {
     lastSeq: 0,
     played: [],
     layers: {},
+    history: [],
+    hostDrives: false,
   };
 }
 

@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { DEMO_GAME, type Event } from "@quiz/schema";
+import { DEMO_GAME, DEMO_TEXT_GAME, type Event } from "@quiz/schema";
 import { CorruptJournalError, createGame, decide, replay } from "./game.ts";
-import { defaultRegistry as reg } from "./index.ts";
+import { defaultRegistry as reg, defaultRegistry } from "./index.ts";
+import { createRegistry } from "./mechanic.ts";
 import { project } from "./project.ts";
 import { participantTotal, teamTotal } from "./state.ts";
 import { actor, addPlayers, answer, CONTROL, ctl, makeSession, run } from "./testing/harness.ts";
@@ -163,5 +164,21 @@ describe("phase 1 review — replay scope and snapshots", () => {
     // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- test-only: simulates a snapshot written by an older engine
     const state = old as unknown as typeof g.state;
     expect(replay(g.session, g.events, reg, { seq: lastSeq(g), state }).state).toEqual(g.state);
+  });
+});
+
+describe("projection cost with 500 tablets (review I4)", () => {
+  it("judges once per mechanic state, not once per player view", () => {
+    let calls = 0;
+    const base = defaultRegistry.get("text-answer");
+    if (base === null) throw new Error("text-answer registered");
+    const counting = createRegistry([{ ...base, judge: (st: unknown) => { calls++; return base.judge(st); } }, ...defaultRegistry.ids().filter((id) => id !== "text-answer").flatMap((id) => { const m = defaultRegistry.get(id); return m === null ? [] : [m]; })]);
+    const players = Array.from({ length: 500 }, (_, i) => ctl({ type: "player.add", participantId: `p_${i + 1}`, displayName: `J${i + 1}`, channel: "play" }));
+    const answers = Array.from({ length: 500 }, (_, i) => [actor("player", `p_${i + 1}`), { type: "answer.submit", participantId: `p_${i + 1}`, answer: { kind: "text", text: i % 2 === 0 ? "Van Gogh" : "Monet" } }] as const);
+    const g = run(counting, [ctl({ type: "game.start" }), ctl({ type: "round.start" }), ...players, ctl({ type: "question.present" }), ctl({ type: "question.open" }), ...answers, ctl({ type: "question.lock" }), ctl({ type: "question.reveal" })], createGame(makeSession(DEMO_TEXT_GAME)));
+    calls = 0;
+    for (let i = 1; i <= 500; i++) project(g, { role: "player", participantId: `p_${i}` }, counting);
+    expect(calls).toBe(1);
+    expect(project(g, { role: "player", participantId: "p_2" }, counting)).toMatchObject({ myResult: "wrong" });
   });
 });

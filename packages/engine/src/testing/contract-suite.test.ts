@@ -40,7 +40,7 @@ describe("mechanicContractSuite catches faulty mechanics", () => {
     const mutating = defineMechanic<C, S>({
       ...typed,
       submit: (s, participantId, answer, env) => {
-        (s.answers as unknown[]).push({ participantId, optionIds: answer.optionIds, at: env.at }); // deliberate mutation
+        (s.answers as unknown[]).push({ participantId, optionIds: answer.kind === "choice" ? answer.optionIds : [], at: env.at }); // deliberate mutation
         return { ok: true, value: s };
       },
     });

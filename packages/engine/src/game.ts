@@ -1,4 +1,4 @@
-import { isAllowed, isUndoableByDefault, type Action, type Actor, type Event, type Session } from "@quiz/schema";
+import { isAllowed, isNeverUndone, isUndoableByDefault, type Action, type Actor, type Event, type Session } from "@quiz/schema";
 import type { Registry } from "./mechanic.ts";
 import { reduce } from "./reduce.ts";
 import { err, ok, type Rejection, type Result } from "./result.ts";
@@ -139,6 +139,7 @@ function undoTarget(g: Game, explicit: number | undefined): Result<number, Rejec
     if (e === undefined) return err("not-found", `événement ${explicit} inconnu`);
     if (g.cancelledBy.has(explicit)) return err("conflict", `événement ${explicit} déjà annulé`);
     if (skipped.has(explicit)) return err("conflict", `événement ${explicit} déjà sans effet`);
+    if (isNeverUndone(e.action.type)) return err("forbidden", "ce réglage ne s'annule pas : envoyer le réglage inverse");
     return ok(explicit);
   }
   for (let i = g.events.length - 1; i >= 0; i--) {

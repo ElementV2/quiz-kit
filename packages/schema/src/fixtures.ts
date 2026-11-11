@@ -1,4 +1,5 @@
 import type { GameDocument } from "./session.ts";
+import { DEMO_ALLOCATION_GAME, DEMO_BOARD_GAME, DEMO_CHAT_GAME, DEMO_EVENING_GAME, DEMO_HINTS_GAME, DEMO_NUMBER_GAME, DEMO_ORDER_GAME, DEMO_PAIRS_GAME, DEMO_TEXT_GAME } from "./fixtures-formats.ts";
 
 /**
  * Demo game used by tests, bots, chaos / load scripts and the dev server.
@@ -339,4 +340,13 @@ export const TEMPLATES: readonly { readonly id: string; readonly game: GameDocum
   { id: "g_modele_paliers", game: { ...DEMO_LADDER_GAME, title: "Modèle — QCM à paliers" } },
   { id: "g_modele_sondage", game: { ...DEMO_POLL_GAME, title: "Modèle — Sondage à slots" } },
   { id: "g_modele_buzzer", game: { ...DEMO_BUZZER_GAME, title: "Modèle — Buzzer culture G" } },
+  { id: "g_modele_soiree", game: { ...DEMO_EVENING_GAME, title: "Modèle — Soirée multi-manches" } },
+  { id: "g_modele_texte", game: { ...DEMO_TEXT_GAME, title: "Modèle — Réponse libre" } },
+  { id: "g_modele_estimation", game: { ...DEMO_NUMBER_GAME, title: "Modèle — Estimation (le plus proche)" } },
+  { id: "g_modele_ordre", game: { ...DEMO_ORDER_GAME, title: "Modèle — Remettre dans l'ordre" } },
+  { id: "g_modele_paires", game: { ...DEMO_PAIRS_GAME, title: "Modèle — Associations" } },
+  { id: "g_modele_repartition", game: { ...DEMO_ALLOCATION_GAME, title: "Modèle — Répartition de mise" } },
+  { id: "g_modele_plateau", game: { ...DEMO_BOARD_GAME, title: "Modèle — Plateau catégories × valeurs" } },
+  { id: "g_modele_indices", game: { ...DEMO_HINTS_GAME, title: "Modèle — Indices dégressifs" } },
+  { id: "g_modele_chat", game: { ...DEMO_CHAT_GAME, title: "Modèle — Vote du chat (Twitch / YouTube)" } },
 ];

@@ -1,5 +1,6 @@
 import { z } from "zod";
-import { OptionId, ParticipantId, ScoreEntryId, TeamId } from "./ids.ts";
+import { AnswerSpec } from "./content.ts";
+import { OptionId, ParticipantId, QuestionId, ScoreEntryId, TeamId } from "./ids.ts";
 import type { Role } from "./roles.ts";
 import { DisplayName, ParticipantStatus, ScoreTarget, Channel } from "./session.ts";
 
@@ -8,6 +9,16 @@ const action = <T extends string, S extends z.core.$ZodLooseShape>(type: T, shap
 
 export const AnswerValue = z.discriminatedUnion("kind", [
   z.strictObject({ kind: z.literal("choice"), optionIds: z.array(OptionId).min(1).max(6) }),
+  z.strictObject({ kind: z.literal("text"), text: z.string().trim().min(1).max(200) }),
+  z.strictObject({ kind: z.literal("number"), value: z.number() }),
+  /** Full ordering of the shown options (order). */
+  z.strictObject({ kind: z.literal("order"), optionIds: z.array(OptionId).min(2).max(8) }),
+  /** left pair id → right pair id (pairs). */
+  z.strictObject({ kind: z.literal("pairs"), matches: z.array(z.strictObject({ left: OptionId, right: OptionId })).min(1).max(8) }),
+  /** Normalised point on the question image (pin). */
+  z.strictObject({ kind: z.literal("pin"), x: z.number().min(0).max(1), y: z.number().min(0).max(1) }),
+  /** Amount per option (allocation); the sum must equal the budget. */
+  z.strictObject({ kind: z.literal("allocation"), amounts: z.array(z.strictObject({ optionId: OptionId, amount: z.number().int().min(0).max(10_000_000) })).min(1).max(6) }),
 ]);
 export type AnswerValue = z.infer<typeof AnswerValue>;
 
@@ -23,6 +34,20 @@ export const Action = z.discriminatedUnion("type", [
   action("question.lock", {}),
   action("question.reveal", {}),
   action("question.next", {}),
+  // Live corrections (doc 09)
+  /**
+   * Swaps a question of the current round for one of its reserve questions. Question on (presenting → judging):
+   * the current one is replaced and presented again from scratch; phase idle: the question at `questionIndex`
+   * (default: the next one). Refused once revealed (undo, or regrade).
+   */
+  action("question.replaceFromReserve", { reserveId: QuestionId, questionIndex: z.number().int().min(0).optional() }),
+  /** Fixes the text of the question on air (typo). */
+  action("question.edit", { text: z.string().trim().min(1).max(2000) }),
+  /**
+   * Fixes the right answer of a question (same kind), then re-judges every reveal of it: their automatic points
+   * are voided and rewritten (`reason: regrade`). Mechanics judged by a human (buzzer, board) cannot be regraded.
+   */
+  action("question.regrade", { questionId: QuestionId, answerSpec: AnswerSpec }),
   // Answers
   action("answer.submit", { participantId: ParticipantId, answer: AnswerValue }),
   /**
@@ -78,6 +103,18 @@ export const Action = z.discriminatedUnion("type", [
     name: z.string().trim().min(1).max(40),
     color: z.string().regex(/^#[0-9a-fA-F]{6}$/),
   }),
+  /**
+   * The control room lets the host drive the flow from their tablet (pick, present, open, lock, reveal, skip,
+   * hints, timer) — or takes it back. Journaled: who drove what stays in the journal.
+   */
+  action("host.setDrive", { enabled: z.boolean() }),
+  /**
+   * Chat votes (Twitch / YouTube), batched by the server's chat ingestion (one event per ~300 ms, not per message).
+   * `userId` is the platform's id, prefixed by the channel (`tw:123`, `yt:UC…`): chat viewers are not participants.
+   */
+  action("crowd.tally", {
+    votes: z.array(z.strictObject({ userId: z.string().regex(/^(tw|yt):[0-9A-Za-z_-]{1,64}$/), optionId: OptionId })).min(1).max(1000),
+  }),
   // Undo (ADR-0010). The engine always journals the resolved `targetSeq`, so replay never guesses.
   action("undo", { targetSeq: z.number().int().min(1).optional() }),
 ]);
@@ -89,9 +126,19 @@ const CONTROL_ONLY: readonly ActionType[] = [
   "game.start", "round.start", "question.present", "question.open", "question.lock", "question.reveal",
   "question.next", "timer.set", "timer.stop", "player.add", "player.rename", "player.setStatus",
   "player.setTeam", "player.setSeat", "player.remove", "team.add", "undo", "layer.take", "layer.out",
-  "element.reveal", "joker.use", "ladder.stop", "poll.control", "poll.steal",
+  "element.reveal", "joker.use", "ladder.stop", "poll.control", "poll.steal", "question.replaceFromReserve", "question.edit",
+  "host.setDrive",
 ];
-const SCORING: readonly ActionType[] = ["score.adjust", "score.setTotal", "score.void"];
+
+/**
+ * What a host may do once the control room enabled `host.setDrive` (on top of `answer.judge`): the question flow
+ * and the in-question tools — never scores, players, layers on air or undo (those stay with the control room).
+ */
+export const HOST_DRIVE_ACTIONS: ReadonlySet<ActionType> = new Set<ActionType>([
+  "game.start", "round.start", "question.present", "question.open", "question.lock", "question.reveal", "question.next",
+  "element.reveal", "timer.set", "timer.stop", "joker.use", "ladder.stop", "poll.control", "poll.steal",
+]);
+const SCORING: readonly ActionType[] = ["score.adjust", "score.setTotal", "score.void", "question.regrade"];
 
 /** Role → allowed actions (doc 01). Checked by the server AND the engine. */
 export const actionPermissions: Readonly<Record<Role, ReadonlySet<ActionType>>> = {
@@ -104,7 +151,7 @@ export const actionPermissions: Readonly<Record<Role, ReadonlySet<ActionType>>> 
   player: new Set<ActionType>(["answer.submit", "buzz"]),
   seat: new Set<ActionType>(["answer.submit", "buzz"]),
   studio: new Set<ActionType>(),
-  system: new Set<ActionType>(["timer.expired"]),
+  system: new Set<ActionType>(["timer.expired", "crowd.tally"]),
 };
 
 export function isAllowed(role: Role, type: ActionType): boolean {
@@ -116,5 +163,16 @@ export function isAllowed(role: Role, type: ActionType): boolean {
  * `timer.expired` is included so that "undo" right after an auto-lock simply re-opens answers.
  */
 export function isUndoableByDefault(type: ActionType): boolean {
-  return type !== "answer.submit" && type !== "buzz" && type !== "undo";
+  return type !== "answer.submit" && type !== "buzz" && type !== "undo" && type !== "crowd.tally" && !NEVER_UNDONE.has(type);
+}
+
+/**
+ * Never undone, even with an explicit target: undoing them would change, at replay, the permission under which
+ * later events were accepted (review 3 B1: undoing `host.setDrive` erased everything the host had driven).
+ * To change it back, send the opposite action.
+ */
+export const NEVER_UNDONE: ReadonlySet<ActionType> = new Set<ActionType>(["host.setDrive"]);
+
+export function isNeverUndone(type: ActionType): boolean {
+  return NEVER_UNDONE.has(type);
 }

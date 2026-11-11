@@ -196,8 +196,15 @@ export const ladder = defineMechanic<LadderConfig, LadderState>({
         if (s.hidden.includes(optionId)) return err("invalid", "option retirée par le 50:50");
         return ok({ ...s, candidate: participantId, answer: { optionId, at: env.at } });
       }
+      case "text":
+      case "number":
+      case "order":
+      case "pairs":
+      case "pin":
+      case "allocation":
+        return err("invalid", "réponse à choix attendue");
       default:
-        return assertNever(answer.kind);
+        return assertNever(answer);
     }
   },
 

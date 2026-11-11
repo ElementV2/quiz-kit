@@ -1,7 +1,8 @@
 import { z } from "zod";
-import { Media, OptionId, ParticipantId, type ActionOf, type BuzzerMechanicView } from "@quiz/schema";
-import { defineMechanic, type Judgement, type MechanicEnv } from "../../mechanic.ts";
-import { assertNever, err, ok, type Rejection, type Result } from "../../result.ts";
+import { Media, OptionId, type BuzzerMechanicView } from "@quiz/schema";
+import { defineMechanic, type Judgement } from "../../mechanic.ts";
+import { assertNever, err, ok } from "../../result.ts";
+import { Buzz, buzzMe, handOf, lockedOutOf, onBuzz, onJudge, queueOf, winnerOf } from "../shared/buzz-queue.ts";
 
 /**
  * Buzzer (culture G, doc 03). Answers open = buzzers open. Each `buzz` joins the queue in journal order:
@@ -26,38 +27,9 @@ export const BuzzerState = z.strictObject({
   expected: z.string().nullable(),
   lockoutOnWrong: z.boolean(),
   /** Every buzz, in journal order. `waiting` ones form the queue. */
-  buzzes: z.array(z.strictObject({ participantId: ParticipantId, at: z.number().int(), status: z.enum(["waiting", "correct", "wrong"]) })),
+  buzzes: z.array(Buzz),
 });
 export type BuzzerState = z.infer<typeof BuzzerState>;
-
-type S = BuzzerState;
-type R = Result<S, Rejection>;
-
-const winnerOf = (s: S): string | null => s.buzzes.find((b) => b.status === "correct")?.participantId ?? null;
-const queueOf = (s: S): string[] => s.buzzes.filter((b) => b.status === "waiting").map((b) => b.participantId);
-const handOf = (s: S): string | null => (winnerOf(s) === null ? (queueOf(s)[0] ?? null) : null);
-const isLockedOut = (s: S, pid: string): boolean => s.lockoutOnWrong && s.buzzes.some((b) => b.participantId === pid && b.status === "wrong");
-const lockedOutOf = (s: S): string[] => (s.lockoutOnWrong ? [...new Set(s.buzzes.filter((b) => b.status === "wrong").map((b) => b.participantId))] : []);
-
-/** Phase `open` is checked by the core; the participant is known and active. */
-function onBuzz(s: S, a: ActionOf<"buzz">, env: MechanicEnv): R {
-  if (winnerOf(s) !== null) return err("conflict", "question déjà gagnée");
-  if (s.buzzes.some((b) => b.participantId === a.participantId && b.status === "waiting")) return err("conflict", "déjà dans la file");
-  if (isLockedOut(s, a.participantId)) return err("forbidden", "joueur bloqué pour cette question");
-  return ok({ ...s, buzzes: [...s.buzzes, { participantId: a.participantId, at: env.at, status: "waiting" }] });
-}
-
-function onJudge(s: S, a: ActionOf<"answer.judge">, env: MechanicEnv): R {
-  if (env.phase !== "open" && env.phase !== "locked" && env.phase !== "judging") return err("wrong-phase", "aucune réponse à juger");
-  if (a.participantId === undefined) return err("invalid", "préciser le joueur jugé (participantId)");
-  const hand = handOf(s);
-  if (hand === null) return err("conflict", "personne n'a la main");
-  if (hand !== a.participantId) return err("conflict", "ce joueur n'a pas la main");
-  const status = a.correct ? "correct" : "wrong";
-  // The hand is the first waiting buzz: update exactly that one.
-  const i = s.buzzes.findIndex((b) => b.status === "waiting");
-  return ok({ ...s, buzzes: s.buzzes.map((b, j) => (j === i ? { ...b, status } : b)) });
-}
 
 export const buzzer = defineMechanic<BuzzerConfig, BuzzerState>({
   id: "buzzer",
@@ -72,9 +44,17 @@ export const buzzer = defineMechanic<BuzzerConfig, BuzzerState>({
         return ok({ kind: "oral", options: [], correct: null, expected: spec.expected, ...common });
       case "single":
         return ok({ kind: "single", options: spec.options.map(({ id, label, media }) => (media ? { id, label, media } : { id, label })), correct: spec.correct, expected: null, ...common });
+      case "text":
+        // A free-text question read out by the host: the canonical answer is what the host expects.
+        return ok({ kind: "oral", options: [], correct: null, expected: spec.accepted[0] ?? "", ...common });
       case "multi":
       case "boolean":
       case "poll":
+      case "number":
+      case "order":
+      case "pairs":
+      case "pin":
+      case "allocation":
         return err("unsupported", `la mécanique buzzer ne gère pas les questions ${spec.kind}`);
       default:
         return assertNever(spec);
@@ -120,13 +100,7 @@ export const buzzer = defineMechanic<BuzzerConfig, BuzzerState>({
     const queue = queueOf(s);
     const hand = handOf(s);
     const winner = winnerOf(s);
-    const pid = env.audience === "player" ? env.participantId : null;
-    let me: BuzzerMechanicView["me"] = null;
-    if (env.audience === "player" && pid !== null) {
-      const pos = queue.indexOf(pid);
-      const lockedOut = isLockedOut(s, pid);
-      me = { hasHand: hand === pid, queuePosition: pos < 0 ? null : pos + 1, lockedOut, canBuzz: env.phase === "open" && winner === null && pos < 0 && !lockedOut };
-    }
+    const me: BuzzerMechanicView["me"] = buzzMe(s, env.audience, env.participantId, env.phase);
     const light = env.audience === "player";
     return {
       mechanic: "buzzer",

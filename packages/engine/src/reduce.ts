@@ -1,9 +1,9 @@
-import { isAllowed, type Action, type ActionOf, type Actor, type Participant, type ScoreEntry, type ScoreTarget } from "@quiz/schema";
-import type { AnyMechanic, FixedJudgement, MechanicEnv, Registry } from "./mechanic.ts";
+import { HOST_DRIVE_ACTIONS, isAllowed, type Action, type ActionOf, type Actor, type Participant, type Round, type ScoreEntry, type ScoreTarget } from "@quiz/schema";
+import type { AnyMechanic, FixedJudgement, Judgement, MechanicEnv, Registry } from "./mechanic.ts";
 import { assertNever, err, ok, type Rejection, type Result } from "./result.ts";
 import type { Rng } from "./rng.ts";
 import { pointsFor } from "./scoring.ts";
-import { currentQuestion, currentRound, participantTotal, teamTotal, type GameState } from "./state.ts";
+import { currentQuestion, currentRound, participantTotal, teamTotal, type GameState, type QuestionRecord } from "./state.ts";
 
 /** Everything comes from the event (ADR-0010): no clock, no global randomness. */
 export type Ctx = { readonly at: number; readonly seq: number; readonly actor: Actor; readonly rng: Rng };
@@ -17,7 +17,8 @@ const QUESTION_PHASES = new Set(["presenting", "open", "locked", "judging", "rev
  * Overrides (score.*, player.*, team.add) are accepted in every phase (doc 03).
  */
 export function reduce(s: GameState, action: Action, ctx: Ctx, registry: Registry): R {
-  if (!isAllowed(ctx.actor.role, action.type)) {
+  const hostDriving = ctx.actor.role === "host" && s.hostDrives && HOST_DRIVE_ACTIONS.has(action.type);
+  if (!isAllowed(ctx.actor.role, action.type) && !hostDriving) {
     return err("forbidden", `le rôle ${ctx.actor.role} ne peut pas faire ${action.type}`);
   }
   const r = reduceAllowed(s, action, ctx, registry);
@@ -33,17 +34,32 @@ function reduceAllowed(s: GameState, a: Action, ctx: Ctx, registry: Registry): R
     case "round.start": {
       if (s.phase !== "idle" && s.phase !== "round.end") return err("wrong-phase", "une question est en cours");
       const current = currentRound(s);
-      const remaining = current !== null && s.phase === "idle" && (s.questionIndex ?? -1) + 1 < current.questions.length;
+      // Free order (board): phase idle inside the round always means cells are left (the last one ends the round).
+      const free = current !== null && registry.get(current.mechanic)?.freeOrder === true;
+      const remaining = current !== null && s.phase === "idle" && s.roundIndex !== null && (free || (s.questionIndex ?? -1) + 1 < current.questions.length);
       if (a.roundIndex === undefined && remaining) {
         return err("conflict", "il reste des questions dans la manche : préciser roundIndex pour sauter");
       }
-      const index = a.roundIndex ?? (s.roundIndex === null ? 0 : s.roundIndex + 1);
+      const following = nextRoundIndex(s);
+      const index = a.roundIndex ?? following ?? -1;
       if (s.game.format.rounds[index] === undefined) return err("not-found", `manche ${index} inexistante`);
       return ok({ ...s, phase: "idle", roundIndex: index, questionIndex: null, carry: null, roundLedgerStart: s.ledger.length });
     }
 
     case "question.present":
       return present(s, a, ctx, registry);
+
+    case "question.replaceFromReserve":
+      return replaceFromReserve(s, a, ctx, registry);
+
+    case "question.edit": {
+      const q = QUESTION_PHASES.has(s.phase) ? currentQuestion(s) : null;
+      if (q === null) return err("wrong-phase", "aucune question à l'antenne");
+      return ok({ ...s, game: { ...s.game, questions: s.game.questions.map((x) => (x.id === q.id ? { ...x, prompt: { ...x.prompt, text: a.text } } : x)) } });
+    }
+
+    case "question.regrade":
+      return regrade(s, a, ctx, registry);
 
     case "question.open": {
       if (s.phase !== "presenting") return err("wrong-phase", "présenter la question avant d'ouvrir les réponses");
@@ -93,14 +109,16 @@ function reduceAllowed(s: GameState, a: Action, ctx: Ctx, registry: Registry): R
       const qi = s.questionIndex ?? 0;
       const m = s.mechanic === null ? null : registry.get(s.mechanic.id);
       const endsRound = m !== null && s.mechanic !== null && m.endsRound(s.mechanic.state, s.phase);
-      const isLastQuestion = round === null || qi + 1 >= round.questions.length || endsRound;
-      const isLastRound = s.roundIndex === null || s.roundIndex + 1 >= s.game.format.rounds.length;
-      const phase = !isLastQuestion ? "idle" : isLastRound ? "game.end" : "round.end";
+      const isLastQuestion = round === null || endsRound || (m?.freeOrder !== true && qi + 1 >= round.questions.length);
       const carry = s.mechanic === null ? s.carry : { id: s.mechanic.id, state: s.mechanic.state, revealed: s.phase === "revealed", questionIndex: qi };
       // A round ending here lets the mechanic bank what was not scored by a reveal (ladder skipped / stopped).
       const question = currentQuestion(s);
       const closing = isLastQuestion && m !== null && s.mechanic !== null && question !== null ? m.closeRound(s.mechanic.state, s.phase) : [];
-      const ledger = [...s.ledger, ...fixedEntries(s, ctx, closing, question?.id ?? null, 0)];
+      const skipped = s.phase !== "revealed" && m?.onSkip !== undefined && s.mechanic !== null ? m.onSkip(s.mechanic.state) : [];
+      const ledger = [...s.ledger, ...fixedEntries(s, ctx, [...skipped, ...closing], question?.id ?? null, 0)];
+      // Flow (format.flow): the round that follows depends on the final scores of this one; null = game over.
+      const isLastRound = s.roundIndex === null || nextRoundIndex({ ...s, ledger }) === null;
+      const phase = !isLastQuestion ? "idle" : isLastRound ? "game.end" : "round.end";
       return ok({ ...s, phase, ledger, mechanic: null, carry, timer: null, openedAt: null, lockedAt: null, windowMs: null });
     }
 
@@ -130,6 +148,7 @@ function reduceAllowed(s: GameState, a: Action, ctx: Ctx, registry: Registry): R
     case "element.reveal":
     case "joker.use":
     case "ladder.stop":
+    case "crowd.tally":
       return mechanicAction(s, a, ctx, registry);
 
     case "score.adjust":
@@ -188,8 +207,13 @@ function reduceAllowed(s: GameState, a: Action, ctx: Ctx, registry: Registry): R
       const carryMechanic = s.carry === null ? null : registry.get(s.carry.id);
       // Unknown carried mechanic (cannot purge it): drop the carry rather than keep stale progression.
       const purged = s.carry === null ? without : carryMechanic === null ? { ...without, carry: null } : { ...without, carry: { ...s.carry, state: carryMechanic.removeParticipant(s.carry.state, a.participantId) } };
-      if (s.mechanic === null) return ok(purged);
-      return withMechanic(purged, registry, (m, state) => ok(m.removeParticipant(state, a.participantId)));
+      // History too: a regrade must never give points to a later player reusing this id.
+      const history = purged.history.map((h) => {
+        const hm = registry.get(h.mechanicId);
+        return { ...h, state: hm === null ? h.state : hm.removeParticipant(h.state, a.participantId), correctMs: h.correctMs.filter((x) => x.participantId !== a.participantId) };
+      });
+      if (s.mechanic === null) return ok({ ...purged, history });
+      return withMechanic({ ...purged, history }, registry, (m, state) => ok(m.removeParticipant(state, a.participantId)));
     }
 
     case "layer.take":
@@ -204,6 +228,10 @@ function reduceAllowed(s: GameState, a: Action, ctx: Ctx, registry: Registry): R
       if (s.teams.some((t) => t.id === a.teamId)) return err("conflict", "identifiant d'équipe déjà pris");
       return ok({ ...s, teams: [...s.teams, { id: a.teamId, name: a.name, color: a.color, captainId: null }] });
 
+    case "host.setDrive":
+      if (s.hostDrives === a.enabled) return err("conflict", a.enabled ? "l'animateur pilote déjà" : "l'animateur ne pilote pas");
+      return ok({ ...s, hostDrives: a.enabled });
+
     case "undo":
       return err("unsupported", "undo est résolu par le journal (game.ts)");
 
@@ -212,26 +240,78 @@ function reduceAllowed(s: GameState, a: Action, ctx: Ctx, registry: Registry): R
   }
 }
 
+/** Two best totals equal (teams when the game has teams, else players): what `when: tie` tests. */
+function isTie(s: GameState): boolean {
+  const totals = s.teams.length > 0 ? s.teams.map((t) => teamTotal(s, t.id)) : s.participants.map((p) => participantTotal(s, p.id));
+  const [a, b] = totals.toSorted((x, y) => y - x);
+  return a !== undefined && b !== undefined && a === b;
+}
+
+/**
+ * Index of the round that follows the current one (null = game over): the first matching transition of
+ * `format.flow` from this round, else the next round of the list. Before the first round: round 0.
+ */
+export function nextRoundIndex(s: GameState): number | null {
+  const rounds = s.game.format.rounds;
+  if (s.roundIndex === null) return rounds.length > 0 ? 0 : null;
+  const current = rounds[s.roundIndex];
+  const transitions = current === undefined ? [] : (s.game.format.flow ?? []).filter((t) => t.from === current.id);
+  if (transitions.length === 0) return s.roundIndex + 1 < rounds.length ? s.roundIndex + 1 : null;
+  const tie = isTie(s);
+  for (const t of transitions) {
+    if (t.when === "tie" && !tie) continue;
+    if (t.when === "no-tie" && tie) continue;
+    if (t.to === "end") return null;
+    const i = rounds.findIndex((r) => r.id === t.to);
+    return i < 0 ? null : i;
+  }
+  // Transitions exist but none matches (e.g. only `tie` and no tie): the list order applies.
+  return s.roundIndex + 1 < rounds.length ? s.roundIndex + 1 : null;
+}
+
 function envOf(s: GameState, ctx: Ctx): MechanicEnv {
-  return { at: ctx.at, rng: ctx.rng, phase: s.phase };
+  return { at: ctx.at, rng: ctx.rng, phase: s.phase, lockedAt: s.lockedAt };
 }
 
 function present(s: GameState, a: ActionOf<"question.present">, ctx: Ctx, registry: Registry): R {
   if (s.phase !== "idle" || s.roundIndex === null) return err("wrong-phase", "démarrer une manche avant de présenter");
   const round = currentRound(s);
   if (round === null) return err("not-found", "manche inconnue");
-  const index = a.questionIndex ?? (s.questionIndex === null ? 0 : s.questionIndex + 1);
-  const qid = round.questions[index];
-  const question = qid === undefined ? undefined : s.game.questions.find((q) => q.id === qid);
-  if (question === undefined) return err("not-found", `question ${index} inexistante dans la manche`);
   const m = registry.get(round.mechanic);
   if (m === null) return err("unsupported", `mécanique inconnue : ${round.mechanic}`);
   const cfg = m.configSchema.safeParse(round.mechanicConfig);
   if (!cfg.success) return err("invalid", `configuration de mécanique invalide : ${cfg.error.message}`);
   const previous = s.carry !== null && s.carry.id === m.id ? { state: s.carry.state, revealed: s.carry.revealed, questionIndex: s.carry.questionIndex } : null;
-  const init = m.init(cfg.data, question, envOf(s, ctx), { previous, questionIndex: index, questionsLeft: round.questions.length - index - 1 });
-  if (!init.ok) return init;
-  return ok({ ...s, phase: "presenting", questionIndex: index, mechanic: { id: m.id, state: init.value }, timer: null, openedAt: null, lockedAt: null, windowMs: null });
+  // GameDocument guarantees every round question exists (superRefine).
+  const byId = new Map(s.game.questions.map((q) => [q.id, q]));
+  const questions = round.questions.flatMap((id) => {
+    const q = byId.get(id);
+    return q === undefined ? [] : [q];
+  });
+  type Picked = Result<{ index: number; state: unknown }, Rejection>;
+  const tryAt = (index: number): Picked => {
+    const question = questions[index];
+    if (question === undefined) return err("not-found", `question ${index} inexistante dans la manche`);
+    const init = m.init(cfg.data, question, envOf(s, ctx), { previous, questionIndex: index, questionsLeft: round.questions.length - index - 1, questions });
+    return init.ok ? ok({ index, state: init.value }) : init;
+  };
+  let picked: Picked;
+  if (a.questionIndex === undefined && m.freeOrder === true) {
+    // Free order (board): the first question the mechanic accepts (cells already played are refused).
+    picked = err("conflict", "toutes les questions de la manche sont jouées");
+    for (let i = 0; i < questions.length; i++) {
+      const r = tryAt(i);
+      if (r.ok) {
+        picked = r;
+        break;
+      }
+    }
+  } else {
+    picked = tryAt(a.questionIndex ?? (s.questionIndex === null ? 0 : s.questionIndex + 1));
+  }
+  if (!picked.ok) return picked;
+  const { index, state } = picked.value;
+  return ok({ ...s, phase: "presenting", questionIndex: index, mechanic: { id: m.id, state }, timer: null, openedAt: null, lockedAt: null, windowMs: null });
 }
 
 function reveal(s: GameState, ctx: Ctx, registry: Registry): R {
@@ -262,11 +342,120 @@ function reveal(s: GameState, ctx: Ctx, registry: Registry): R {
     }
   }
   entries.push(...fixedEntries(s, ctx, fixed, question.id, entries.length));
-  // Replaying a question (doc 09 "rejouer") replaces its automatic points instead of adding to them —
-  // within the current round only: the same question used by another round keeps its points.
-  const ledger = s.ledger.map((e, i) => (i >= s.roundLedgerStart && e.reason === "auto" && e.questionId === question.id && !e.voided ? { ...e, voided: true } : e));
+  // Replaying a question (doc 09 "rejouer") replaces the points of its previous reveal at the same place
+  // (round, question index) — including a regrade of it — instead of adding to them. The same question used
+  // elsewhere (another round) keeps its points (review 2 B1: never by position in the ledger).
+  const previousReveal = s.history.find((h) => h.roundIndex === (s.roundIndex ?? 0) && h.questionIndex === (s.questionIndex ?? 0));
+  const replaced = new Set(previousReveal?.entryIds ?? []);
+  const ledger = s.ledger.map((e) => (replaced.has(e.id) && !e.voided ? { ...e, voided: true } : e));
   const played = s.played.includes(question.id) ? s.played : [...s.played, question.id];
-  return ok({ ...s, phase: "revealed", timer: null, ledger: [...ledger, ...entries], played });
+  const roundIndex = s.roundIndex ?? 0;
+  const questionIndex = s.questionIndex ?? 0;
+  const record = { roundIndex, questionIndex, questionId: question.id, mechanicId: m.id, state: m.compact === undefined ? s.mechanic.state : m.compact(s.mechanic.state), openedAt: s.openedAt, windowMs: s.windowMs, entryIds: entries.map((e) => e.id), correctMs: correctTimes(m, s.mechanic.state, s.openedAt) };
+  const history = [...s.history.filter((h) => h.roundIndex !== roundIndex || h.questionIndex !== questionIndex), record];
+  return ok({ ...s, phase: "revealed", timer: null, ledger: [...ledger, ...entries], played, history });
+}
+
+/** Response time of each right answer (speed tie-break): buzz / answer time minus opening time. */
+function correctTimes(m: AnyMechanic, state: unknown, openedAt: number): { participantId: string; ms: number }[] {
+  const at = new Map(m.answers(state).map((x) => [x.participantId, x.at]));
+  const out: { participantId: string; ms: number }[] = [];
+  for (const j of m.judge(state)) {
+    if (j.outcome !== "correct") continue;
+    const pid = j.kind === "rule" ? j.participantId : "participantId" in j.target ? j.target.participantId : null;
+    if (pid === null || out.some((x) => x.participantId === pid)) continue;
+    const t = j.kind === "rule" ? j.answeredAt : at.get(pid);
+    if (t !== undefined) out.push({ participantId: pid, ms: Math.max(0, t - openedAt) });
+  }
+  return out;
+}
+
+/** Ledger entries of a set of judgements (rule points use the round's ScoringRule and the given answer window). */
+function judgementEntries(s: GameState, ctx: Ctx, judgements: readonly Judgement[], round: Round, questionId: string, window: { openedAt: number; durationMs: number | null }, reason: ScoreEntry["reason"]): ScoreEntry[] {
+  const entries: ScoreEntry[] = [];
+  const fixed: FixedJudgement[] = [];
+  for (const j of judgements) {
+    if (j.kind === "fixed") {
+      fixed.push(j);
+      continue;
+    }
+    const p = s.participants.find((x) => x.id === j.participantId);
+    if (p === undefined) continue;
+    const delta = pointsFor(round.scoring, j, window);
+    if (delta !== 0) entries.push(entry(ctx, entries.length, { participantId: p.id }, p.teamId, delta, reason, null, questionId));
+  }
+  return [...entries, ...fixedEntries(s, ctx, fixed, questionId, entries.length).map((e) => ({ ...e, reason }))];
+}
+
+function replaceFromReserve(s: GameState, a: ActionOf<"question.replaceFromReserve">, ctx: Ctx, registry: Registry): R {
+  const round = currentRound(s);
+  if (round === null || s.roundIndex === null) return err("wrong-phase", "aucune manche en cours");
+  if (!round.reserve.includes(a.reserveId)) return err("not-found", "question absente de la réserve de la manche");
+  const onAir = s.phase === "presenting" || s.phase === "open" || s.phase === "locked" || s.phase === "judging";
+  if (!onAir && s.phase !== "idle") return err("wrong-phase", s.phase === "revealed" ? "question déjà révélée : annuler (undo) ou corriger (regrade)" : "aucune question à remplacer");
+  const free = registry.get(round.mechanic)?.freeOrder === true;
+  if (!onAir && free && a.questionIndex === undefined) return err("invalid", "ordre libre : préciser la case à remplacer (questionIndex)");
+  const index = onAir ? (s.questionIndex ?? 0) : (a.questionIndex ?? (s.questionIndex === null ? 0 : s.questionIndex + 1));
+  if (round.questions[index] === undefined) return err("not-found", `question ${index} inexistante dans la manche`);
+  const ri = s.roundIndex;
+  if (s.history.some((h) => h.roundIndex === ri && h.questionIndex === index)) return err("conflict", "cette question a déjà été révélée : annuler (undo) ou corriger (regrade)");
+  const rounds = s.game.format.rounds.map((r, i) =>
+    i === ri ? { ...r, questions: r.questions.map((q, qi) => (qi === index ? a.reserveId : q)), reserve: r.reserve.filter((q) => q !== a.reserveId) } : r,
+  );
+  const swapped: GameState = { ...s, game: { ...s.game, format: { ...s.game.format, rounds } } };
+  if (!onAir) return ok(swapped);
+  // The replaced question restarts from scratch: no answer given to the old one is kept.
+  return present({ ...swapped, phase: "idle" }, { type: "question.present", questionIndex: index }, ctx, registry);
+}
+
+/**
+ * `question.regrade`: new answer (same kind) written into the game, then every reveal of that question is
+ * judged again: its automatic entries are voided, new ones written with `reason: regrade` (manual ones stay).
+ */
+function regrade(s: GameState, a: ActionOf<"question.regrade">, ctx: Ctx, registry: Registry): R {
+  const old = s.game.questions.find((q) => q.id === a.questionId);
+  if (old === undefined) return err("not-found", "question inconnue");
+  if (old.answerSpec.kind !== a.answerSpec.kind) return err("invalid", `même type de réponse attendu (${old.answerSpec.kind})`);
+  const question = { ...old, answerSpec: a.answerSpec };
+  const records = s.history.filter((h) => h.questionId === a.questionId);
+  const live = s.mechanic !== null && currentQuestion(s)?.id === a.questionId ? s.mechanic : null;
+  if (records.length === 0 && live === null) return err("conflict", "question jamais jouée : modifier la question dans le studio");
+  let ledger = s.ledger;
+  const history: QuestionRecord[] = [];
+  for (const h of s.history) {
+    if (h.questionId !== a.questionId) {
+      history.push(h);
+      continue;
+    }
+    const m = registry.get(h.mechanicId);
+    const round = s.game.format.rounds[h.roundIndex];
+    const r = m?.regrade?.(h.state, question) ?? null;
+    if (m === null || round === undefined || r === null) return err("unsupported", `la mécanique ${h.mechanicId} ne se corrige pas après coup (juger / ajuster le score)`);
+    if (!r.ok) return r;
+    const voided = new Set(h.entryIds);
+    // Team at the time of the original scoring (a player moved since keeps crediting their old team).
+    const teamAtScoring = new Map<string, string | null>();
+    for (const e of ledger) if (voided.has(e.id) && "participantId" in e.target) teamAtScoring.set(e.target.participantId, e.teamId);
+    ledger = ledger.map((e) => (voided.has(e.id) && !e.voided ? { ...e, voided: true } : e));
+    const fresh = judgementEntries({ ...s, ledger }, ctx, m.judge(r.value), round, question.id, { openedAt: h.openedAt ?? 0, durationMs: h.windowMs }, "regrade")
+      .map((e, i) => ({
+        ...e,
+        // Unique ids across several records rewritten by the same event.
+        id: `se_${ctx.seq}_${ledger.length + i}`,
+        teamId: "participantId" in e.target ? (teamAtScoring.has(e.target.participantId) ? (teamAtScoring.get(e.target.participantId) ?? null) : e.teamId) : e.teamId,
+      }));
+    ledger = [...ledger, ...fresh];
+    history.push({ ...h, state: r.value, entryIds: fresh.map((e) => e.id), correctMs: correctTimes(m, r.value, h.openedAt ?? 0) });
+  }
+  let mechanic = s.mechanic;
+  if (live !== null) {
+    const m = registry.get(live.id);
+    const r = m?.regrade?.(live.state, question) ?? null;
+    if (r === null) return err("unsupported", `la mécanique ${live.id} ne se corrige pas après coup`);
+    if (!r.ok) return r;
+    mechanic = { id: live.id, state: r.value };
+  }
+  return ok({ ...s, game: { ...s.game, questions: s.game.questions.map((q) => (q.id === question.id ? question : q)) }, ledger, history, mechanic });
 }
 
 /** Ledger entries for mechanic-decided points (player or team target); 0 points and unknown targets write nothing. */

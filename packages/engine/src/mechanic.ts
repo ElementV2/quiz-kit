@@ -6,7 +6,13 @@ import type { Rng } from "./rng.ts";
 /** Who looks at the mechanic: secrets depend on it (ADR-0004). */
 export type Audience = "public" | "player" | "host" | "control";
 
-export type MechanicEnv = { readonly at: number; readonly rng: Rng; readonly phase: Phase };
+export type MechanicEnv = {
+  readonly at: number;
+  readonly rng: Rng;
+  readonly phase: Phase;
+  /** When answers were locked (null while open): stream-delay windows (crowd-vote). */
+  readonly lockedAt?: number | null | undefined;
+};
 
 export type ProjectEnv = {
   readonly audience: Audience;
@@ -49,6 +55,8 @@ export type RoundContext<S> = {
   readonly questionIndex: number;
   /** Questions left in the round after this one. */
   readonly questionsLeft: number;
+  /** Every question of the round, in round order (board: the grid is built from them). */
+  readonly questions: readonly Question[];
 };
 
 /**
@@ -59,6 +67,13 @@ export interface Mechanic<C, S> {
   readonly id: string;
   readonly configSchema: z.ZodType<C>;
   readonly stateSchema: z.ZodType<S>;
+  /**
+   * Questions are played in any order (board): `question.present` without index takes the first question
+   * `init` accepts, and only `endsRound` ends the round (not the last index).
+   */
+  readonly freeOrder?: boolean;
+  /** The question media is the secret (reveal-image): never sent to players in the base view. */
+  readonly hidesPromptMedia?: boolean;
   /** Called on `question.present`. Rejects question kinds it cannot run. */
   init(config: C, question: Question, env: MechanicEnv, round: RoundContext<S>): Result<S, Rejection>;
   /** `answer.submit` while phase = open. */
@@ -85,6 +100,23 @@ export interface Mechanic<C, S> {
   /** All accepted answers, for the control view. */
   answers(state: S): readonly { participantId: ParticipantId; optionIds: readonly string[]; at: number }[];
   project(state: S, env: ProjectEnv): MechanicView;
+  /**
+   * View shown between questions of the round (phase `idle`, no question on): the board grid while control
+   * picks the next cell. `previous` = final state of the last question played in the round, if any.
+   */
+  projectIdle?(config: C, questions: readonly Question[], previous: S | null, env: ProjectEnv): MechanicView;
+  /**
+   * `question.regrade`: the same answers judged against the corrected question (same answer kind).
+   * Absent or null: this mechanic cannot be regraded (judged by a human, round-level progression…).
+   */
+  regrade?(state: S, question: Question): Result<S, Rejection> | null;
+  /**
+   * `question.next` on a question that was NOT revealed: points the mechanic still wants written (board: a cell
+   * judged right then skipped without reveal keeps its value). Absent: nothing is written (default).
+   */
+  onSkip?(state: S): readonly FixedJudgement[];
+  /** Smaller state kept in the reveal history (must judge / regrade / project identically). Absent: as is. */
+  compact?(state: S): S;
 }
 
 /** Type-erased mechanic stored in the registry. */

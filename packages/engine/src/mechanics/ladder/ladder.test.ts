@@ -249,7 +249,7 @@ describe("ladder projections and rejections", () => {
 
   it("refuses non-single questions", () => {
     const oral: Question = { id: "q_o", prompt: { text: "?" }, answerSpec: { kind: "oral", expected: "x" }, hints: [], tags: [] };
-    const r = ladder.init({ steps: [1], safeSteps: [], jokers: [] }, oral, { at: 0, phase: "idle", rng: createRng(1, 1) }, { previous: null, questionIndex: 0, questionsLeft: 0 });
+    const r = ladder.init({ steps: [1], safeSteps: [], jokers: [] }, oral, { at: 0, phase: "idle", lockedAt: null, rng: createRng(1, 1) }, { previous: null, questionIndex: 0, questionsLeft: 0, questions: [] });
     expect(r).toMatchObject({ ok: false, error: { code: "unsupported" } });
   });
 });

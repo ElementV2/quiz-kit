@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { Phase } from "./phase.ts";
-import { Media } from "./content.ts";
+import { AnswerSpec, Media, NormRect } from "./content.ts";
 import { OptionId, ParticipantId, QuestionId, SessionId, TeamId } from "./ids.ts";
 import { Participant, ParticipantStatus, ScoreEntry, Team } from "./session.ts";
 
@@ -126,7 +126,160 @@ export const LadderMechanicView = z.strictObject({
 });
 export type LadderMechanicView = z.infer<typeof LadderMechanicView>;
 
-export const MechanicView = z.discriminatedUnion("mechanic", [ChoiceMechanicView, PollBoardMechanicView, BuzzerMechanicView, LadderMechanicView]);
+const OptionLite = z.strictObject({ id: OptionId, label: z.string(), media: Media.optional() });
+
+/** Free text answer with fuzzy matching (accents, case, punctuation, small typos). */
+export const TextAnswerMechanicView = z.strictObject({
+  mechanic: z.literal("text-answer"),
+  /** SECRET: canonical answer, null for player / output until `revealed`. */
+  correct: z.string().nullable(),
+  answeredCount: z.number().int().nullable(),
+  /** Host / control only: every answer with its automatic verdict, so the operator can overrule (`answer.judge`). */
+  review: z.array(z.strictObject({ participantId: ParticipantId, text: z.string(), accepted: z.boolean(), overruled: z.boolean() })).nullable(),
+});
+export type TextAnswerMechanicView = z.infer<typeof TextAnswerMechanicView>;
+
+export const NumberAnswerMechanicView = z.strictObject({
+  mechanic: z.literal("number-answer"),
+  /** `tolerance`: right within the tolerance; `closest`: the closest answer(s) win. */
+  mode: z.enum(["tolerance", "closest"]),
+  unit: z.string().nullable(),
+  min: z.number().nullable(),
+  max: z.number().nullable(),
+  /** SECRET until `revealed`. */
+  correct: z.number().nullable(),
+  tolerance: z.number().nullable(),
+  answeredCount: z.number().int().nullable(),
+  /** Closest answers first (top 10). Host / control from `locked`, outputs once revealed; null on tablets. */
+  ranking: z.array(z.strictObject({ participantId: ParticipantId, value: z.number(), gap: z.number(), win: z.boolean() })).nullable(),
+});
+export type NumberAnswerMechanicView = z.infer<typeof NumberAnswerMechanicView>;
+
+export const OrderMechanicView = z.strictObject({
+  mechanic: z.literal("order"),
+  /** Shown order (shuffled with the session seed, same for everyone). */
+  options: z.array(OptionLite),
+  /** SECRET: right order, until `revealed`. */
+  correct: z.array(OptionId).nullable(),
+  answeredCount: z.number().int().nullable(),
+});
+export type OrderMechanicView = z.infer<typeof OrderMechanicView>;
+
+export const PairsMechanicView = z.strictObject({
+  mechanic: z.literal("pairs"),
+  left: z.array(z.strictObject({ id: OptionId, label: z.string() })),
+  /** Shuffled, with anonymous ids (`r0`...): the id never tells the matching left item. */
+  right: z.array(z.strictObject({ id: OptionId, label: z.string() })),
+  /** SECRET until `revealed`. */
+  correct: z.array(z.strictObject({ left: OptionId, right: OptionId })).nullable(),
+  answeredCount: z.number().int().nullable(),
+});
+export type PairsMechanicView = z.infer<typeof PairsMechanicView>;
+
+export const PinMechanicView = z.strictObject({
+  mechanic: z.literal("pin"),
+  image: Media.nullable(),
+  /** SECRET: target zone until `revealed`. */
+  correct: NormRect.nullable(),
+  answeredCount: z.number().int().nullable(),
+  /** Every pin, anonymous: host / control from `locked`, outputs once revealed; never sent to tablets (weight). */
+  pins: z.array(z.strictObject({ x: z.number(), y: z.number(), hit: z.boolean() })).nullable(),
+});
+export type PinMechanicView = z.infer<typeof PinMechanicView>;
+
+export const AllocationMechanicView = z.strictObject({
+  mechanic: z.literal("allocation"),
+  options: z.array(OptionLite),
+  budget: z.number().int(),
+  /** At least one option must stay empty (the tablet checks it before sending). */
+  keepOneEmpty: z.boolean(),
+  /** SECRET until `revealed`. */
+  correct: OptionId.nullable(),
+  /** Sum placed on each option: host / control from `locked`, everyone once revealed. */
+  counts: z.record(OptionId, z.number().int()).nullable(),
+  answeredCount: z.number().int().nullable(),
+});
+export type AllocationMechanicView = z.infer<typeof AllocationMechanicView>;
+
+/** Jeopardy-like board: categories x values, control picks a cell, players buzz. */
+export const BoardMechanicView = z.strictObject({
+  mechanic: z.literal("board"),
+  categories: z.array(z.strictObject({ name: z.string(), cells: z.array(z.strictObject({ questionIndex: z.number().int(), value: z.number().int(), played: z.boolean() })) })),
+  /** Cell being played. */
+  cell: z.strictObject({ questionIndex: z.number().int(), value: z.number().int(), category: z.string() }).nullable(),
+  kind: z.enum(["oral", "single"]),
+  options: z.array(OptionLite).nullable(),
+  /** SECRET: right option label (`single`) or expected answer (`oral`), until `revealed`. */
+  correct: z.string().nullable(),
+  hand: ParticipantId.nullable(),
+  winner: ParticipantId.nullable(),
+  queue: z.array(ParticipantId).nullable(),
+  lockedOut: z.array(ParticipantId).nullable(),
+  me: z.strictObject({ hasHand: z.boolean(), queuePosition: z.number().int().min(1).nullable(), lockedOut: z.boolean(), canBuzz: z.boolean() }).nullable(),
+});
+export type BoardMechanicView = z.infer<typeof BoardMechanicView>;
+
+/** Shared by hints and reveal-image: what the player types or picks. */
+export const ProgressiveInput = z.enum(["text", "choice"]);
+
+/** Decreasing hints: the earlier you answer, the more you score. */
+export const HintsMechanicView = z.strictObject({
+  mechanic: z.literal("hints"),
+  /** Hints shown so far (the hidden ones never leave the server). */
+  hints: z.array(z.string()),
+  hintCount: z.number().int(),
+  /** Number of hints of the question (public: only their texts are secret). */
+  total: z.number().int(),
+  /** Points for a right answer given now. */
+  points: z.number().int(),
+  input: ProgressiveInput,
+  options: z.array(OptionLite).nullable(),
+  /** SECRET: canonical text or right option id, until `revealed`. */
+  correct: z.string().nullable(),
+  answeredCount: z.number().int().nullable(),
+});
+export type HintsMechanicView = z.infer<typeof HintsMechanicView>;
+
+/** Image revealed tile by tile: the earlier you answer, the more you score. */
+export const RevealImageMechanicView = z.strictObject({
+  mechanic: z.literal("reveal-image"),
+  /** Null for players: the tablet must not get the full picture (it is shown masked on the outputs). */
+  image: Media.nullable(),
+  cols: z.number().int(),
+  rows: z.number().int(),
+  /** Uncovered tiles (row-major index); everything once revealed. */
+  revealed: z.array(z.number().int()),
+  points: z.number().int(),
+  input: ProgressiveInput,
+  options: z.array(OptionLite).nullable(),
+  /** SECRET until `revealed`. */
+  correct: z.string().nullable(),
+  answeredCount: z.number().int().nullable(),
+});
+export type RevealImageMechanicView = z.infer<typeof RevealImageMechanicView>;
+
+/** The chat votes (Twitch / YouTube): majority wins. */
+export const CrowdVoteMechanicView = z.strictObject({
+  mechanic: z.literal("crowd-vote"),
+  options: z.array(OptionLite),
+  /** Votes per option: live when `showLive`, else host / control only until revealed. */
+  counts: z.record(OptionId, z.number().int()).nullable(),
+  /** Number of distinct voters (outputs / host / control; null on tablets: it changes ~3 times a second). */
+  voters: z.number().int().nullable(),
+  /** SECRET (when the question has a right answer) until revealed. */
+  correct: OptionId.nullable(),
+  /** Option(s) with the most votes, once revealed. */
+  majority: z.array(OptionId).nullable(),
+  /** Votes still accepted this long after the lock (stream delay), ms. */
+  streamDelayMs: z.number().int(),
+});
+export type CrowdVoteMechanicView = z.infer<typeof CrowdVoteMechanicView>;
+
+export const MechanicView = z.discriminatedUnion("mechanic", [
+  ChoiceMechanicView, PollBoardMechanicView, BuzzerMechanicView, LadderMechanicView,
+  TextAnswerMechanicView, NumberAnswerMechanicView, OrderMechanicView, PairsMechanicView, PinMechanicView,
+  AllocationMechanicView, BoardMechanicView, HintsMechanicView, RevealImageMechanicView, CrowdVoteMechanicView,
+]);
 export type MechanicView = z.infer<typeof MechanicView>;
 
 export const LeaderboardRow = z.strictObject({
@@ -188,42 +341,69 @@ export const PlayerView = BaseView.extend({
       rank: z.number().int().min(1),
     })
     .nullable(),
-  /** The player's own accepted answer (option ids), null if none. */
-  myAnswer: z.array(OptionId).nullable(),
+  /**
+   * The player's own accepted answer, null if none. Option ids for choice / order; otherwise the mechanic's
+   * text form (`text`: [text], `number`: [value], `pairs`: ["left:right"], `pin`: ["x,y"], `allocation`: ["id:amount"]).
+   */
+  myAnswer: z.array(z.string().max(200)).nullable(),
   /** Only after reveal. */
   myResult: z.enum(["correct", "wrong", "none"]).nullable(),
   canAnswer: z.boolean(),
 });
 export type PlayerView = z.infer<typeof PlayerView>;
 
+/** Run-down (doc 08): every round with its questions (status, answer, notes) and reserve — control / host only. */
+export const Rundown = z.array(
+    z.strictObject({
+      index: z.number().int(),
+      title: z.string(),
+      mechanic: z.string(),
+      questions: z.array(z.strictObject({
+        index: z.number().int(),
+        id: QuestionId,
+        text: z.string(),
+        played: z.boolean(),
+        /** Control / host only (never in player / output views): to read ahead and correct (`question.regrade`). */
+        answerSpec: AnswerSpec,
+        /** Host notes of the question (control / host only). */
+        notes: z.string().nullable(),
+      })),
+      /** Reserve questions of the round (`question.replaceFromReserve`). */
+      reserve: z.array(z.strictObject({ id: QuestionId, text: z.string() })),
+    }),
+  );
+export type Rundown = z.infer<typeof Rundown>;
+
 export const HostView = BaseView.extend({
   role: z.literal("host"),
   notes: z.string().nullable(),
   nextQuestion: z.strictObject({ id: QuestionId, text: z.string() }).nullable(),
+  /** The control room lets the host drive the question flow (`host.setDrive`). */
+  drive: z.boolean(),
+  /** Every question, to read ahead before anything is on air (and to pick one when driving). */
+  rundown: Rundown,
+  /** Current round / question position, even between questions (null before the first round). */
+  cursor: z.strictObject({ roundIndex: z.number().int(), questionIndex: z.number().int().nullable() }).nullable(),
 });
 export type HostView = z.infer<typeof HostView>;
 
 export const ControlView = BaseView.extend({
   role: z.literal("control"),
   readonly: z.boolean(),
+  /** The host drives the question flow (`host.setDrive`). */
+  hostDrives: z.boolean(),
   notes: z.string().nullable(),
   nextQuestion: z.strictObject({ id: QuestionId, text: z.string() }).nullable(),
   participants: z.array(Participant),
   teams: z.array(Team),
   ledger: z.array(ScoreEntry),
-  answers: z.array(z.strictObject({ participantId: ParticipantId, optionIds: z.array(OptionId), at: z.number().int() })),
+  /** Same text form as `PlayerView.myAnswer`. */
+  answers: z.array(z.strictObject({ participantId: ParticipantId, optionIds: z.array(z.string().max(200)), at: z.number().int() })),
   /** Events ignored during the last replay because they became invalid after an undo (ADR-0010). */
   skipped: z.array(z.strictObject({ seq: z.number().int(), type: z.string(), reason: z.string() })),
   lastSeq: z.number().int(),
   /** Run-down (doc 08): every round and question with its status, for the control room's left column. */
-  rundown: z.array(
-    z.strictObject({
-      index: z.number().int(),
-      title: z.string(),
-      mechanic: z.string(),
-      questions: z.array(z.strictObject({ index: z.number().int(), id: QuestionId, text: z.string(), played: z.boolean() })),
-    }),
-  ),
+  rundown: Rundown,
 });
 export type ControlView = z.infer<typeof ControlView>;
 

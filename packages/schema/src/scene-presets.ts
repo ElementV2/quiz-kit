@@ -5,21 +5,23 @@ import { Scene, Theme } from "./scenes.ts";
  * Safe areas EBU R 95 in 1920×1080: graphics safe x 96→1823, y 54→1025 — every zone below stays inside.
  */
 export const DEFAULT_THEME: Theme = Theme.parse({
-  id: "nuit",
-  name: "Nuit électrique",
+  id: "plateau",
+  name: "Plateau",
+  // Ink panels, gold signal, square cuts: reads well over any camera feed, nothing borrowed from a TV show.
   colors: {
-    surface: "#141833",
-    surfaceAlt: "#1f2550",
-    text: "#f4f5ff",
-    muted: "#a3a8d6",
-    primary: "#7c5cff",
-    accent: "#ffcc4d",
-    correct: "#22c55e",
-    wrong: "#ef4444",
-    selected: "#38bdf8",
+    surface: "#111216",
+    surfaceAlt: "#1d1f25",
+    text: "#f6f3ec",
+    muted: "#a7a296",
+    primary: "#e9b13b",
+    accent: "#ffd27a",
+    correct: "#35b866",
+    wrong: "#e5402f",
+    selected: "#3fb6c6",
   },
-  font: { family: "Inter, 'Segoe UI', system-ui, sans-serif", weight: 700 },
-  radius: 18,
+  // Bundled by the output app (zero internet during a show).
+  font: { family: "'Archivo Variable', 'Segoe UI', sans-serif", weight: 700 },
+  radius: 4,
   motion: "snappy",
 });
 
@@ -71,7 +73,15 @@ export const PROGRAM_SCENE: Scene = Scene.parse({
       name: "Classement",
       z: 30,
       phases: ["idle", "round.end", "game.end"],
-      zones: [{ id: "board", type: "leaderboard", rect: { x: 480, y: 140, w: 960, h: 860 }, props: { maxRows: 10 } }],
+      zones: [{ id: "board", type: "leaderboard", rect: { x: 480, y: 140, w: 960, h: 860 }, props: { maxRows: 10, yieldToBoardGrid: true } }],
+    },
+    {
+      // Board rounds (Jeopardy-like): the grid between two cells, while control picks the next one.
+      id: "grid",
+      name: "Plateau (grille)",
+      z: 35,
+      phases: ["idle"],
+      zones: [{ id: "grid", type: "board-grid", rect: { x: 96, y: 130, w: 1728, h: 880 } }],
     },
   ],
 });

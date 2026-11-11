@@ -206,7 +206,7 @@ describe("poll-board projections", () => {
     const q = DEMO_POLL_GAME.questions[0];
     if (q === undefined || q.answerSpec.kind !== "poll") throw new Error("fixture");
     const shuffled: Question = { ...q, answerSpec: { ...q.answerSpec, options: q.answerSpec.options.toReversed() } };
-    const r = pollBoard.init({ maxStrikes: 3, multiplier: 1 }, shuffled, { at: 0, phase: "idle", rng: createRng(1, 1) }, { previous: null, questionIndex: 0, questionsLeft: 0 });
+    const r = pollBoard.init({ maxStrikes: 3, multiplier: 1 }, shuffled, { at: 0, phase: "idle", lockedAt: null, rng: createRng(1, 1) }, { previous: null, questionIndex: 0, questionsLeft: 0, questions: [] });
     if (!r.ok) throw new Error(r.error.message);
     expect(pollBoard.project(r.value, { audience: "host", phase: "presenting", participantId: null })).toMatchObject({ slots: [{ value: 38 }, { value: 22 }, { value: 17 }, { value: 9 }, { value: 6 }] });
   });
@@ -238,8 +238,8 @@ describe("poll-board rejections", () => {
   });
 
   it("refuses non-poll questions and options without value", () => {
-    const env = { at: 0, phase: "idle", rng: createRng(1, 1) } as const;
-    const round = { previous: null, questionIndex: 0, questionsLeft: 0 };
+    const env = { at: 0, phase: "idle", lockedAt: null, rng: createRng(1, 1) } as const;
+    const round = { previous: null, questionIndex: 0, questionsLeft: 0, questions: [] };
     const oral: Question = { id: "q_o", prompt: { text: "?" }, answerSpec: { kind: "oral", expected: "x" }, hints: [], tags: [] };
     expect(pollBoard.init({ maxStrikes: 3, multiplier: 1 }, oral, env, round)).toMatchObject({ ok: false, error: { code: "unsupported" } });
     const noValue: Question = { ...oral, answerSpec: { kind: "poll", options: [{ id: "a", label: "A" }] } };

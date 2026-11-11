@@ -7,6 +7,7 @@ import {
   DEMO_POLL_GAME,
   DEMO_BUZZER_GAME,
   DEMO_LADDER_GAME,
+  TEMPLATES,
   Event,
   GameDocument,
   QuestionId,
@@ -56,12 +57,28 @@ describe("AnswerSpec", () => {
   });
 });
 
+describe("phase 3 answer specs", () => {
+  it("validates numbers, pairs, pin zones and allocations", () => {
+    expect(AnswerSpec.safeParse({ kind: "number", correct: 5, min: 10 }).success).toBe(false);
+    expect(AnswerSpec.safeParse({ kind: "number", correct: 5 }).data).toMatchObject({ tolerance: 0 });
+    expect(AnswerSpec.safeParse({ kind: "pairs", pairs: [{ id: "a", left: "x", right: "y" }, { id: "a", left: "z", right: "w" }] }).success).toBe(false);
+    expect(AnswerSpec.safeParse({ kind: "pin", target: { x: 0.8, y: 0, w: 0.5, h: 0.1 } }).success).toBe(false);
+    expect(AnswerSpec.safeParse({ kind: "allocation", budget: 100, correct: "z", options: [{ id: "a", label: "A" }, { id: "b", label: "B" }] }).success).toBe(false);
+    expect(AnswerSpec.safeParse({ kind: "text", accepted: [] }).success).toBe(false);
+    expect(AnswerSpec.safeParse({ kind: "text", accepted: ["!!!"] }).success).toBe(false); // empty once normalised
+    // 2 items: "the reverse of what is shown" would always win.
+    expect(AnswerSpec.safeParse({ kind: "order", options: [{ id: "a", label: "A" }, { id: "b", label: "B" }] }).success).toBe(false);
+    expect(AnswerSpec.safeParse({ kind: "pairs", pairs: [{ id: "a", left: "x", right: "1789" }, { id: "b", left: "z", right: "1789" }] }).success).toBe(false);
+  });
+});
+
 describe("GameDocument", () => {
-  it.each([
+  it.each<[string, GameDocument]>([
     ["choice", DEMO_GAME],
     ["poll-board", DEMO_POLL_GAME],
     ["buzzer", DEMO_BUZZER_GAME],
     ["ladder", DEMO_LADDER_GAME],
+    ...TEMPLATES.map((t): [string, GameDocument] => [t.id, t.game]),
   ])("accepts the %s demo game", (_name, game) => {
     expect(GameDocument.safeParse(game).success).toBe(true);
   });
