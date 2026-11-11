@@ -101,6 +101,12 @@ describe("loadGameDocument (versioning)", () => {
     expect(loadGameDocument(DEMO_GAME).ok).toBe(true);
   });
 
+  it("an older document with « who plays », minimum and team size still loads; those keys are dropped", () => {
+    const old = { ...DEMO_GAME, format: { ...DEMO_GAME.format, participants: { mode: "teams", min: 30, max: 20, teamSize: 5 } } };
+    const r = loadGameDocument(old);
+    expect(r.ok && r.value.format.participants).toEqual({ max: 20 });
+  });
+
   it("refuses a future version instead of guessing", () => {
     expect(loadGameDocument({ ...DEMO_GAME, schemaVersion: 99 })).toEqual({ ok: false, error: { code: "future-version", version: 99 } });
   });

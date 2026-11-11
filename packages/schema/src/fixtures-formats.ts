@@ -26,7 +26,7 @@ const solo = (title: string, questions: Question[], rounds: Round[]): GameDocume
   title,
   scenes: [],
   questions,
-  format: { id: `f_${rounds[0]?.mechanic.replaceAll("-", "_") ?? "x"}`, name: title, participants: { mode: "solo", min: 1, max: 500 }, tieBreak: "speed", rounds },
+  format: { id: `f_${rounds[0]?.mechanic.replaceAll("-", "_") ?? "x"}`, name: title, participants: { max: 500 }, tieBreak: "speed", rounds },
 });
 
 export const TEXT_QUESTIONS: Question[] = [
@@ -129,7 +129,7 @@ export const DEMO_EVENING_GAME: GameDocument = {
   format: {
     id: "f_evening",
     name: "Soirée quiz",
-    participants: { mode: "solo", min: 1, max: 500 },
+    participants: { max: 500 },
     tieBreak: "speed",
     rounds: [
       round("r_e_text", "Manche 1 — Réponse libre", "text-answer", TEXT_QUESTIONS.slice(0, 2), { reserve: ["q_txt_3"], timer: { durationMs: 30_000, autoLock: true } }),

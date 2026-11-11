@@ -35,7 +35,7 @@ const GAME = GameDocument.parse({
   format: {
     id: "f_points",
     name: "Points",
-    participants: { mode: "solo", min: 1, max: 50 },
+    participants: { max: 50 },
     rounds: [{ id: "r_pts", title: "Manche points", mechanic: "mixed", mechanicConfig: {}, questions: QUESTIONS.map((q) => q.id), reserve: [], timer: { durationMs: 60_000, autoLock: false }, scoring: [{ type: "base", points: 100 }, { type: "timeDecay", minPoints: 50 }] }],
   },
   scenes: [],

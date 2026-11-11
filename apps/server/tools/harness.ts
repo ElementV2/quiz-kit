@@ -34,7 +34,7 @@ export function bigGame(n: number, maxPlayers = 1000): GameDocument {
     format: {
       id: "f_load",
       name: "Charge",
-      participants: { mode: "solo", min: 1, max: maxPlayers },
+      participants: { max: maxPlayers },
       tieBreak: "control",
       rounds: [{ id: "r_1", title: "Manche", mechanic: "choice", mechanicConfig: {}, questions: questions.map((q) => q.id), reserve: [], timer: { durationMs: 60_000, autoLock: true }, scoring: [{ type: "base", points: 100 }, { type: "timeDecay", minPoints: 50 }] }],
     },

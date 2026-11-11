@@ -55,7 +55,7 @@ export const DEMO_GAME: GameDocument = {
   format: {
     id: "f_demo",
     name: "QCM simple",
-    participants: { mode: "solo", min: 1, max: 1000 },
+    participants: { max: 1000 },
     tieBreak: "control",
     rounds: [
       {
@@ -122,7 +122,7 @@ export const DEMO_POLL_GAME: GameDocument = {
   format: {
     id: "f_demo_poll",
     name: "Sondage à slots",
-    participants: { mode: "teams", min: 2, max: 20, teamSize: 5 },
+    participants: { max: 20 },
     tieBreak: "control",
     rounds: [
       {
@@ -184,7 +184,7 @@ export const DEMO_BUZZER_GAME: GameDocument = {
   format: {
     id: "f_demo_buzzer",
     name: "Buzzer culture G",
-    participants: { mode: "solo", min: 2, max: 20 },
+    participants: { max: 20 },
     tieBreak: "speed",
     rounds: [
       {
@@ -319,7 +319,7 @@ export const DEMO_LADDER_GAME: GameDocument = {
   format: {
     id: "f_demo_ladder",
     name: "QCM à paliers",
-    participants: { mode: "solo", min: 1, max: 1 },
+    participants: { max: 1 },
     tieBreak: "control",
     rounds: [
       {

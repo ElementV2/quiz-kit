@@ -109,7 +109,7 @@ export function gameFromQuestions(title: string, questions: readonly Question[],
     format: {
       id: "f_import",
       name: title,
-      participants: { mode: "solo", min: 1, max: opts.maxPlayers },
+      participants: { max: opts.maxPlayers },
       tieBreak: "control",
       rounds: [
         {

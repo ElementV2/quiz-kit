@@ -59,7 +59,7 @@ const CONTRACT_GAME: GameDocument = {
   ...DEMO_LADDER_GAME,
   format: {
     ...DEMO_LADDER_GAME.format,
-    participants: { mode: "solo", min: 1, max: 10 },
+    participants: { max: 10 },
     rounds: [0, 1, 2, 3, 4, 5].flatMap((i) =>
       DEMO_LADDER_GAME.format.rounds.map((r) => ({
         ...r,
@@ -233,7 +233,7 @@ describe("ladder projections and rejections", () => {
   });
 
   it("only the candidate answers", () => {
-    const two = { ...DEMO_LADDER_GAME, format: { ...DEMO_LADDER_GAME.format, participants: { mode: "solo" as const, min: 1, max: 2 } } };
+    const two = { ...DEMO_LADDER_GAME, format: { ...DEMO_LADDER_GAME.format, participants: { max: 2 } } };
     const g = play([...START, ctl({ type: "player.add", participantId: "p_2", displayName: "Public", channel: "seat" }), ...OPEN, say("b")], two);
     expect(rejection(g, { type: "answer.submit", participantId: "p_2", answer: { kind: "choice", optionIds: ["b"] } })).toBe("conflict");
   });

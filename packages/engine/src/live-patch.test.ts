@@ -124,12 +124,6 @@ describe("game.patch — review 8", () => {
     const n = notes.questions.find((q) => q.id === "q_capital_fr");
     if (n !== undefined) n.notes = "Nouvelle note animateur";
     expect(run(reg, [ctl({ type: "game.patch", baseVersion: base, game: notes })], g).state.game.questions.find((q) => q.id === "q_capital_fr")?.notes).toBe("Nouvelle note animateur");
-    // « Who plays » has no effect any more (teams exist when the control room makes them): a change is accepted.
-    const mode = clone(g.state.game);
-    mode.format.participants.mode = mode.format.participants.mode === "solo" ? "teams" : "solo";
-    const modeChanged = run(reg, [ctl({ type: "game.patch", baseVersion: base, game: mode })], g);
-    expect(modeChanged.state.participants).toEqual(g.state.participants);
-    expect(modeChanged.state.ledger).toEqual(g.state.ledger);
     const cfg = clone(g.state.game);
     const r0 = cfg.format.rounds[0];
     if (r0 !== undefined) r0.mechanicConfig = { ...(r0.mechanicConfig as Record<string, unknown>), __changed: true }; // oxlint-disable-line typescript/no-unsafe-type-assertion -- test: any change of the settings

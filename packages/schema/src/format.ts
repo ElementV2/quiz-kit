@@ -1,14 +1,17 @@
 import { z } from "zod";
 import { FormatId, QuestionId, RoundId } from "./ids.ts";
 
-export const ParticipantsConfig = z
-  .strictObject({
-    mode: z.enum(["solo", "teams", "crowd"]),
-    min: z.number().int().min(0),
-    max: z.number().int().min(1),
-    teamSize: z.number().int().min(1).optional(),
-  })
-  .refine((p) => p.min <= p.max, "participants.min > participants.max");
+/** Keys of older documents that never changed the game (teams exist when the control room makes them). */
+const LEGACY_PARTICIPANT_KEYS = new Set(["mode", "min", "teamSize"]);
+
+/**
+ * Who may join: only the maximum acts. Older documents (library, imports, journals) still carry `mode` / `min` /
+ * `teamSize`: they are dropped on read, so every document and every journal keeps loading.
+ */
+export const ParticipantsConfig = z.preprocess(
+  (v) => (typeof v === "object" && v !== null && !Array.isArray(v) ? Object.fromEntries(Object.entries(v).filter(([k]) => !LEGACY_PARTICIPANT_KEYS.has(k))) : v),
+  z.strictObject({ max: z.number().int().min(1) }),
+);
 export type ParticipantsConfig = z.infer<typeof ParticipantsConfig>;
 
 /** Composable scoring components (doc 02). Phase 0 implements base, timeDecay and penalty. */

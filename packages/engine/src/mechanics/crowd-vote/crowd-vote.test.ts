@@ -11,7 +11,7 @@ import { crowdVote } from "./crowd-vote.ts";
 // Six single-choice questions (the ladder demo), played as chat votes.
 const CHAT_GAME = (config: Record<string, unknown> = {}): GameDocument => ({
   ...DEMO_LADDER_GAME,
-  format: { ...DEMO_LADDER_GAME.format, participants: { mode: "teams", min: 0, max: 50 }, rounds: [{ ...DEMO_LADDER_GAME.format.rounds[0]!, mechanic: "crowd-vote", mechanicConfig: config, timer: undefined }] }, // oxlint-disable-line typescript/no-non-null-assertion -- fixture has a round
+  format: { ...DEMO_LADDER_GAME.format, participants: { max: 50 }, rounds: [{ ...DEMO_LADDER_GAME.format.rounds[0]!, mechanic: "crowd-vote", mechanicConfig: config, timer: undefined }] }, // oxlint-disable-line typescript/no-non-null-assertion -- fixture has a round
 });
 
 // Chat votes come from the server (system actor): the contract checks views, replay and undo around them.

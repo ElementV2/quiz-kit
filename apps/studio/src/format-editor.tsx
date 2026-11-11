@@ -33,7 +33,7 @@ export function FormatEditor(p: { doc: GameDocument; update: Update }): JSX.Elem
       <Panel title="Format de la partie">
         <div class="s-format-head">
           <label class="s-field"><span class="s-label">Nom du format</span><input value={p.doc.format.name} onInput={(e) => { const v = e.currentTarget.value; if (v.length > 0) fmt((f) => { f.name = v; }, "fname"); }} /></label>
-          <label class="s-field"><span class="s-label">Joueurs maximum</span><NumField min={1} value={p.doc.format.participants.max} onChange={(v) => fmt((f) => { f.participants.max = Math.max(1, Math.round(v)); f.participants.min = Math.min(f.participants.min, f.participants.max); })} /></label>
+          <label class="s-field"><span class="s-label">Joueurs maximum</span><NumField min={1} value={p.doc.format.participants.max} onChange={(v) => fmt((f) => { f.participants.max = Math.max(1, Math.round(v)); })} /></label>
           <label class="s-field"><span class="s-label">En cas d'égalité</span>
             <select value={p.doc.format.tieBreak} onChange={(e) => { const v = e.currentTarget.value === "speed" ? "speed" : "control"; fmt((f) => { f.tieBreak = v; }); }}>
               <option value="speed">rapidité cumulée (le plus rapide gagne)</option>

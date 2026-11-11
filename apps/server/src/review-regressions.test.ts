@@ -485,8 +485,8 @@ describe("relaunching a game keeps the players (no one is kicked)", () => {
     expect(s.runtime.current.state.participants.map((p) => [p.id, p.teamId, p.seat])).toEqual([["p_a", "t_r", 1], [joined.participantId, null, null]]);
     expect(phone.messages.some((m) => m["t"] === "welcome" || m["t"] === "snapshot")).toBe(true); // re-welcomed, not kicked
     expect(JSON.stringify(phone.messages)).toContain(`"participantId":"${joined.participantId}"`);
-    // A max of 1 player keeps only the first; the teams come along (whatever the format says).
-    const solo = { ...DEMO_GAME, format: { ...DEMO_GAME.format, participants: { ...DEMO_GAME.format.participants, mode: "solo" as const, min: 1, max: 1 } } };
+    // A max of 1 player keeps only the first; the teams come along.
+    const solo = { ...DEMO_GAME, format: { ...DEMO_GAME.format, participants: { max: 1 } } };
     await fetch(`${base}/api/games/g_solo1?t=${t}`, { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ game: solo }) });
     expect(await (await fetch(`${base}/api/games/g_solo1/launch?t=${t}`, { method: "POST" })).json()).toMatchObject({ kept: 1, dropped: 1 });
     expect(s.runtime.current.state.teams.map((x) => x.id)).toEqual(["t_r"]);

@@ -18,7 +18,7 @@ const PIN_GAME: GameDocument = {
     { id: "q_pin_1", prompt: { text: "Où est Paris ?", media: MAP }, answerSpec: { kind: "pin", target: { x: 0.4, y: 0.3, w: 0.1, h: 0.1 } }, hints: [], tags: [], notes: "secret-pin-1" },
     { id: "q_pin_2", prompt: { text: "Où est Lyon ?", media: MAP }, answerSpec: { kind: "pin", target: { x: 0.6, y: 0.6, w: 0.05, h: 0.05 } }, hints: [], tags: [], notes: "secret-pin-2" },
   ],
-  format: { id: "f_pin", name: "Pin", participants: { mode: "solo", min: 1, max: 50 }, tieBreak: "speed", rounds: [{ id: "r_pin", title: "Carte", mechanic: "pin", mechanicConfig: {}, questions: ["q_pin_1", "q_pin_2"], reserve: [], scoring: [{ type: "base", points: 100 }] }] },
+  format: { id: "f_pin", name: "Pin", participants: { max: 50 }, tieBreak: "speed", rounds: [{ id: "r_pin", title: "Carte", mechanic: "pin", mechanicConfig: {}, questions: ["q_pin_1", "q_pin_2"], reserve: [], scoring: [{ type: "base", points: 100 }] }] },
 };
 
 mechanicContractSuite({
