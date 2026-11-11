@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { AnswerSpec } from "@quiz/schema";
 import { splitCsvRow } from "@quiz/schema";
-import { DEFAULT_BUZZER_KEYS, REGRADABLE_KINDS, assignBuzzerKey, buzzerKey, keyLabel, keyOfSeat, parseAcceptedLines, parseBuzzerKeys, parsePlayersCsv, regradeSpec } from "./logic.ts";
+import { DEFAULT_BUZZER_KEYS, REGRADABLE_KINDS, assignBuzzerKey, buzzerKey, keyLabel, keyOfSeat, parseAcceptedLines, parseBuzzerKeys, ledgerRows, parsePlayersCsv, regradeSpec } from "./logic.ts";
 
 describe("players CSV", () => {
   it("parses ; , and tab separated lines, header optional", () => {
@@ -70,6 +70,22 @@ describe("regrade of order and allocation questions", () => {
     const alloc: AnswerSpec = { kind: "allocation", correct: "a", budget: 1000, options: [{ id: "a", label: "A" }, { id: "b", label: "B" }] };
     expect(regradeSpec(alloc, { picked: ["b"] })).toEqual({ ...alloc, correct: "b" });
     expect(REGRADABLE_KINDS.has("order") && REGRADABLE_KINDS.has("allocation")).toBe(true);
+  });
+});
+
+describe("ledgerRows (points history)", () => {
+  it("newest first, in words: who, points, why, which question; cancelled lines kept", () => {
+    const by = { role: "control", id: "op" } as const;
+    const rows = ledgerRows({
+      participants: [{ id: "p_1", displayName: "Ana", status: "active", teamId: null, seat: null, channel: "tablet", photo: null }],
+      teams: [{ id: "t_r", name: "Rouges", color: "#f00", captainId: null }],
+      rundown: [{ index: 0, title: "Manche 1", mechanic: "mixed", questions: [{ index: 1, id: "q_a", text: "?", status: "revealed" }] }],
+      ledger: [
+        { id: "s_1", target: { participantId: "p_1" }, teamId: null, delta: 100, questionId: "q_a", reason: "auto", note: null, by, at: 1, voided: false },
+        { id: "s_2", target: { teamId: "t_r" }, teamId: "t_r", delta: -5, questionId: null, reason: "manual", note: null, by, at: 2, voided: true },
+      ],
+    } as never);
+    expect(rows.map((r) => [r.who, r.delta, r.why, r.question, r.voided])).toEqual([["équipe Rouges", -5, "réglage manuel", null, true], ["Ana", 100, "réponse", "Manche 1 · Q2", false]]);
   });
 });
 

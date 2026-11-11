@@ -179,3 +179,24 @@ export const keyOfSeat = (map: BuzzerKeyMap, seat: number): string | null => Obj
 
 /** Readable key name (`" "` → `Espace`). */
 export const keyLabel = (key: string): string => (key === " " ? "Espace" : key.length === 1 ? key.toUpperCase() : key);
+
+const REASON_LABEL: Readonly<Record<ControlView["ledger"][number]["reason"], string>> = {
+  auto: "réponse",
+  bonus: "bonus",
+  penalty: "pénalité",
+  manual: "réglage manuel",
+  regrade: "correction",
+};
+
+export type LedgerRow = { readonly id: string; readonly at: number; readonly who: string; readonly delta: number; readonly why: string; readonly question: string | null; readonly voided: boolean };
+
+/** Points history (newest first) in words: who, how many, why, on which question. */
+export function ledgerRows(v: Pick<ControlView, "ledger" | "participants" | "teams" | "rundown">): LedgerRow[] {
+  const names = new Map<string, string>([...v.participants.map((p) => [p.id, p.displayName] as const), ...v.teams.map((t) => [t.id, `équipe ${t.name}`] as const)]);
+  const questions = new Map<string, string>();
+  for (const r of v.rundown) for (const q of r.questions) questions.set(q.id, `${r.title} · Q${q.index + 1}`);
+  return v.ledger.toReversed().map((e) => {
+    const id = "participantId" in e.target ? e.target.participantId : e.target.teamId;
+    return { id: e.id, at: e.at, who: names.get(id) ?? "(retiré)", delta: e.delta, why: e.note ?? REASON_LABEL[e.reason], question: e.questionId === null ? null : (questions.get(e.questionId) ?? null), voided: e.voided };
+  });
+}

@@ -6,6 +6,7 @@ import { Button, HomeLink, MECHANIC_LABEL, MechanicPanel, VerdictsPanel, ON_AIR_
 import "@quiz/ui/ui.css";
 import "./control.css";
 import { api, lanOrigin, token, withToken, type LinksResponse, type StatusResponse } from "./api.ts";
+import { LedgerPanel } from "./Ledger.tsx";
 import { StandbyBar } from "./Standby.tsx";
 import { ApiInfo, ChatPanel, StaffCode } from "./Integrations.tsx";
 import { KeyBuzzersPanel, createKeyBuzzers } from "./KeyBuzzers.tsx";
@@ -198,6 +199,7 @@ function App() {
                   </Show>
                   <Show when={tab() === "tools"}>
                     <div class="c-tools">
+                      <Tool title="Historique des points"><LedgerPanel view={v()} readonly={readonly()} act={act} /></Tool>
                       <Tool title="Résultats (CSV, PDF)"><ResultsPanel withToken={withToken} /></Tool>
                       <Show when={!readonly()}>
                         <Tool title="Buzzers clavier (USB)"><KeyBuzzersPanel kb={kb} view={v()} /></Tool>

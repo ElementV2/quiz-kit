@@ -221,3 +221,10 @@ a.q-btn { text-decoration: none; text-align: center; display: inline-flex; align
 /* Backup server bar (doc 05): only on a standby. */
 .c-standby { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; padding: 8px 16px; background: var(--ui-surface); border-bottom: 2px solid var(--ui-accent); font-size: 14px; }
 .c-standby[data-bad="true"], .c-standby[data-mode="promoted"] { border-bottom-color: var(--ui-danger, #d23a2a); }
+/* Points history (Outils). */
+.c-ledger { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; max-height: 360px; overflow-y: auto; }
+.c-ledger li { display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: center; padding: 4px 6px; border-bottom: 1px solid var(--ui-border, #2a2824); font-size: 13px; }
+.c-ledger li[data-voided="true"] > :not(button) { text-decoration: line-through; opacity: .6; }
+.c-ledger-delta[data-sign="plus"] { color: var(--ui-ok, #5bbf6a); }
+.c-ledger-delta[data-sign="minus"] { color: var(--ui-danger); }
+.c-ledger li .q-btn { margin-left: auto; }
