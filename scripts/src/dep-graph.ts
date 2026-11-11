@@ -12,6 +12,7 @@ export const ALLOWED_DEPS: Readonly<Record<string, readonly string[]>> = {
   "@quiz/output": ["@quiz/schema", "@quiz/protocol", "@quiz/renderer", "@quiz/ui"],
   "@quiz/studio": ["@quiz/schema", "@quiz/protocol", "@quiz/renderer", "@quiz/ui", "@quiz/engine"],
   "@quiz/scripts": [],
+  "@quiz/e2e": ["@quiz/server", "@quiz/schema"],
 };
 
 export type Manifest = {

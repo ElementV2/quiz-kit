@@ -6,7 +6,7 @@ import { createQuizConnection } from "@quiz/ui";
 
 /** /out/<scene>?t=… — 1920×1080, transparent, read-only. A reload gets the exact state from the welcome snapshot. */
 function Output() {
-  const conn = createQuizConnection({ persist: false });
+  const conn = createQuizConnection({ persist: false, preview: new URLSearchParams(location.search).get("preview") === "1" });
   const sceneId = createMemo(() => {
     const v = conn.viewer();
     if (v?.role === "output") return v.scene;

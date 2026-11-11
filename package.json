@@ -7,7 +7,7 @@
     "node": ">=26.13"
   },
   "scripts": {
-    "start": "pnpm --filter @quiz/server start",
+    "start": "pnpm build && pnpm --filter @quiz/server start",
     "dev": "pnpm --filter @quiz/server dev",
     "test": "turbo run test",
     "typecheck": "turbo run typecheck",
@@ -15,7 +15,9 @@
     "check:deps": "node scripts/check-deps.ts",
     "check": "pnpm lint && pnpm typecheck && pnpm check:deps && pnpm test",
     "chaos": "pnpm --filter @quiz/server chaos",
-    "load": "pnpm --filter @quiz/server load"
+    "load": "pnpm --filter @quiz/server load",
+    "build": "turbo run build",
+    "test:e2e": "pnpm build && pnpm --filter @quiz/e2e test:e2e"
   },
   "devDependencies": {
     "@types/node": "26.6.6",

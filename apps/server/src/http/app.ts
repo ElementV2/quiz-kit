@@ -19,6 +19,7 @@ export type HttpDeps = {
   readonly isRevoked: (jti: string) => boolean;
   readonly clock: () => number;
   readonly connections: () => number;
+  readonly presence: () => Record<string, unknown>;
   readonly health: () => Record<string, unknown>;
   readonly dataDir: string;
 };
@@ -31,7 +32,6 @@ const SECURITY_HEADERS: Record<string, string> = {
   "referrer-policy": "no-referrer", // the token is in the URL: never leak it through Referer
   // The control room may embed its own outputs (same origin only).
   "x-frame-options": "SAMEORIGIN",
-  "cross-origin-opener-policy": "same-origin",
   // Scripts: own files only. Styles: inline allowed (Solid style bindings / templates); all text is rendered as text.
   "content-security-policy": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'self'; img-src 'self' data: blob:; media-src 'self' data: blob:; frame-ancestors 'self'; base-uri 'none'; form-action 'none'",
 };
@@ -98,6 +98,12 @@ export function buildHttpApp(deps: HttpDeps, options: FastifyServerOptions): Fas
   app.get<{ Querystring: { t?: string } }>("/api/links", async (req, reply) => {
     if (!controlToken(deps, req)) return reply.code(401).send({ error: "jeton régie requis" });
     return { ...deps.links(), joinCode: deps.joinCode() };
+  });
+
+  /** Live status for the control room: presence + journal health (polled every few seconds). */
+  app.get<{ Querystring: { t?: string } }>("/api/status", async (req, reply) => {
+    if (!controlToken(deps, req)) return reply.code(401).send({ error: "jeton régie requis" });
+    return { ...deps.health(), presence: deps.presence() };
   });
 
   const joinAttempts = new Map<string, { windowStart: number; count: number }>();

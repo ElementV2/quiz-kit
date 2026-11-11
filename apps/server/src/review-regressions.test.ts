@@ -98,6 +98,7 @@ describe("review #2 — tokens never reach the logs", () => {
       isRevoked: () => false,
       clock: () => 0,
       connections: () => 0,
+      presence: () => ({}),
       health: () => ({}),
       dataDir: "",
     };

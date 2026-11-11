@@ -51,7 +51,7 @@ function storageOrNull(): Storage | null {
  * One WebSocket per app (CONVENTIONS « Front »), exposed as Solid signals. Intents persist in localStorage
  * (per token) so a reload never loses an un-acked answer.
  */
-export function createQuizConnection(opts: { token?: string; persist?: boolean } = {}): QuizConnection {
+export function createQuizConnection(opts: { token?: string; persist?: boolean; preview?: boolean } = {}): QuizConnection {
   const token = opts.token ?? tokenFromUrl();
   const [view, setView] = createSignal<View | null>(null);
   const [viewer, setViewer] = createSignal<Viewer | null>(null);
@@ -64,7 +64,8 @@ export function createQuizConnection(opts: { token?: string; persist?: boolean }
   const client: QuizClient = new QuizClient({
     url: `${scheme}://${location.host}/ws`,
     token,
-    clientId: deviceId(),
+    // Control-room previews are not "real" outputs: the checklist must not count them (prefix read by the server).
+    clientId: opts.preview === true ? `c_preview${randomHex(8)}` : deviceId(),
     socket: (u) => new WebSocket(u),
     store,
     onView: (v) => {

@@ -148,6 +148,7 @@ async function boot(config: Config, opts: { timers?: Timers; broadcastIntervalMs
     isRevoked,
     clock,
     connections: () => transport?.connectionCount ?? 0,
+    presence: () => transport?.presence() ?? { total: 0, byRole: {}, seats: [], players: [] },
     health: () => ({ sessionId: getRuntime().session.id, lastSeq: getRuntime().current.state.lastSeq, journal: { ...store.pragmas(), ...getRuntime().journalHealth } }),
     dataDir,
   };

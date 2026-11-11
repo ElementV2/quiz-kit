@@ -1,7 +1,16 @@
 {
   "$schema": "https://turborepo.com/schema.json",
   "tasks": {
-    "test": { "outputs": [] },
-    "typecheck": { "outputs": [] }
+    "test": {
+      "outputs": []
+    },
+    "typecheck": {
+      "outputs": []
+    },
+    "build": {
+      "outputs": [
+        "dist/**"
+      ]
+    }
   }
 }

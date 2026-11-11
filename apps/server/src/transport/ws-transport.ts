@@ -112,6 +112,21 @@ export class WsTransport {
     return this.conns.size;
   }
 
+  /** Who is connected right now (control-room checklist, doc 05). Seats by number, players by id, others by role. */
+  presence(): { total: number; byRole: Record<string, number>; seats: number[]; players: string[] } {
+    const byRole: Record<string, number> = {};
+    const seats = new Set<number>();
+    const players = new Set<string>();
+    for (const c of this.conns) {
+      const v = c.viewer;
+      if (v === null || c.clientId?.startsWith("c_preview") === true) continue; // control-room preview
+      byRole[v.role] = (byRole[v.role] ?? 0) + 1;
+      if (v.role === "seat") seats.add(v.seat);
+      if (v.role === "player") players.add(v.participantId);
+    }
+    return { total: this.conns.size, byRole, seats: [...seats].toSorted((a, b) => a - b), players: [...players] };
+  }
+
   /**
    * Revocation takes effect immediately: the connection stops being served at once (no view, no intent), then is
    * closed — even a hostile client that ignores the close handshake can do nothing more.

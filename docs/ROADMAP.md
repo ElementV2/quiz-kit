@@ -26,9 +26,9 @@ Règle : une phase n'est terminée que quand ses critères de sortie passent. Co
 ## Phase 1 — Un show jouable
 
 - [ ] `renderer` : SceneRenderer, zones question / answer / answer-list / timer / score / leaderboard, états, couches TAKE/OUT
-- [ ] `output` : sortie 1920×1080 transparente, reprise par snapshot
+- [x] `output` : sortie 1920×1080 transparente, reprise par snapshot
 - [ ] `control` : run-down, actions contextuelles, couches, scores éditables, undo, raccourcis
-- [ ] `host` : bonne réponse, notes, valider / refuser
+- [x] `host` : bonne réponse, notes (valider / refuser : avec la mécanique buzzer)
 - [ ] `player` : PWA `/seat/<n>` et `/play/<code>`, Wake Lock, cache médias, « Réponse enregistrée » après ack
 - [x] HTTPS LAN tranché (ADR-0012) : HTTP simple, aucune install sur les tablettes louées — prérequis de `player` (Wake Lock, Service Worker)
 - [ ] Médias minimum : stockage par hash + `preload` (prérequis du cache médias de `player`)
@@ -37,7 +37,7 @@ Règle : une phase n'est terminée que quand ses critères de sortie passent. Co
 - [ ] Joueurs / équipes / sièges : création, import CSV, statuts, échange de tablette
 - [ ] Import CSV de questions
 - [ ] Templates codés : QCM à paliers (`ladder`), sondage à slots, buzzer culture G
-- [ ] Check-list pré-antenne
+- [x] Check-list pré-antenne
 
 **Sortie** : répétition réelle avec 50 tablettes et une sortie dans OBS, sans incident.
 

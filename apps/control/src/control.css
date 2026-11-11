@@ -1,0 +1,47 @@
+.c-app { min-height: 100vh; display: flex; flex-direction: column; }
+.c-top { display: flex; align-items: center; gap: 14px; padding: 10px 16px; border-bottom: 1px solid var(--ui-border); background: var(--ui-surface); position: sticky; top: 0; z-index: 2; }
+.c-top h1 { font-size: 18px; }
+.c-spacer { flex: 1; }
+.c-code { font-size: 15px; } .c-code b { font-size: 20px; letter-spacing: .12em; color: var(--ui-primary); }
+.c-wait { padding: 40px; text-align: center; color: var(--ui-muted); }
+.c-grid { flex: 1; display: grid; gap: 12px; padding: 12px; grid-template-columns: 300px minmax(0, 1fr) 360px; grid-template-areas: "rundown center right" "players players players"; align-items: start; }
+.c-rundown { grid-area: rundown; max-height: calc(100vh - 90px); overflow: auto; position: sticky; top: 64px; }
+.c-center { grid-area: center; display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.c-right { grid-area: right; display: flex; flex-direction: column; gap: 12px; }
+.c-players { grid-area: players; overflow-x: auto; }
+@media (max-width: 1200px) { .c-grid { grid-template-columns: 1fr; grid-template-areas: "right" "center" "rundown" "players"; } .c-rundown { position: static; max-height: none; } }
+.c-round { margin-bottom: 14px; }
+.c-round-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
+.c-q { width: 100%; display: flex; gap: 8px; align-items: center; text-align: left; font: inherit; color: var(--ui-text); background: transparent; border: 1px solid transparent; border-radius: 8px; padding: 6px 8px; cursor: pointer; }
+.c-q:disabled { cursor: default; }
+.c-q:hover:not(:disabled) { border-color: var(--ui-border); }
+.c-q[data-current="true"] { background: var(--ui-surface-2); border-color: var(--ui-primary); }
+.c-q[data-played="true"] .c-q-t { color: var(--ui-muted); }
+.c-q-n { width: 24px; color: var(--ui-muted); font-variant-numeric: tabular-nums; }
+.c-q-t { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.c-q-ok { color: var(--ui-ok); }
+.c-preview { position: relative; width: 100%; aspect-ratio: 16 / 9; background: repeating-conic-gradient(#1a1f3d 0 25%, #12162e 0 50%) 0 0 / 24px 24px; border-radius: 8px; overflow: hidden; }
+.c-preview iframe { position: absolute; left: 0; top: 0; width: 1920px; height: 1080px; border: 0; transform-origin: 0 0; transform: scale(var(--s, .4)); }
+.c-current .c-prompt { font-size: 20px; margin: 0 0 10px; }
+.c-opts { display: grid; gap: 6px; }
+.c-opt { display: flex; gap: 10px; padding: 8px 10px; border-radius: 8px; background: var(--ui-surface-2); }
+.c-opt[data-correct="true"] { outline: 2px solid var(--ui-ok); }
+.c-count { margin-left: auto; font-variant-numeric: tabular-nums; color: var(--ui-muted); }
+.c-notes { background: #2a2410; border-radius: 8px; padding: 8px 10px; }
+.c-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-top: 10px; }
+.c-timer { font-size: 22px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.c-keys { margin-top: 10px; font-size: 12px; }
+.c-ok { color: var(--ui-ok); } .c-err { color: var(--ui-danger); }
+.c-check { list-style: none; padding: 0; margin: 0; display: grid; gap: 6px; }
+.c-check li[data-ok="true"] span:first-child { color: var(--ui-ok); }
+.c-check li[data-ok="false"] span:first-child { color: var(--ui-danger); }
+.c-links { display: grid; gap: 6px; }
+.c-link { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.c-players-inner input { width: 100%; }
+.c-num { width: 80px !important; }
+.c-score { display: flex; gap: 6px; align-items: center; }
+tr[data-status="eliminated"] { opacity: .5; }
+.c-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #555; margin-right: 6px; }
+.c-dot-on { background: var(--ui-ok); }
+.c-add { display: flex; gap: 8px; margin-top: 10px; }
+.c-csv { margin-top: 10px; } .c-csv textarea { width: 100%; font: 13px ui-monospace, monospace; background: var(--ui-bg); color: var(--ui-text); border: 1px solid var(--ui-border); border-radius: 8px; margin: 8px 0; padding: 8px; }
