@@ -139,6 +139,38 @@ for (const [template, name] of [["g_modele_estimation", "number"], ["g_modele_or
   });
 }
 
+test("responsive: host on a portrait tablet and a phone, tablets in landscape, home page on a phone — nothing overflows", async ({ browser, request }) => {
+  const errors: string[] = [];
+  const { control, next } = await setup(browser, request, "g_modele_qcm", "Ana;1;Rouges\nBo;2;Bleus", errors);
+  await control.getByRole("switch", { name: "L'animateur pilote" }).click();
+  const sizes = { "host-tablet-portrait": { width: 800, height: 1280 }, "host-phone": { width: 390, height: 844 } } as const;
+  const hosts = await Promise.all(Object.values(sizes).map((vp) => open(browser, path("host"), vp, errors)));
+  const tabletLand = await seat(browser, 1, { width: 1024, height: 768 }, errors);
+  const phoneLand = await seat(browser, 2, { width: 844, height: 390 }, errors);
+  await next(4); // a QCM open
+  const pages = [...hosts, tabletLand, phoneLand];
+  const names = [...Object.keys(sizes), "player-tablet-landscape", "player-phone-landscape"];
+  for (const [i, pg] of pages.entries()) {
+    await pg.waitForTimeout(300);
+    // No horizontal scroll on any device.
+    expect(await pg.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1), names[i]).toBe(true);
+    await pg.screenshot({ path: `screenshots/ux-${names[i]}.png` });
+  }
+  // The host's next-step key stays at the same place whatever the phase (fixed bottom slot).
+  const host = hosts[0];
+  if (host === undefined) throw new Error("host");
+  const keyBox = async () => (await host.locator(".h-key-primary").boundingBox())?.y ?? -1;
+  const y1 = await keyBox();
+  await host.locator(".h-key-primary").click(); // lock
+  await host.waitForTimeout(300);
+  expect(Math.abs((await keyBox()) - y1)).toBeLessThan(2);
+  const hub = await open(browser, "/", { width: 390, height: 844 }, errors);
+  await hub.waitForTimeout(300);
+  expect(await hub.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true);
+  await hub.screenshot({ path: "screenshots/ux-hub-phone.png" });
+  expect(errors).toEqual([]);
+});
+
 test("join screen on a phone", async ({ browser }) => {
   const errors: string[] = [];
   const p = await open(browser, "/play", PHONE, errors);

@@ -68,6 +68,13 @@ Le contrat réel est dans `packages/engine/src/mechanic.ts`. Points notables (ph
   `poll.control`, `poll.steal`) passent par `onAction`. Le cœur vérifie avant : rôle, identité du joueur et
   statut actif (`buzz`), existence de l'équipe ou du joueur référencé ; la mécanique vérifie la phase.
 
+### `mixed` (« Mixte », ADR-0015) — type de manche par défaut
+
+Tous les types de question dans la même manche. `mixed` ne joue jamais lui-même : au `question.present`,
+`playedBy()` (`route.ts`) choisit la mécanique selon le type de réponse (`MIXED_ROUTES`) et lui passe ses réglages
+(`MixedConfig` : mélange des QCM, changement de réponse, erreurs du sondage, mode du nombre, blocage au buzzer).
+`GameState.mechanic.id` est celui de la mécanique choisie.
+
 ### `poll-board` (« Une famille en or »)
 
 Question `poll` (chaque option a une `value` en %, sinon refus à la présentation). Cases triées par valeur

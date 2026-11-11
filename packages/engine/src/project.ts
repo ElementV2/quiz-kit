@@ -1,4 +1,5 @@
 import { PLAYER_LEADERBOARD_ROWS, type BaseView, type ControlView, type HostView, type LeaderboardRow, type OutputView, type Rundown, type PlayerView, type TeamLeaderboardRow, type View, type Viewer } from "@quiz/schema";
+import { playedBy } from "./route.ts";
 import type { Game } from "./game.ts";
 import type { AnyMechanic, Audience, Registry } from "./mechanic.ts";
 import { assertNever } from "./result.ts";
@@ -64,17 +65,35 @@ function base(s: GameState, audience: Audience, participantId: string | null, re
   };
 }
 
-/** The question a stakes change sent now targets: on air, else the next one (never guessed on a board). */
+const stakesCache = new WeakMap<GameState, BaseView["stakesTarget"]>();
+
+/** The question a stakes change sent now targets: on air, else the next one (never guessed on a board). Per state. */
 function stakesTargetOf(s: GameState, registry: Registry): BaseView["stakesTarget"] {
+  if (stakesCache.has(s)) return stakesCache.get(s) ?? null;
+  const t = computeStakesTarget(s, registry);
+  stakesCache.set(s, t);
+  return t;
+}
+
+function computeStakesTarget(s: GameState, registry: Registry): BaseView["stakesTarget"] {
   const round = currentRound(s);
   if (round === null || s.roundIndex === null || s.phase === "revealed" || s.phase === "round.end" || s.phase === "game.end") return null;
-  const m = registry.get(round.mechanic);
-  if (m === null || m.noStakes === true) return null;
+  const rm = registry.get(round.mechanic);
+  if (rm === null) return null;
   let questionIndex: number;
   if (s.mechanic !== null && s.questionIndex !== null) questionIndex = s.questionIndex;
-  else if (m.freeOrder === true) return null; // board between cells: the next cell is not known yet
+  else if (rm.freeOrder === true) return null; // board between cells: the next cell is not known yet
   else questionIndex = s.questionIndex === null ? 0 : s.questionIndex + 1;
-  if (round.questions[questionIndex] === undefined) return null;
+  const id = round.questions[questionIndex];
+  if (id === undefined) return null;
+  // The mechanic of that question (a mixed round plays each kind with its own; on air: the one playing).
+  let m = s.mechanic !== null ? (registry.get(s.mechanic.id) ?? rm) : rm;
+  if (s.mechanic === null && rm.route !== undefined) {
+    const q = s.game.questions.find((x) => x.id === id);
+    const routed = q === undefined ? null : playedBy(round, q, registry);
+    if (routed?.ok === true) m = routed.value.mechanic;
+  }
+  if (m.noStakes === true) return null;
   return { roundIndex: s.roundIndex, questionIndex, points: m.ownPoints !== true };
 }
 

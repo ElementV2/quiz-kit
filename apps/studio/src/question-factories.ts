@@ -95,7 +95,7 @@ export function blankGame(suffix: string): GameDocument {
       name: "Nouvelle partie",
       participants: { mode: "solo", min: 1, max: 500 },
       tieBreak: "control",
-      rounds: [{ id: `r_${suffix}`, title: "Manche 1", mechanic: "choice", mechanicConfig: {}, questions: [q.id], reserve: [], timer: { durationMs: 20_000, autoLock: true }, scoring: [{ type: "base", points: 100 }, { type: "timeDecay", minPoints: 50 }] }],
+      rounds: [{ id: `r_${suffix}`, title: "Manche 1", mechanic: "mixed", mechanicConfig: {}, questions: [q.id], reserve: [], timer: { durationMs: 20_000, autoLock: true }, scoring: [{ type: "base", points: 100 }, { type: "timeDecay", minPoints: 50 }] }],
     },
   };
 }

@@ -131,3 +131,17 @@ body { overscroll-behavior: none; user-select: none; -webkit-user-select: none; 
 .p-claim-field input { font-size: 22px; padding: 12px 14px; }
 .p-claim-err { color: var(--ui-danger); margin: 0; }
 .p-claim .q-btn-big { width: 100%; }
+
+/*
+ * The send key never moves: whatever the question length or the number of items, it sits at the bottom of the
+ * screen (thumb zone), just above the feedback line, and stays there (sticky) when the content scrolls.
+ */
+.p-text, .p-number, .p-order, .p-pairs, .p-pin, .p-alloc { flex: 1; }
+.p-text > .q-btn-big, .p-number > .q-btn-big, .p-order > .q-btn-big, .p-pin > .q-btn-big,
+.p-pairs > .p-row:last-child, .p-alloc > .p-row:last-child {
+  margin-top: auto;
+  position: sticky;
+  bottom: max(8px, env(safe-area-inset-bottom));
+  z-index: 2;
+  box-shadow: 0 -10px 18px var(--ui-bg);
+}

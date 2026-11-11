@@ -1,0 +1,112 @@
+import { describe, expect, it } from "vitest";
+import { DEMO_BUZZER_GAME, DEMO_EVENING_GAME, DEMO_GAME, DEMO_POLL_GAME, GameDocument, type Question } from "@quiz/schema";
+import { createGame, replay } from "../../game.ts";
+import { MIXED_ROUTES, defaultRegistry as reg } from "../../index.ts";
+import { project } from "../../project.ts";
+import { actor, addPlayers, answer, ctl, makeSession, run, type Step } from "../../testing/harness.ts";
+
+const pick = (id: string): Question => {
+  const q = [DEMO_GAME, DEMO_POLL_GAME, DEMO_BUZZER_GAME, DEMO_EVENING_GAME].flatMap((g) => g.questions).find((x) => x.id === id);
+  if (q === undefined) throw new Error(`fixture ${id}`);
+  return q;
+};
+const IDS = ["q_capital_fr", "q_poll_breakfast", "q_buzz_everest", "q_txt_1", "q_num_1", "q_ord_1"];
+const MIXED: GameDocument = GameDocument.parse({
+  ...DEMO_GAME,
+  questions: IDS.map(pick),
+  format: { ...DEMO_GAME.format, rounds: [{ ...DEMO_GAME.format.rounds[0], id: "r_mix", title: "Manche mixte", mechanic: "mixed", mechanicConfig: {}, questions: IDS, reserve: [] }] },
+});
+const START: Step[] = [ctl({ type: "game.start" }), ctl({ type: "round.start" }), ...addPlayers(2)];
+const NEXT = ctl({ type: "question.next" });
+const text = (pid: string, t: string): Step => [actor("player", pid), { type: "answer.submit", participantId: pid, answer: { kind: "text", text: t } }];
+
+describe("mixed round (ADR-0015): every question kind in one round", () => {
+  it("each question is played by the mechanic of its kind", () => {
+    let g = run(reg, START, createGame(makeSession(MIXED)));
+    const seen: string[] = [];
+    for (let i = 0; i < IDS.length; i++) {
+      g = run(reg, [ctl({ type: "question.present" })], g);
+      seen.push(g.state.mechanic?.id ?? "?");
+      const v = project(g, { role: "output", scene: "program" }, reg);
+      expect(v.mechanic?.mechanic).toBe(g.state.mechanic?.id); // views see the real mechanic
+      g = run(reg, [NEXT], g);
+    }
+    expect(seen).toEqual(["choice", "poll-board", "buzzer", "text-answer", "number-answer", "order"]);
+    expect(["round.end", "game.end"]).toContain(g.state.phase);
+  });
+
+  it("scores a QCM then a free text with the round's rule; replay identical", () => {
+    const qcm = pick("q_capital_fr");
+    if (qcm.answerSpec.kind !== "single") throw new Error("fixture");
+    const g = run(reg, [
+      ...START,
+      ctl({ type: "question.present" }), ctl({ type: "question.open" }), answer("p_1", qcm.answerSpec.correct), ctl({ type: "question.lock" }), ctl({ type: "question.reveal" }), NEXT,
+    ], createGame(makeSession(MIXED)));
+    const afterQcm = g.state.ledger.filter((e) => !e.voided).reduce((t, e) => t + e.delta, 0);
+    expect(afterQcm).toBeGreaterThan(0);
+    const t = run(reg, [
+      ctl({ type: "question.skip", roundIndex: 0, questionIndex: 1 }), ctl({ type: "question.skip", roundIndex: 0, questionIndex: 2 }),
+      ctl({ type: "question.present" }), ctl({ type: "question.open" }), text("p_2", "van gogh"), ctl({ type: "question.lock" }), ctl({ type: "question.reveal" }),
+    ], g);
+    expect(t.state.mechanic?.id).toBe("text-answer");
+    expect(t.state.ledger.some((e) => !e.voided && "participantId" in e.target && e.target.participantId === "p_2" && e.delta > 0)).toBe(true);
+    expect(replay(t.session, t.events, reg).state).toEqual(t.state);
+  });
+
+  it("stakes on a poll question offer the multiplier only (its own points)", () => {
+    const g = run(reg, [...START, ctl({ type: "question.skip", roundIndex: 0, questionIndex: 0 })], createGame(makeSession(MIXED)));
+    expect(project(g, { role: "control" }, reg).stakesTarget).toMatchObject({ questionIndex: 1, points: false });
+    expect(() => run(reg, [ctl({ type: "question.setStakes", roundIndex: 0, questionIndex: 1, points: 500, multiplier: null })], g)).toThrow(/multiplicateur/);
+  });
+});
+
+const total = (g: ReturnType<typeof run>, pid: string) => g.state.ledger.filter((e) => !e.voided && "participantId" in e.target && e.target.participantId === pid).reduce((t, e) => t + e.delta, 0);
+
+describe("mixed round — what must not break live", () => {
+  const qcm = pick("q_capital_fr");
+  const correct = qcm.answerSpec.kind === "single" ? qcm.answerSpec.correct : "";
+  const REVEALED: Step[] = [...START, ctl({ type: "question.present" }), ctl({ type: "question.open" }), answer("p_1", correct), ctl({ type: "question.lock" }), ctl({ type: "question.reveal" })];
+
+  it("a routed QCM is regraded like any QCM (its own mechanic, from the history)", () => {
+    const g = run(reg, REVEALED, createGame(makeSession(MIXED)));
+    expect(total(g, "p_1")).toBeGreaterThan(0);
+    if (qcm.answerSpec.kind !== "single") throw new Error("fixture");
+    const wrong = qcm.answerSpec.options.find((o) => o.id !== correct)?.id ?? "";
+    const r = run(reg, [ctl({ type: "question.regrade", questionId: qcm.id, answerSpec: { ...qcm.answerSpec, correct: wrong } })], g);
+    expect(total(r, "p_1")).toBe(0);
+    expect(replay(r.session, r.events, reg).state).toEqual(r.state);
+  });
+
+  it("game.patch: settings frozen after the first question; an upcoming question may change kind and is routed again", () => {
+    const g = run(reg, [...REVEALED, NEXT], createGame(makeSession(MIXED)));
+    const cfg = structuredClone(g.state.game);
+    const r0 = cfg.format.rounds[0];
+    if (r0 === undefined) throw new Error("fixture");
+    r0.mechanicConfig = { allowChange: false };
+    expect(() => run(reg, [ctl({ type: "game.patch", baseVersion: g.state.gameVersion, game: cfg })], g)).toThrow(/réglages ne changent/);
+    // The next question (a survey) becomes a free text: played by text-answer at present.
+    const kind = structuredClone(g.state.game);
+    const poll = kind.questions.find((q) => q.id === "q_poll_breakfast");
+    if (poll === undefined) throw new Error("fixture");
+    poll.answerSpec = { kind: "text", accepted: ["café"] };
+    const p = run(reg, [ctl({ type: "game.patch", baseVersion: g.state.gameVersion, game: kind }), ctl({ type: "question.present" })], g);
+    expect(p.state.mechanic?.id).toBe("text-answer");
+  });
+
+  it("resuming from a snapshot taken mid-round gives the same game (other kind on air)", () => {
+    const g = run(reg, [...REVEALED, NEXT, ctl({ type: "question.present" }), ctl({ type: "question.open" })], createGame(makeSession(MIXED)));
+    const cut = g.events.findIndex((e) => e.action.type === "question.reveal");
+    const prefix = replay(g.session, g.events.slice(0, cut + 1), reg);
+    expect(replay(g.session, g.events, reg, { seq: prefix.state.lastSeq, state: prefix.state }).state).toEqual(g.state);
+    expect(g.state.mechanic?.id).toBe("poll-board");
+  });
+
+  it("never routes to a mechanic that hides the question media or spans the round", () => {
+    const bad = [...new Set(Object.values(MIXED_ROUTES))].filter((id) => {
+      const m = reg.get(id);
+      return m === null || m.hidesPromptMedia === true || m.freeOrder === true || m.route !== undefined;
+    });
+    expect(bad).toEqual([]);
+  });
+});
+

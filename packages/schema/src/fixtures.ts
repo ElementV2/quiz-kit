@@ -1,3 +1,4 @@
+import { PER_KIND_MECHANICS } from "./labels.ts";
 import type { GameDocument } from "./session.ts";
 import { DEMO_ALLOCATION_GAME, DEMO_BOARD_GAME, DEMO_CHAT_GAME, DEMO_EVENING_GAME, DEMO_HINTS_GAME, DEMO_NUMBER_GAME, DEMO_ORDER_GAME, DEMO_PAIRS_GAME, DEMO_TEXT_GAME } from "./fixtures-formats.ts";
 
@@ -335,18 +336,34 @@ export const DEMO_LADDER_GAME: GameDocument = {
 };
 
 /** Built-in templates (roadmap phase 1): mechanics only, original look — never a broadcast show's branding. */
+
+/** A demo game as a template: its one-kind rounds become « Mixte » rounds with the same settings. */
+function mixedTemplate(game: GameDocument): GameDocument {
+  const rounds = game.format.rounds.map((r) => {
+    if (!PER_KIND_MECHANICS.has(r.mechanic)) return r;
+    const c = typeof r.mechanicConfig === "object" && r.mechanicConfig !== null ? (r.mechanicConfig as Record<string, unknown>) : {}; // oxlint-disable-line typescript/no-unsafe-type-assertion -- plain JSON settings of our own fixtures
+    const cfg: Record<string, unknown> = {};
+    if (typeof c["shuffleOptions"] === "boolean") cfg["shuffleOptions"] = c["shuffleOptions"];
+    if (typeof c["allowChange"] === "boolean") cfg["allowChange"] = c["allowChange"];
+    if (typeof c["maxStrikes"] === "number") cfg["pollMaxStrikes"] = c["maxStrikes"];
+    if (c["mode"] === "closest" || c["mode"] === "tolerance") cfg["numberMode"] = c["mode"];
+    return { ...r, mechanic: "mixed", mechanicConfig: cfg };
+  });
+  return { ...game, format: { ...game.format, rounds } };
+}
+
 export const TEMPLATES: readonly { readonly id: string; readonly game: GameDocument }[] = [
-  { id: "g_modele_qcm", game: { ...DEMO_GAME, title: "Modèle — QCM rapide (Kahoot-like)" } },
-  { id: "g_modele_paliers", game: { ...DEMO_LADDER_GAME, title: "Modèle — QCM à paliers" } },
-  { id: "g_modele_sondage", game: { ...DEMO_POLL_GAME, title: "Modèle — Sondage à slots" } },
-  { id: "g_modele_buzzer", game: { ...DEMO_BUZZER_GAME, title: "Modèle — Buzzer culture G" } },
-  { id: "g_modele_soiree", game: { ...DEMO_EVENING_GAME, title: "Modèle — Soirée multi-manches" } },
-  { id: "g_modele_texte", game: { ...DEMO_TEXT_GAME, title: "Modèle — Réponse libre" } },
-  { id: "g_modele_estimation", game: { ...DEMO_NUMBER_GAME, title: "Modèle — Estimation (le plus proche)" } },
-  { id: "g_modele_ordre", game: { ...DEMO_ORDER_GAME, title: "Modèle — Remettre dans l'ordre" } },
-  { id: "g_modele_paires", game: { ...DEMO_PAIRS_GAME, title: "Modèle — Associations" } },
-  { id: "g_modele_repartition", game: { ...DEMO_ALLOCATION_GAME, title: "Modèle — Répartition de mise" } },
-  { id: "g_modele_plateau", game: { ...DEMO_BOARD_GAME, title: "Modèle — Plateau catégories × valeurs" } },
-  { id: "g_modele_indices", game: { ...DEMO_HINTS_GAME, title: "Modèle — Indices dégressifs" } },
-  { id: "g_modele_chat", game: { ...DEMO_CHAT_GAME, title: "Modèle — Vote du chat (Twitch / YouTube)" } },
+  { id: "g_modele_qcm", game: mixedTemplate({ ...DEMO_GAME, title: "Modèle — QCM rapide (Kahoot-like)" }) },
+  { id: "g_modele_paliers", game: mixedTemplate({ ...DEMO_LADDER_GAME, title: "Modèle — QCM à paliers" }) },
+  { id: "g_modele_sondage", game: mixedTemplate({ ...DEMO_POLL_GAME, title: "Modèle — Sondage à slots" }) },
+  { id: "g_modele_buzzer", game: mixedTemplate({ ...DEMO_BUZZER_GAME, title: "Modèle — Buzzer culture G" }) },
+  { id: "g_modele_soiree", game: mixedTemplate({ ...DEMO_EVENING_GAME, title: "Modèle — Soirée multi-manches" }) },
+  { id: "g_modele_texte", game: mixedTemplate({ ...DEMO_TEXT_GAME, title: "Modèle — Réponse libre" }) },
+  { id: "g_modele_estimation", game: mixedTemplate({ ...DEMO_NUMBER_GAME, title: "Modèle — Estimation (le plus proche)" }) },
+  { id: "g_modele_ordre", game: mixedTemplate({ ...DEMO_ORDER_GAME, title: "Modèle — Remettre dans l'ordre" }) },
+  { id: "g_modele_paires", game: mixedTemplate({ ...DEMO_PAIRS_GAME, title: "Modèle — Associations" }) },
+  { id: "g_modele_repartition", game: mixedTemplate({ ...DEMO_ALLOCATION_GAME, title: "Modèle — Répartition de mise" }) },
+  { id: "g_modele_plateau", game: mixedTemplate({ ...DEMO_BOARD_GAME, title: "Modèle — Plateau catégories × valeurs" }) },
+  { id: "g_modele_indices", game: mixedTemplate({ ...DEMO_HINTS_GAME, title: "Modèle — Indices dégressifs" }) },
+  { id: "g_modele_chat", game: mixedTemplate({ ...DEMO_CHAT_GAME, title: "Modèle — Vote du chat (Twitch / YouTube)" }) },
 ];

@@ -136,7 +136,8 @@ function App() {
 
               <main class="c-center">
                 <Transport view={v()} readonly={readonly()} now={now()} act={act} />
-                <Show when={message()}>{(m) => <p class={`c-message ${m().ok ? "c-ok" : "c-err"}`} role="status">{m().text}</p>}</Show>
+                {/* Always there, fixed height: a message appearing never moves the keys and the question below. */}
+                <p class={`c-message c-message-slot ${message()?.ok === false ? "c-err" : "c-ok"}`} role="status" title={message()?.text ?? ""}>{message()?.text ?? ""}</p>
                 <Show when={v().skipped.length > 0}><p class="c-message c-err">{v().skipped.length} action(s) devenue(s) sans effet après un undo.</p></Show>
                 <Show when={regradeTarget()}>
                   {(q) => (

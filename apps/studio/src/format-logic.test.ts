@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { defaultRegistry } from "@quiz/engine";
-import { DEMO_EVENING_GAME, DEMO_GAME, GameDocument, TEMPLATES, type Question } from "@quiz/schema";
-import { MECHANICS, addToRound, configValues, defaultConfig, deleteQuestion, deleteRound, duplicateRound, mechanicOptions, moveItem, newRound, newScoring, parseNumberList, removeFromRound, roundIssues, roundsOf, setConfigField, setMechanic, swapList } from "./format-logic.ts";
+import { DEMO_EVENING_GAME, DEMO_GAME, DEMO_POLL_GAME, GameDocument, TEMPLATES, type Question } from "@quiz/schema";
+import { MECHANICS, PER_KIND_MECHANICS, addToRound, configValues, defaultConfig, deleteQuestion, deleteRound, duplicateRound, mechanicOptions, moveItem, newRound, newScoring, parseNumberList, removeFromRound, roundIssues, roundsOf, setConfigField, setMechanic, swapList } from "./format-logic.ts";
 import { QUESTION_TYPES, newQuestion } from "./question-factories.ts";
 
 /** Keys of a mechanic config schema (zod object shape). */
@@ -15,7 +15,10 @@ const copy = (g: GameDocument): GameDocument => structuredClone(g);
 describe("mechanic catalogue", () => {
   it("labels every registered mechanic in French and offers them all", () => {
     expect(defaultRegistry.ids().filter((id) => MECHANICS[id] === undefined)).toEqual([]);
-    expect(mechanicOptions(defaultRegistry).map((m) => m.id).toSorted()).toEqual([...defaultRegistry.ids()].toSorted());
+    // New rounds: « Mixte » + the round-level formats; a per-kind type stays offered only where already used.
+    expect(mechanicOptions(defaultRegistry).map((m) => m.id)[0]).toBe("mixed");
+    expect(mechanicOptions(defaultRegistry).map((m) => m.id).toSorted()).toEqual([...defaultRegistry.ids()].filter((id) => !PER_KIND_MECHANICS.has(id)).toSorted());
+    expect(mechanicOptions(defaultRegistry, "choice").map((m) => m.id)).toContain("choice");
   });
   it("form fields match the keys of each mechanic config schema", () => {
     const ids = defaultRegistry.ids();
@@ -46,6 +49,17 @@ describe("roundIssues (compatibility through the mechanic init)", () => {
   it("templates have no issue", () => {
     expect(TEMPLATES.flatMap((t) => t.game.format.rounds.flatMap((_, ri) => roundIssues(t.game, ri, defaultRegistry).map((i) => `${t.id} r${ri}: ${i.message}`)))).toEqual([]);
   });
+  it("mixed round: everything fits, but a survey in a solo game is flagged (team game)", () => {
+    const g = copy(DEMO_GAME);
+    setMechanic(g, 0, "mixed", defaultRegistry);
+    expect(roundIssues(g, 0, defaultRegistry)).toEqual([]);
+    const poll = DEMO_POLL_GAME.questions[0];
+    if (poll === undefined) throw new Error("fixture");
+    g.questions.push(poll);
+    g.format.rounds[0]?.questions.push(poll.id);
+    expect(roundIssues(g, 0, defaultRegistry).map((i) => i.message).join()).toMatch(/se joue en équipes/);
+  });
+
   it("flags a question the mechanic cannot play", () => {
     const g = copy(DEMO_GAME);
     setMechanic(g, 0, "order", defaultRegistry);

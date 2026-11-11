@@ -208,3 +208,5 @@ a.q-btn { text-decoration: none; text-align: center; display: inline-flex; align
 .c-fix-card { border-left: 3px solid var(--ui-warn); }
 .c-fix-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .c-fix-note { margin: 0 0 8px; font-size: 12px; color: var(--ui-muted); }
+
+.c-message-slot { min-height: 1.45em; margin: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

@@ -1,5 +1,5 @@
-import { createRng, type Registry } from "@quiz/engine";
-import type { GameDocument, Question, Round, ScoringComponent } from "@quiz/schema";
+import { createRng, playedBy, type Registry } from "@quiz/engine";
+import { PER_KIND_MECHANICS, type GameDocument, type Question, type Round, type ScoringComponent } from "@quiz/schema";
 import { pruneRound } from "./flow-logic.ts";
 
 /**
@@ -39,6 +39,18 @@ const progressive: ConfigField[] = [
 
 /** French catalogue of the registered mechanics (ids from packages/engine). */
 export const MECHANICS: Readonly<Record<string, MechanicInfo>> = {
+  mixed: {
+    label: "Mixte (tous types)",
+    explain: "Toutes les questions dans la même manche : chacune se joue selon son type — QCM et vrai / faux sur tablette, sondage en cases à découvrir, réponse orale au buzzer (l'animateur juge), réponse libre, nombre, ordre, associations, point sur image, répartition. Le barème vaut pour toutes, sauf le sondage (en équipes) qui compte ses propres points.",
+    usesScoring: true,
+    fields: [
+      { key: "shuffleOptions", kind: "boolean", label: "QCM : mélanger l'ordre des réponses" },
+      allowChange,
+      { key: "pollMaxStrikes", kind: "number", label: "Sondage : erreurs avant de passer la main", min: 1, max: 10 },
+      { key: "numberMode", kind: "enum", label: "Nombre : qui gagne", options: [{ value: "tolerance", label: "toute réponse dans la tolérance" }, { value: "closest", label: "le ou les plus proches" }] },
+      { key: "buzzerLockout", kind: "boolean", label: "Réponse orale (buzzer) : qui se trompe ne peut plus buzzer" },
+    ],
+  },
   choice: {
     label: "QCM",
     explain: "Chacun répond sur sa tablette (QCM, vrai / faux, plusieurs réponses) ; le barème donne les points.",
@@ -131,11 +143,15 @@ export const MECHANICS: Readonly<Record<string, MechanicInfo>> = {
 
 export const mechanicLabel = (id: string): string => MECHANICS[id]?.label ?? id;
 
-/** Mechanics offered in the select: every registered one, catalogue order first. */
-export function mechanicOptions(registry: Registry): { id: string; label: string }[] {
+export { PER_KIND_MECHANICS } from "@quiz/schema";
+
+/** Round types offered: « Mixte » then the real game formats; `current` stays listed (older games). */
+export function mechanicOptions(registry: Registry, current?: string): { id: string; label: string; special: boolean }[] {
   const ids = registry.ids();
   const known = Object.keys(MECHANICS).filter((id) => ids.includes(id));
-  return [...known, ...ids.filter((id) => !known.includes(id))].map((id) => ({ id, label: mechanicLabel(id) }));
+  return [...known, ...ids.filter((id) => !known.includes(id))]
+    .filter((id) => !PER_KIND_MECHANICS.has(id) || id === current)
+    .map((id) => ({ id, label: mechanicLabel(id), special: id !== "mixed" }));
 }
 
 export const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === "object" && v !== null && !Array.isArray(v);
@@ -179,7 +195,16 @@ export function roundIssues(doc: GameDocument, ri: number, registry: Registry): 
   if (!cfg.success) return [...issues, { questionId: null, message: `réglages invalides : ${cfg.error.issues.map((i) => i.message).join(" ; ")}` }];
   const questions = round.questions.flatMap((id) => byId.get(id) ?? []);
   const check = (q: Question, questionIndex: number, list: readonly Question[]) => {
-    const r = m.init(cfg.data, q, { at: 0, rng: createRng(1, 1), phase: "idle" }, { previous: null, questionIndex, questionsLeft: list.length - questionIndex - 1, questions: list });
+    // The mechanic that will play this question (a mixed round picks one per answer kind).
+    const played = playedBy(round, q, registry);
+    if (!played.ok) {
+      issues.push({ questionId: q.id, message: played.error.message });
+      return;
+    }
+    if (played.value.mechanic.id === "poll-board" && doc.format.participants.mode !== "teams") {
+      issues.push({ questionId: q.id, message: "un sondage façon « Une famille en or » se joue en équipes : passer la partie en « Équipes » (onglet Format), sinon il ne rapporte aucun point" });
+    }
+    const r = played.value.mechanic.init(played.value.config, q, { at: 0, rng: createRng(1, 1), phase: "idle" }, { previous: null, questionIndex, questionsLeft: list.length - questionIndex - 1, questions: list });
     if (!r.ok) issues.push({ questionId: q.id, message: r.error.message });
   };
   questions.forEach((q, i) => check(q, i, questions));
@@ -197,8 +222,8 @@ export function newRound(registry: Registry, id: string, n: number): Round {
   return {
     id,
     title: `Manche ${n}`,
-    mechanic: "choice",
-    mechanicConfig: defaultConfig(registry, "choice"),
+    mechanic: "mixed", // any question kind: the safest default (each one plays with its own rule)
+    mechanicConfig: defaultConfig(registry, "mixed"),
     questions: [],
     reserve: [],
     timer: { durationMs: 20_000, autoLock: true },

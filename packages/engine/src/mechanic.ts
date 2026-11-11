@@ -74,6 +74,11 @@ export interface Mechanic<C, S> {
   readonly freeOrder?: boolean;
   /** The question media is the secret (reveal-image): never sent to players in the base view. */
   readonly hidesPromptMedia?: boolean;
+  /**
+   * Router round (« mixte », ADR-0015): the mechanic that plays this question and its settings. A router never
+   * goes on air itself; every engine path resolves it through `playedBy` (route.ts).
+   */
+  route?(config: C, question: Question): { readonly id: string; readonly config: unknown };
   /** Called on `question.present`. Rejects question kinds it cannot run. */
   init(config: C, question: Question, env: MechanicEnv, round: RoundContext<S>): Result<S, Rejection>;
   /** `answer.submit` while phase = open. */

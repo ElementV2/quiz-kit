@@ -53,6 +53,12 @@ Fond 1920×1080 (livrer 3840×2160), stinger 1920×1080 ProRes 4444 ou WebM VP9 
 logo SVG (sinon PNG alpha ≥ 1000 px de large), avatar carré ≥ 512×512, sons WAV 48 kHz.
 Contrôles à l'import : dimensions, alpha, licence de police déclarée, échantillonnage audio (conversion auto).
 
+## Types de manche
+
+« Mixte » (par défaut) accepte tous les types de question : chacune se joue selon son type (ADR-0015). Les formats
+spéciaux changent la règle de toute la manche : paliers, plateau, buzzer, indices, image dévoilée, vote du chat.
+Les anciens types « un seul type de question » restent lisibles dans les parties existantes.
+
 ## Modifier une partie en direct (« Envoyer au direct »)
 
 Quand la partie ouverte dans le studio est celle lancée en régie, l'en-tête affiche **En direct** et le bouton

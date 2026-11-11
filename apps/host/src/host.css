@@ -92,7 +92,9 @@ body { overscroll-behavior: none; }
 .h-key.q-confirm[data-armed="true"] { background: var(--ui-warn-bg); border-color: var(--ui-warn); color: var(--ui-warn); }
 .h-keys { display: grid; gap: 8px; padding: 14px 20px 16px; border-top: 1px solid var(--ui-border); background: var(--ui-bg); }
 .h-keys-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
-.h-keys-grid:empty { display: none; }
+.h-keys-tools { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.h-keys-tools:empty { display: none; }
+.h-keys-tools > .h-stakes { grid-column: 1 / -1; }
 .h-notice { margin: 0; padding: 10px 20px; border-top: 1px solid var(--ui-danger); color: var(--ui-danger); font-size: 15px; font-weight: 600; }
 
 /* Poll-board slots, rankings. */
@@ -168,6 +170,16 @@ body { overscroll-behavior: none; }
   .h-question { font-size: 30px; }
   .h-desk { grid-template-columns: 1fr; max-height: none; }
   .h-clock, .h-desk-body, .h-keys, .h-desk-foot { grid-column: 1; grid-row: auto; border-right: 0; }
+  /* The question gets the room: compact clock on one line, no « Ensuite » (in the run-down), denser keys. */
+  .h-clock { padding: 6px 14px; align-items: center; }
+  .h-clock-time { font-size: 34px; }
+  .h-clock-meta b { font-size: 18px; }
+  .h-desk-body { padding: 8px 14px; }
+  .h-desk-body:not(:has(> :not(.h-then))) { display: none; }
+  .h-then { display: none; }
+  .h-keys { padding: 10px 14px 12px; gap: 6px; }
+  .h-key { min-height: 50px; font-size: 14px; }
+  .h-key-primary { min-height: 66px; font-size: 19px; }
 }
 .h-key-wide { grid-column: 1 / -1; }
 .h-then { margin: auto 0 0; padding-top: 12px; border-top: 1px solid var(--ui-border); color: var(--ui-muted); font-size: 16px; line-height: 1.35; }

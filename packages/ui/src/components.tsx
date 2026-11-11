@@ -85,6 +85,7 @@ export function ConfirmKey(p: { readonly label: string; readonly confirmLabel?: 
 
 /** Mechanic ids in words (run-downs). Unknown ids are shown as is. */
 export const MECHANIC_LABEL: Readonly<Record<string, string>> = {
+  mixed: "Mixte",
   choice: "QCM",
   buzzer: "Buzzer",
   ladder: "Paliers",

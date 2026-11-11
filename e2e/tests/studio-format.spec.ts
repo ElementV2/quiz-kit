@@ -17,7 +17,7 @@ const watch = (page: Page): string[] => {
   return errors;
 };
 
-test("studio Format: a 2-round format (free text + order) built from the bank, saved and valid", async ({ browser, request }) => {
+test("studio Format: a ladder round + a mixed round (free text + order) built from the bank, saved and valid", async ({ browser, request }) => {
   const ctx = await browser.newContext({ viewport: { width: 1600, height: 1000 } });
   const studio = await ctx.newPage();
   const errors = watch(studio);
@@ -26,32 +26,31 @@ test("studio Format: a 2-round format (free text + order) built from the bank, s
   await studio.getByRole("menuitem", { name: "QCM rapide (Kahoot-like)" }).click(); // the demo questions
   await studio.locator(".s-title").fill("Format e2e");
 
-  // Round 1 becomes "Réponse libre": the boolean and multi questions are flagged by the engine's own init.
+  // Round 1 becomes "Paliers" (single-answer QCM only): the boolean and multi questions are flagged by the engine's own init.
   await studio.getByRole("button", { name: "Format", exact: true }).click();
   const round1 = studio.locator(".s-round").nth(0);
-  await round1.getByLabel("Mécanique de jeu").selectOption("text-answer");
+  await round1.getByLabel("Type de manche").selectOption("ladder");
   await expect(round1.getByText("⚠ question incompatible").first()).toBeVisible();
   await expect(round1.getByText("⚠ question incompatible")).toHaveCount(2);
 
-  // Round 2: "Remettre dans l'ordre", empty for now (warned).
+  // Round 2: a new round is « Mixte » (every question kind), empty for now (warned).
   await studio.getByRole("button", { name: "+ Ajouter une manche" }).click();
   const round2 = studio.locator(".s-round").nth(1);
   await expect(round2.getByText(/aucune question/).first()).toBeVisible();
-  await round2.getByLabel("Mécanique de jeu").selectOption("order");
+  await expect(round2.getByLabel("Type de manche")).toHaveValue("mixed");
   await round2.getByLabel("Titre de la manche").fill("Chronologie");
-  await expect(round2.getByText(/Les éléments sont mélangés/)).toBeVisible();
-  // Mechanic config form: number list of the board, switched back to order.
-  await round2.getByLabel("Mécanique de jeu").selectOption("board");
+  await expect(round2.getByText(/Toutes les questions dans la même manche/)).toBeVisible();
+  // Config form of a special format (board values), then back to mixed.
+  await round2.getByLabel("Type de manche").selectOption("board");
   await expect(round2.getByText("Valeurs des cases, de haut en bas")).toBeVisible();
-  await round2.getByLabel("Mécanique de jeu").selectOption("order");
+  await round2.getByLabel("Type de manche").selectOption("mixed");
   await studio.screenshot({ path: "screenshots/studio-format.png" });
 
   // Bank: a new order question goes to the last round by default, a free-text one to round 1.
   await studio.getByRole("button", { name: "Contenu" }).click();
   await studio.getByRole("button", { name: "+ Remettre dans l'ordre" }).click();
   await expect(studio.getByText("Question ajoutée à « Chronologie »")).toBeVisible();
-  await studio.getByLabel("dans la manche").selectOption({ index: 0 });
-  await studio.getByRole("button", { name: "+ Réponse libre" }).click();
+  await studio.getByRole("button", { name: "+ Réponse libre" }).click(); // same mixed round: any kind fits
   const textRow = studio.locator(".s-table tbody tr").filter({ hasText: "Réponses acceptées" });
   await textRow.locator(".s-opt input").first().fill("Victor Hugo");
   await textRow.getByRole("button", { name: "+ variante acceptée" }).click();
@@ -66,8 +65,8 @@ test("studio Format: a 2-round format (free text + order) built from the bank, s
   await studio.getByRole("button", { name: "Format", exact: true }).click();
   await expect(studio.getByText("⚠ question incompatible")).toHaveCount(0);
   await expect(studio.getByText(/aucune question \(/)).toHaveCount(0);
-  await expect(studio.locator(".s-round").nth(0).locator(".s-qlist").first().locator("li")).toHaveCount(2);
-  await expect(studio.locator(".s-round").nth(1).locator(".s-qlist").first().locator("li")).toHaveCount(1);
+  await expect(studio.locator(".s-round").nth(0).locator(".s-qlist").first().locator("li")).toHaveCount(1);
+  await expect(studio.locator(".s-round").nth(1).locator(".s-qlist").first().locator("li")).toHaveCount(2);
 
   await studio.getByRole("button", { name: /^(Enregistr|Modifications|Non enregistré)/ }).click();
   await expect(studio.getByText("Enregistré", { exact: true }).first()).toBeVisible();
@@ -77,7 +76,7 @@ test("studio Format: a 2-round format (free text + order) built from the bank, s
   const saved = GameDocument.safeParse(body.game);
   expect(saved.success).toBe(true);
   const rounds = saved.data?.format.rounds ?? [];
-  expect(rounds.map((r) => [r.mechanic, r.questions.length])).toEqual([["text-answer", 2], ["order", 1]]);
+  expect(rounds.map((r) => [r.mechanic, r.questions.length])).toEqual([["ladder", 1], ["mixed", 2]]);
   const free = saved.data?.questions.find((q) => q.answerSpec.kind === "text");
   expect(free?.answerSpec).toMatchObject({ kind: "text", accepted: ["Victor Hugo", "Variante"] });
   expect(errors).toEqual([]);

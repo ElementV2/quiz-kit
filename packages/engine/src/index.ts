@@ -25,6 +25,9 @@ export { normalizeAnswer, matchesText } from "./mechanics/shared/text-match.ts";
 export { boardCells } from "./mechanics/board/board.ts";
 
 import { createRegistry } from "./mechanic.ts";
+import { mixed } from "./mechanics/mixed/mixed.ts";
+export { mixed, MixedConfig, MIXED_ROUTES } from "./mechanics/mixed/mixed.ts";
+export { playedBy, type Played } from "./route.ts";
 import { choice } from "./mechanics/choice/choice.ts";
 import { pollBoard } from "./mechanics/poll-board/poll-board.ts";
 import { buzzer } from "./mechanics/buzzer/buzzer.ts";
@@ -41,4 +44,4 @@ import { revealImage } from "./mechanics/reveal-image/reveal-image.ts";
 import { crowdVote } from "./mechanics/crowd-vote/crowd-vote.ts";
 
 /** Mechanics available in this build. */
-export const defaultRegistry = createRegistry([choice, pollBoard, buzzer, ladder, textAnswer, numberAnswer, order, pairs, pin, allocation, boardMechanic, hints, revealImage, crowdVote]);
+export const defaultRegistry = createRegistry([mixed, choice, pollBoard, buzzer, ladder, textAnswer, numberAnswer, order, pairs, pin, allocation, boardMechanic, hints, revealImage, crowdVote]);

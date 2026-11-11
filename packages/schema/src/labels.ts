@@ -9,6 +9,7 @@ import type { ParticipantStatus } from "./session.ts";
  */
 
 export const MECHANIC_LABEL_FR: Readonly<Record<string, string>> = {
+  mixed: "mixte",
   choice: "QCM",
   "poll-board": "sondage à cases",
   buzzer: "buzzer",
@@ -24,6 +25,12 @@ export const MECHANIC_LABEL_FR: Readonly<Record<string, string>> = {
   "reveal-image": "image révélée",
   "crowd-vote": "vote du chat",
 };
+
+/**
+ * Round types that play one kind of question only: a « Mixte » round plays them all (ADR-0015), so they are not
+ * offered for new rounds (older games keep them).
+ */
+export const PER_KIND_MECHANICS: ReadonlySet<string> = new Set(["choice", "text-answer", "number-answer", "order", "pairs", "pin", "allocation", "poll-board"]);
 
 export const ANSWER_KIND_LABEL_FR: Readonly<Record<AnswerKind, string>> = {
   single: "QCM (une réponse)",

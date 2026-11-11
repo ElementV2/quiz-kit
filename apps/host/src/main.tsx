@@ -123,23 +123,29 @@ function App() {
                   </div>
 
                   <Show when={v().drive} fallback={<p class="h-small h-desk-foot">La régie pilote le déroulé. Vous validez les réponses.</p>}>
+                    {/*
+                      Fixed places, bottom-up (thumb zone): the next step is ALWAYS the last key, « Passer » just above,
+                      then Révéler / +10 s (always there, greyed when useless). Tools that depend on the question
+                      (jokers, stakes…) come above them, so they never push the main keys around.
+                    */}
                     <div class="h-keys">
+                      <div class="h-keys-tools">
+                        <DriveTools view={v()} act={act} />
+                        <StakesBar class="h-stakes" view={v()} act={(a) => act(a)} />
+                      </div>
+                      <div class="h-keys-grid">
+                        <button type="button" class="h-key" disabled={v().phase !== "open"} onClick={() => void run([{ type: "question.lock" }, { type: "question.reveal" }])}>Révéler</button>
+                        <button type="button" class="h-key" disabled={v().phase !== "open" || v().timer === null} onClick={() => { const t = v().timer; if (t !== null) void act({ type: "timer.set", remainingMs: Math.max(0, t.endsAt - now()) + 10_000 }); }}>+10 s</button>
+                        <Show
+                          when={!inQuestion() && v().phase === "idle" && v().round !== null ? nextTarget(v()) : null}
+                          fallback={<ConfirmKey class="h-key h-key-wide" label="Passer la question" confirmLabel="Confirmer : passer sans révéler ?" disabled={!inQuestion()} onConfirm={() => void act({ type: "question.next" })} />}
+                        >
+                          {(t) => <ConfirmKey class="h-key h-key-wide" label="Passer la question" confirmLabel="Confirmer : passer la suivante sans la jouer ?" onConfirm={() => void act({ type: "question.skip", ...t() })} />}
+                        </Show>
+                      </div>
                       <Show when={step()} fallback={<button type="button" class="h-key h-key-primary" disabled>Partie terminée</button>}>
                         {(s) => <button type="button" class="h-key h-key-primary" onClick={() => void act(s().action)}>{s().label}</button>}
                       </Show>
-                      <div class="h-keys-grid">
-                        <Show when={v().phase === "open"}>
-                          <button type="button" class="h-key" onClick={() => void run([{ type: "question.lock" }, { type: "question.reveal" }])}>Révéler</button>
-                          <Show when={v().timer}>
-                            {(t) => <button type="button" class="h-key" onClick={() => void act({ type: "timer.set", remainingMs: Math.max(0, t().endsAt - now()) + 10_000 })}>+10 s</button>}
-                          </Show>
-                        </Show>
-                        <DriveTools view={v()} act={act} />
-                        <StakesBar class="h-stakes" view={v()} act={(a) => act(a)} />
-                        <Show when={inQuestion()}>
-                          <ConfirmKey class="h-key h-key-wide" label="Passer la question" confirmLabel="Confirmer : passer sans révéler ?" onConfirm={() => void act({ type: "question.next" })} />
-                        </Show>
-                      </div>
                     </div>
                   </Show>
                   <Show when={notice()}>{(n) => <p class="h-notice" role="alert">{n()}</p>}</Show>

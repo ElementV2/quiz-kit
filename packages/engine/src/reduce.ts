@@ -1,4 +1,5 @@
 import { HOST_DRIVE_ACTIONS, isAllowed, type Action, type ActionOf, type Actor, type Participant, type Round, type ScoreEntry, type ScoreTarget, ROLE_LABEL_FR, STATUS_LABEL_FR, actionLabel, answerKindLabel, mechanicLabel } from "@quiz/schema";
+import { playedBy } from "./route.ts";
 import type { AnyMechanic, FixedJudgement, Judgement, MechanicEnv, Registry } from "./mechanic.ts";
 import { assertNever, err, ok, type Rejection, type Result } from "./result.ts";
 import type { Rng } from "./rng.ts";
@@ -87,7 +88,9 @@ function reduceAllowed(s: GameState, a: Action, ctx: Ctx, registry: Registry): R
       const onAir = QUESTION_PHASES.has(s.phase) ? s.questionIndex : null;
       if (onAir === a.questionIndex && s.phase === "revealed") return err("wrong-phase", "question déjà révélée : corriger les points à la main ou rejouer");
       if (s.history.some((h) => h.roundIndex === a.roundIndex && h.questionIndex === a.questionIndex) && onAir !== a.questionIndex) return err("conflict", "question déjà jouée");
-      const m = registry.get(round.mechanic);
+      const targetQ = s.game.questions.find((q) => q.id === round.questions[a.questionIndex]);
+      const routed = targetQ === undefined ? null : playedBy(round, targetQ, registry);
+      const m = routed?.ok === true ? routed.value.mechanic : registry.get(round.mechanic);
       if (m?.noStakes === true) return err("unsupported", "pas de mise sur les paliers : c'est le gain de toute la montée qui est en jeu");
       if (a.points !== null && m?.ownPoints === true) return err("unsupported", "cette mécanique décide de ses points : utiliser un multiplicateur (×2, ×5…)");
       // One stakes slot: a question on air keeps its stakes until it is left (review 6 m1).
@@ -337,12 +340,12 @@ function skipUpcoming(s: GameState, a: ActionOf<"question.skip">, ctx: Ctx, regi
   // had been presented then left unplayed — so its state is built like at present (progression of the previous one).
   let carried: readonly FixedJudgement[] = [];
   if (isLastQuestion && m !== null && s.carry !== null && s.carry.id === m.id) {
-    const cfg = m.configSchema.safeParse(round.mechanicConfig);
     const byId = new Map(s.game.questions.map((q) => [q.id, q]));
     const questions = round.questions.flatMap((id) => byId.get(id) ?? []);
     const question = questions[index];
-    const init = cfg.success && question !== undefined
-      ? m.init(cfg.data, question, envOf(s, ctx), { previous: { state: s.carry.state, revealed: s.carry.revealed, questionIndex: s.carry.questionIndex }, questionIndex: index, questionsLeft: 0, questions })
+    const played = question === undefined ? null : playedBy(round, question, registry);
+    const init = played !== null && played.ok && played.value.mechanic.id === m.id && question !== undefined
+      ? m.init(played.value.config, question, envOf(s, ctx), { previous: { state: s.carry.state, revealed: s.carry.revealed, questionIndex: s.carry.questionIndex }, questionIndex: index, questionsLeft: 0, questions })
       : null;
     // Unplayable here (the usual reason to pass it): nothing is built, nothing banked — never a refusal.
     if (init !== null && init.ok) carried = m.closeRound(init.value, "presenting");
@@ -362,21 +365,23 @@ function present(s: GameState, a: ActionOf<"question.present">, ctx: Ctx, regist
   if (round === null) return err("not-found", "manche inconnue");
   const m = registry.get(round.mechanic);
   if (m === null) return err("unsupported", `type de manche inconnu de cette version : ${mechanicLabel(round.mechanic)}`);
-  const cfg = m.configSchema.safeParse(round.mechanicConfig);
-  if (!cfg.success) return err("invalid", `configuration de mécanique invalide : ${cfg.error.message}`);
-  const previous = s.carry !== null && s.carry.id === m.id ? { state: s.carry.state, revealed: s.carry.revealed, questionIndex: s.carry.questionIndex } : null;
   // GameDocument guarantees every round question exists (superRefine).
   const byId = new Map(s.game.questions.map((q) => [q.id, q]));
   const questions = round.questions.flatMap((id) => {
     const q = byId.get(id);
     return q === undefined ? [] : [q];
   });
-  type Picked = Result<{ index: number; state: unknown }, Rejection>;
+  type Picked = Result<{ index: number; id: string; state: unknown }, Rejection>;
   const tryAt = (index: number): Picked => {
     const question = questions[index];
     if (question === undefined) return err("not-found", `question ${index} inexistante dans la manche`);
-    const init = m.init(cfg.data, question, envOf(s, ctx), { previous, questionIndex: index, questionsLeft: round.questions.length - index - 1, questions });
-    return init.ok ? ok({ index, state: init.value }) : init;
+    // The mechanic that plays THIS question (a mixed round routes it by answer kind, ADR-0015).
+    const played = playedBy(round, question, registry);
+    if (!played.ok) return played;
+    const pm = played.value.mechanic;
+    const previous = s.carry !== null && s.carry.id === pm.id ? { state: s.carry.state, revealed: s.carry.revealed, questionIndex: s.carry.questionIndex } : null;
+    const init = pm.init(played.value.config, question, envOf(s, ctx), { previous, questionIndex: index, questionsLeft: round.questions.length - index - 1, questions });
+    return init.ok ? ok({ index, id: pm.id, state: init.value }) : init;
   };
   let picked: Picked;
   if (a.questionIndex === undefined && m.freeOrder === true) {
@@ -393,8 +398,8 @@ function present(s: GameState, a: ActionOf<"question.present">, ctx: Ctx, regist
     picked = tryAt(a.questionIndex ?? (s.questionIndex === null ? 0 : s.questionIndex + 1));
   }
   if (!picked.ok) return picked;
-  const { index, state } = picked.value;
-  return ok({ ...s, phase: "presenting", questionIndex: index, mechanic: { id: m.id, state }, timer: null, openedAt: null, lockedAt: null, windowMs: null });
+  const { index, id, state } = picked.value;
+  return ok({ ...s, phase: "presenting", questionIndex: index, mechanic: { id, state }, timer: null, openedAt: null, lockedAt: null, windowMs: null });
 }
 
 function reveal(s: GameState, ctx: Ctx, registry: Registry): R {
