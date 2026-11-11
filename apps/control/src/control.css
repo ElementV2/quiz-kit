@@ -228,3 +228,4 @@ a.q-btn { text-decoration: none; text-align: center; display: inline-flex; align
 .c-ledger-delta[data-sign="plus"] { color: var(--ui-ok, #5bbf6a); }
 .c-ledger-delta[data-sign="minus"] { color: var(--ui-danger); }
 .c-ledger li .q-btn { margin-left: auto; }
+.c-channel { font-size: 11px; }

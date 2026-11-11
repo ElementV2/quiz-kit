@@ -279,7 +279,8 @@ export function Players(p: { readonly view: ControlView; readonly readonly: bool
                 <button type="button" class="c-player-name" disabled={p.readonly} title="Modifier" onClick={() => setEditing(editing() === pl.id ? null : pl.id)}>
                   <span class="c-player-label">{pl.displayName}</span>
                   <Show when={teamOf(pl.teamId)}>{(t) => <span class="c-swatch" style={{ background: t().color }} title={t().name} />}</Show>
-                  <Show when={pl.seat !== null}><span class="muted q-mono">S{pl.seat}</span></Show>
+                  <Show when={pl.seat !== null}><span class="muted q-mono" title="Tablette du pupitre">S{pl.seat}</span></Show>
+                  <Show when={pl.channel === "play"}><span class="muted c-channel" title="A rejoint avec son propre appareil (code partie, /play)">son appareil</span></Show>
                   <Show when={pl.status !== "active"}><span class="c-status">{STATUS_LABEL_FR[pl.status]}</span></Show>
                 </button>
                 <span class="c-total q-mono">{totals().get(pl.id)?.total ?? 0}</span>

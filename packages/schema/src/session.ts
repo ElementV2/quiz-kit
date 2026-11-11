@@ -12,7 +12,8 @@ import { Scene, Theme } from "./scenes.ts";
 export const ParticipantStatus = z.preprocess((v) => (v === "waiting" ? "substitute" : v === "disconnected" ? "active" : v), z.enum(["active", "eliminated", "substitute"]));
 export type ParticipantStatus = z.infer<typeof ParticipantStatus>;
 
-export const Channel = z.enum(["seat", "play", "buzzer", "twitch", "youtube"]);
+/** How the player joined: a seat tablet of the set (`seat`), or their own device through /play (`play`). */
+export const Channel = z.enum(["seat", "play"]);
 export type Channel = z.infer<typeof Channel>;
 
 /** Tolerant on purpose: journals written earlier must always read back. New names are cleaned at input (`cleanDisplayName`). */

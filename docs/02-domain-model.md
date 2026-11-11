@@ -50,7 +50,7 @@ sont des fonctions pures `vN → vN+1` testées sur des fixtures.
 - `Session` : `id`, `gameSnapshot` (copie figée Contenu+Format+Scènes+Thème au lancement), `seed`,
   `createdAt`, `status`.
 - `Participant` : `id`, `displayName`, `teamId?`, `seat?`, `status` (active | substitute | eliminated ; les anciens
-  « waiting » / « disconnected » sont lus comme remplaçant / en jeu), `channel` (seat | play | buzzer | twitch | youtube).
+  « waiting » / « disconnected » sont lus comme remplaçant / en jeu), `channel` (seat : tablette de pupitre | play : son propre appareil via /play).
 - `Team` : `id`, `name`, `color`.
 - `ScoreEntry` : `id` (dérivé de l'événement : `se_<seq>_<n>`), `target` ({ participantId } | { teamId }),
   `delta`, `questionId?`, `reason` (auto | bonus | penalty | manual | regrade), `by`, `at`, `voided`.
