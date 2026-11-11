@@ -7,11 +7,13 @@
 .s-tabs button[data-on="true"] { background: var(--ui-primary); color: #fff; border-color: var(--ui-primary); }
 .s-spacer { flex: 1; }
 .s-body { flex: 1; display: grid; grid-template-columns: 240px minmax(0, 1fr); gap: 12px; padding: 12px; }
-.s-library .q-panel { display: grid; gap: 8px; }
-.s-games { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
-.s-games li { display: flex; align-items: center; justify-content: space-between; gap: 6px; border-radius: 8px; padding: 2px 6px; }
+.s-library { min-width: 0; }
+.s-library .q-panel { display: grid; gap: 8px; grid-template-columns: minmax(0, 1fr); min-width: 0; }
+.s-games li > span { flex: none; }
+.s-games { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; grid-template-columns: minmax(0, 1fr); }
+.s-games li { min-width: 0; display: flex; align-items: center; justify-content: space-between; gap: 6px; border-radius: 8px; padding: 2px 6px; }
 .s-games li[data-on="true"] { background: var(--ui-surface-2); }
-.s-games button { font: inherit; color: var(--ui-text); background: none; border: 0; cursor: pointer; text-align: left; padding: 4px 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.s-games button { font: inherit; color: var(--ui-text); background: none; border: 0; cursor: pointer; text-align: left; padding: 4px 0; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .s-hint { font-size: 12px; }
 .s-ok { color: var(--ui-ok); } .s-bad { color: var(--ui-danger); }
 .s-file { position: relative; overflow: hidden; display: inline-block; cursor: pointer; }
@@ -57,3 +59,13 @@
 .s-colors { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 6px; }
 .s-colors label, .s-theme label { display: flex; gap: 8px; align-items: center; margin: 4px 0; }
 .s-mini { position: relative; width: 100%; aspect-ratio: 16 / 9; background: repeating-conic-gradient(#1a1f3d 0 25%, #12162e 0 50%) 0 0 / 24px 24px; border-radius: 8px; overflow: hidden; }
+
+/* Design import tools (doc 07 A) */
+.s-canvas[data-tool="trace"] { cursor: crosshair; } .s-canvas[data-tool="pick"] { cursor: cell; }
+.s-canvas[data-tool="trace"] .s-zone, .s-canvas[data-tool="pick"] .s-zone { pointer-events: none; }
+.s-zone[data-multi="true"] { border-color: #38bdf8; border-style: solid; }
+.s-tracing { position: absolute; border: 3px solid #ffcc4d; background: rgba(255, 204, 77, .15); pointer-events: none; box-sizing: border-box; }
+.s-tracing span { position: absolute; left: 6px; top: 4px; font: 700 22px system-ui; color: #ffcc4d; }
+.s-picked { display: inline-flex; align-items: center; gap: 6px; }
+.s-chip { display: inline-block; width: 22px; height: 22px; border-radius: 4px; border: 1px solid rgba(255, 255, 255, .4); vertical-align: middle; }
+.s-chip-btn { cursor: pointer; padding: 0; margin-right: 4px; }

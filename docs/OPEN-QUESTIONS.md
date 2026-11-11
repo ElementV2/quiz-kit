@@ -42,7 +42,11 @@
       compteur fps 5 min. Mesuré en Chromium headless (Playwright) : 60 fps en `full`. Garder `light` par défaut
       tant que le bench réel n'est pas fait.
 - [ ] Version de Chromium dans vMix 29 (non mentionnée dans les notes de version).
-- [ ] ag-psd : écriture des noms / positions de calques, à confirmer dans les types installés (phase 2).
+- [x] ag-psd 34.1 : `readPsd(buffer, { skipLayerImageData, skipThumbnail })` / `writePsd(psd)` vérifiés dans
+      `dist/index.d.ts` et `psd.d.ts` (Layer : name, top/left/bottom/right, canvas, children, opened, protected,
+      text.style.font.name / fontSize / fillColor). Écriture puis relecture testées (e2e). Constat : un calque
+      sans pixels est relu avec des bornes nulles. Sous Node, la lecture exige `skipCompositeImageData` (pas de canvas).
+- [ ] PSD réels de graphistes (calques de forme, objets dynamiques, effets) : à valider sur un vrai fichier livré.
 - [ ] Twitch : coût exact de `channel.chat.message`, débit max par connexion, keepalive par défaut.
 - [ ] YouTube : statut (GA ?) et durée max d'une connexion `streamList`.
 - [ ] Mode kiosque sur le parc retenu (Accès guidé iOS / épinglage Android).

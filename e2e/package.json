@@ -10,6 +10,7 @@
   "devDependencies": {
     "@playwright/test": "1.65.0",
     "@quiz/schema": "workspace:*",
-    "@quiz/server": "workspace:*"
+    "@quiz/server": "workspace:*",
+    "ag-psd": "34.1.0"
   }
 }

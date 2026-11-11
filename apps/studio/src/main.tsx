@@ -7,7 +7,8 @@ import { Button, Panel } from "@quiz/ui";
 import "@quiz/ui/ui.css";
 import "./studio.css";
 import { api, download, imageSize, mediaUrl, svgToPng, type GameSummary } from "./api.ts";
-import { SAFE_AREAS, SIMULATED_PHASES, assetSheetCsv, clampRect, deriveStates, longestText, matchDeliveredAssets, outsideSafe, simulateView, templateSvg, type SimulatedPhase } from "./studio-logic.ts";
+import { alignRects, assetSheetHtml, distributeRects, duplicateZone, freeId, pickColor, psdTemplateLayers, rectFromDrag, sceneIds, zonesFromPsd } from "./design-import.ts";
+import { SAFE_AREAS, SIMULATED_PHASES, assetSheet, assetSheetCsv, clampRect, deriveStates, longestText, matchDeliveredAssets, outsideSafe, simulateView, templateSvg, type SimulatedPhase } from "./studio-logic.ts";
 
 const hex = (n: number): string => {
   const b = new Uint8Array(n);
@@ -274,7 +275,130 @@ function SceneEditor(p: { doc: GameDocument; update: (f: (d: GameDocument) => vo
   const [refOpacity, setRefOpacity] = createSignal(0.5);
   const [report, setReport] = createSignal<string | null>(null);
   const [scale, setScale] = createSignal(0.5);
+  /** Canvas tool: select / move, trace a new zone on the reference, eyedropper on the reference. */
+  const [tool, setTool] = createSignal<"select" | "trace" | "pick">("select");
+  const [traceType, setTraceType] = createSignal<Zone["type"]>("text");
+  const [tracing, setTracing] = createSignal<Zone["rect"] | null>(null);
+  const [picked, setPicked] = createSignal<string | null>(null);
+  /** Extra zones selected with Shift (align / distribute). The first selected zone is the reference. */
+  const [multi, setMulti] = createSignal<{ layer: number; zone: number }[]>([]);
+  const [psdInfo, setPsdInfo] = createSignal<{ fonts: { name: string; size: number | null; layer: string }[]; colors: string[] } | null>(null);
+  let refPixels: ImageData | null = null;
+  createEffect(() => {
+    const h = refHash();
+    refPixels = null;
+    if (h === null) return;
+    const img = new Image();
+    img.src = mediaUrl(h);
+    void img.decode().then(() => {
+      const c = document.createElement("canvas");
+      c.width = 1920;
+      c.height = 1080;
+      const ctx = c.getContext("2d", { willReadFrequently: true });
+      ctx?.drawImage(img, 0, 0, 1920, 1080);
+      refPixels = ctx?.getImageData(0, 0, 1920, 1080) ?? null; // same origin (/media): canvas not tainted
+    }).catch(() => undefined);
+  });
   let box: HTMLDivElement | undefined;
+  let stage: HTMLDivElement | undefined;
+  const toStage = (e: PointerEvent): { x: number; y: number } => {
+    const r = stage?.getBoundingClientRect();
+    return r === undefined ? { x: 0, y: 0 } : { x: (e.clientX - r.left) / scale(), y: (e.clientY - r.top) / scale() };
+  };
+  const size = () => scene()?.size ?? { w: 1920, h: 1080 };
+  const onCanvasDown = (e: PointerEvent) => {
+    if (tool() === "pick") {
+      const pt = toStage(e);
+      setPicked(refPixels === null ? null : pickColor(refPixels.data, refPixels.width, pt.x, pt.y));
+      return;
+    }
+    if (tool() !== "trace") {
+      setSel(null);
+      setMulti([]);
+      return;
+    }
+    e.preventDefault();
+    const a = toStage(e);
+    const move = (ev: PointerEvent) => setTracing(rectFromDrag(a, toStage(ev), size(), 8));
+    const up = (ev: PointerEvent) => {
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", up);
+      setTracing(null);
+      const r = rectFromDrag(a, toStage(ev), size(), 8);
+      if (r !== null) addZone(traceType(), r);
+    };
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", up);
+  };
+  const selection = (): { layer: number; zone: number }[] => {
+    const s = sel();
+    return s === null || s.zone < 0 ? [] : [s, ...multi().filter((m) => m.layer !== s.layer || m.zone !== s.zone)];
+  };
+  const arrange = (f: (rects: Zone["rect"][]) => Zone["rect"][]) => p.update((d) => {
+    const sc = d.scenes[sceneIdx()];
+    const zones = selection().map((s) => sc?.layers[s.layer]?.zones[s.zone]).filter((z): z is Zone => z !== undefined);
+    f(zones.map((z) => ({ ...z.rect }))).forEach((r, i) => { const z = zones[i]; if (z !== undefined) z.rect = r; });
+  });
+  const duplicate = () => p.update((d) => {
+    const s = sel();
+    const sc = d.scenes[sceneIdx()];
+    const layer = s === null ? undefined : sc?.layers[s.layer];
+    const z = s === null ? undefined : layer?.zones[s.zone];
+    if (sc === undefined || layer === undefined || z === undefined || s === null) return;
+    layer.zones.push(duplicateZone(z, sceneIds(sc), sc.size));
+    setSel({ layer: s.layer, zone: layer.zones.length - 1 });
+  });
+  const importPsd = async (f: File | undefined) => {
+    if (f === undefined) return;
+    setReport("Lecture du PSD…");
+    try {
+      const { readPsd } = await import("ag-psd");
+      const psd = readPsd(await f.arrayBuffer(), { skipLayerImageData: true, skipThumbnail: true });
+      const sc = scene();
+      const r = zonesFromPsd(psd.children ?? [], sc?.size ?? { w: psd.width, h: psd.height });
+      if (psd.canvas !== undefined) {
+        const blob = await new Promise<Blob | null>((res) => psd.canvas?.toBlob(res, "image/png"));
+        if (blob !== null) setRefHash((await api.upload(new File([blob], `${f.name}.png`, { type: "image/png" }))).hash);
+      }
+      p.update((d) => {
+        const target = d.scenes[sceneIdx()];
+        if (target === undefined || r.zones.length === 0) return;
+        const taken = sceneIds(target);
+        let layer = target.layers.find((l) => l.id === "psd");
+        if (layer === undefined) {
+          layer = { id: "psd", name: "Import PSD", z: 10, mode: "auto", phases: [], zones: [] };
+          target.layers.push(layer);
+        }
+        for (const z of r.zones) layer.zones.push(taken.has(z.id) ? { ...z, id: freeId(z.id, taken) } : z);
+      });
+      setPsdInfo({ fonts: r.fonts, colors: r.colors });
+      setReport(`PSD ${psd.width}×${psd.height} : ${r.zones.length} zone(s) créée(s)${r.ignored.length > 0 ? ` · ignorés : ${r.ignored.join(", ")}` : ""}${psd.width !== 1920 || psd.height !== 1080 ? " · attention : le PSD n'est pas en 1920×1080" : ""}`);
+    } catch (err) {
+      setReport(`PSD illisible : ${err instanceof Error ? err.message : String(err)}`);
+    }
+  };
+  const setThemeColor = (k: keyof Theme["colors"], c: string) => p.update((d) => {
+    if (d.theme === undefined) d.theme = structuredClone(DEFAULT_THEME);
+    d.theme.colors[k] = c;
+  });
+  const printSheet = () => {
+    const sc = scene();
+    const v = GameDocument.safeParse(snapshot(p.doc));
+    if (sc === undefined || !v.success) return;
+    const nine = (zone: string) => {
+      const z = sc.layers.flatMap((l) => l.zones).find((x) => x.id === zone);
+      const n = ["nineTop", "nineRight", "nineBottom", "nineLeft"].map((k) => Number(z?.props[k] ?? 0));
+      return n.some((x) => x > 0) ? n.join(" / ") : "—";
+    };
+    const frame = document.createElement("iframe");
+    frame.style.cssText = "position:fixed;width:0;height:0;border:0;right:0;bottom:0";
+    frame.srcdoc = assetSheetHtml(sc, assetSheet(sc), nine, templateSvg(sc, v.data));
+    frame.addEventListener("load", () => {
+      frame.contentWindow?.print(); // the browser's « Enregistrer en PDF »
+      setTimeout(() => frame.remove(), 60_000);
+    }, { once: true });
+    document.body.append(frame);
+  };
   onMount(() => {
     if (box === undefined) return;
     const el = box;
@@ -297,21 +421,27 @@ function SceneEditor(p: { doc: GameDocument; update: (f: (d: GameDocument) => vo
     const z = s === null ? undefined : d.scenes[sceneIdx()]?.layers[s.layer]?.zones[s.zone];
     if (z !== undefined) f(z);
   });
-  const addZone = (type: Zone["type"]) => p.update((d) => {
+  const addZone = (type: Zone["type"], rect: Zone["rect"] = { x: 760, y: 440, w: 400, h: 200 }) => p.update((d) => {
     const sc = d.scenes[sceneIdx()];
     if (sc === undefined) return;
     if (sc.layers.length === 0) sc.layers.push({ id: "set", name: "Plateau", z: 10, mode: "auto", phases: [], zones: [] });
     const li = sel()?.layer ?? 0;
     const layer = sc.layers[li] ?? sc.layers[0];
     if (layer === undefined) return;
-    layer.zones.push({ id: `${type}-${hex(2)}`, type, rect: { x: 760, y: 440, w: 400, h: 200 }, props: {}, style: {}, states: {} });
+    layer.zones.push({ id: `${type}-${hex(2)}`, type, rect, props: {}, style: {}, states: {} });
     setSel({ layer: sc.layers.indexOf(layer), zone: layer.zones.length - 1 });
   });
 
   // Drag (move) or resize with pointer events, snapped to the grid and clamped to the canvas.
   const startDrag = (e: PointerEvent, li: number, zi: number, mode: "move" | "resize") => {
+    if (tool() !== "select") return; // let the canvas trace / pick through zones
     e.preventDefault();
     e.stopPropagation();
+    if (e.shiftKey && sel() !== null && mode === "move") {
+      setMulti((m) => (m.some((x) => x.layer === li && x.zone === zi) ? m.filter((x) => x.layer !== li || x.zone !== zi) : [...m, { layer: li, zone: zi }]));
+      return;
+    }
+    setMulti([]);
     setSel({ layer: li, zone: zi });
     const z = scene()?.layers[li]?.zones[zi];
     if (z === undefined) return;
@@ -330,13 +460,14 @@ function SceneEditor(p: { doc: GameDocument; update: (f: (d: GameDocument) => vo
     window.addEventListener("pointerup", up);
   };
 
-  const exportTemplate = async (kind: "svg" | "png" | "csv") => {
+  const exportTemplate = async (kind: "svg" | "png" | "csv" | "psd") => {
     const sc = scene();
     const v = GameDocument.safeParse(snapshot(p.doc));
     if (sc === undefined || !v.success) return;
     const svg = templateSvg(sc, v.data);
     if (kind === "svg") download(`gabarit-${sc.id}.svg`, svg, "image/svg+xml");
     else if (kind === "csv") download(`assets-${sc.id}.csv`, assetSheetCsv(sc), "text/csv");
+    else if (kind === "psd") download(`gabarit-${sc.id}.psd`, await templatePsd(sc, svg), "image/vnd.adobe.photoshop");
     else download(`gabarit-${sc.id}.png`, await svgToPng(svg, sc.size.w, sc.size.h));
   };
   const reimport = async (files: FileList | null) => {
@@ -378,10 +509,43 @@ function SceneEditor(p: { doc: GameDocument; update: (f: (d: GameDocument) => vo
             </select>
             <label class="muted">Question <input class="s-num" type="number" min="1" max={p.doc.questions.length} value={qIndex() + 1} onInput={(e) => setQIndex(Math.max(0, Math.min(p.doc.questions.length - 1, Number(e.currentTarget.value) - 1)))} /></label>
             <label class="q-btn q-btn-ghost s-file">Calque de référence<input type="file" accept="image/*" onChange={(e) => void uploadRef(e.currentTarget.files?.[0])} /></label>
+            <label class="q-btn q-btn-ghost s-file" title="Calques nommés zone:<type>:<id> → zones">Importer un PSD<input type="file" accept=".psd,image/vnd.adobe.photoshop" onChange={(e) => void importPsd(e.currentTarget.files?.[0])} /></label>
             <Show when={refHash()}><input type="range" min="0" max="1" step="0.05" value={refOpacity()} onInput={(e) => setRefOpacity(Number(e.currentTarget.value))} title="opacité de la référence" /></Show>
           </div>
-          <div ref={box} class="s-canvas" style={{ "--s": String(scale()) }} onPointerDown={() => setSel(null)}>
-            <div class="s-stage">
+          <div class="s-row s-tools">
+            <span class="muted">Outil :</span>
+            <Button kind={tool() === "select" ? "primary" : "ghost"} onClick={() => setTool("select")}>Sélection</Button>
+            <Button kind={tool() === "trace" ? "primary" : "ghost"} onClick={() => setTool("trace")}>Tracer une zone</Button>
+            <Show when={tool() === "trace"}>
+              <select value={traceType()} onChange={(e) => { const t = ZoneType.safeParse(e.currentTarget.value); if (t.success) setTraceType(t.data); }}>
+                <For each={ZoneType.options}>{(t) => <option value={t}>{t}</option>}</For>
+              </select>
+            </Show>
+            <Button kind={tool() === "pick" ? "primary" : "ghost"} disabled={refHash() === null} onClick={() => setTool("pick")} title="Couleur sur le calque de référence">Pipette</Button>
+            <Show when={picked()}>
+              {(c) => (
+                <span class="s-picked">
+                  <span class="s-chip" style={{ background: c() }} /> <code>{c()}</code> →
+                  <For each={["primary", "accent", "surface", "text"] as const}>{(k) => <Button kind="secondary" onClick={() => setThemeColor(k, c())}>{COLOR_LABELS[k]}</Button>}</For>
+                </span>
+              )}
+            </Show>
+          </div>
+          <Show when={selection().length > 0}>
+            <div class="s-row s-align">
+              <span class="muted">{selection().length > 1 ? `Aligner ${selection().length} zones sur la première :` : "Aligner sur le canevas :"}</span>
+              <For each={[["left", "⇤"], ["center-h", "↔"], ["right", "⇥"], ["top", "⤒"], ["center-v", "↕"], ["bottom", "⤓"]] as const}>
+                {([m, icon]) => <Button kind="ghost" title={m} onClick={() => arrange((rs) => alignRects(rs, m, size()))}>{icon}</Button>}
+              </For>
+              <Show when={selection().length > 2}>
+                <Button kind="ghost" onClick={() => arrange((rs) => distributeRects(rs, "x"))}>Répartir ↔</Button>
+                <Button kind="ghost" onClick={() => arrange((rs) => distributeRects(rs, "y"))}>Répartir ↕</Button>
+              </Show>
+              <span class="muted">Maj + clic : ajouter une zone à la sélection</span>
+            </div>
+          </Show>
+          <div ref={box} class="s-canvas" data-tool={tool()} style={{ "--s": String(scale()) }} onPointerDown={onCanvasDown}>
+            <div ref={stage} class="s-stage">
               <Show when={refHash()}>{(h) => <img class="s-ref" src={mediaUrl(h())} alt="" style={{ opacity: refOpacity() }} />}</Show>
               <Show when={scene()}>{(sc) => <SceneRenderer scene={sc()} theme={p.doc.theme ?? DEFAULT_THEME} view={view()} serverNow={() => Date.now()} />}</Show>
               <div class="s-safe s-safe-action" style={{ left: `${SAFE_AREAS.action.x}px`, top: `${SAFE_AREAS.action.y}px`, width: `${SAFE_AREAS.action.w}px`, height: `${SAFE_AREAS.action.h}px` }} />
@@ -390,7 +554,7 @@ function SceneEditor(p: { doc: GameDocument; update: (f: (d: GameDocument) => vo
                 {(l, li) => (
                   <For each={l.zones}>
                     {(z, zi) => (
-                      <div class="s-zone" data-sel={String(sel()?.layer === li() && sel()?.zone === zi())} data-warn={String(outsideSafe(z))} data-off={String(!layerVisible(l, view()?.phase ?? "idle", {}) && sel()?.layer !== li())} style={{ left: `${z.rect.x}px`, top: `${z.rect.y}px`, width: `${z.rect.w}px`, height: `${z.rect.h}px` }} onPointerDown={(e) => startDrag(e, li(), zi(), "move")}>
+                      <div class="s-zone" data-sel={String(sel()?.layer === li() && sel()?.zone === zi())} data-multi={String(multi().some((m) => m.layer === li() && m.zone === zi()))} data-warn={String(outsideSafe(z))} data-off={String(!layerVisible(l, view()?.phase ?? "idle", {}) && sel()?.layer !== li())} style={{ left: `${z.rect.x}px`, top: `${z.rect.y}px`, width: `${z.rect.w}px`, height: `${z.rect.h}px` }} onPointerDown={(e) => startDrag(e, li(), zi(), "move")}>
                         <span class="s-zone-label">{z.id}</span>
                         <span class="s-handle" onPointerDown={(e) => startDrag(e, li(), zi(), "resize")} />
                       </div>
@@ -398,8 +562,22 @@ function SceneEditor(p: { doc: GameDocument; update: (f: (d: GameDocument) => vo
                   </For>
                 )}
               </For>
+              <Show when={tracing()}>{(t) => <div class="s-tracing" style={{ left: `${t().x}px`, top: `${t().y}px`, width: `${t().w}px`, height: `${t().h}px` }}><span>{t().w}×{t().h}</span></div>}</Show>
             </div>
           </div>
+          <Show when={psdInfo()}>
+            {(i) => (
+              <Panel title="Relevé du PSD (pipette police / couleur)">
+                <Show when={i().fonts.length > 0} fallback={<p class="muted">Aucun calque texte.</p>}>
+                  <p>Polices : <For each={i().fonts}>{(f) => <Button kind="secondary" title={`calque « ${f.layer} »`} onClick={() => p.update((d) => { if (d.theme === undefined) d.theme = structuredClone(DEFAULT_THEME); d.theme.font.family = f.name; })}>{f.name}{f.size !== null ? ` · ${Math.round(f.size)} px` : ""}</Button>}</For></p>
+                  <p class="muted">Vérifier la licence de la police avant diffusion (doc 07).</p>
+                </Show>
+                <Show when={i().colors.length > 0}>
+                  <p>Couleurs des textes : <For each={i().colors}>{(c) => <button type="button" class="s-chip s-chip-btn" style={{ background: c }} title={c} onClick={() => setPicked(c)} />}</For></p>
+                </Show>
+              </Panel>
+            )}
+          </Show>
           <div class="s-row">
             <span class="muted">Ajouter une zone :</span>
             <For each={ZoneType.options}>{(t) => <Button kind="secondary" onClick={() => addZone(t)}>{t}</Button>}</For>
@@ -408,7 +586,9 @@ function SceneEditor(p: { doc: GameDocument; update: (f: (d: GameDocument) => vo
             <div class="s-row">
               <Button kind="secondary" onClick={() => void exportTemplate("svg")}>Gabarit SVG</Button>
               <Button kind="secondary" onClick={() => void exportTemplate("png")}>Gabarit PNG</Button>
+              <Button kind="secondary" onClick={() => void exportTemplate("psd")}>Gabarit PSD (calques)</Button>
               <Button kind="secondary" onClick={() => void exportTemplate("csv")}>Fiche assets (CSV)</Button>
+              <Button kind="secondary" onClick={printSheet}>Fiche assets (PDF)</Button>
               <label class="q-btn s-file">Réimporter les assets livrés<input type="file" multiple accept="image/png" onChange={(e) => void reimport(e.currentTarget.files)} /></label>
             </div>
             <p class="muted">Convention : <code>&lt;zone&gt;_&lt;état&gt;@2x.png</code>, un fichier par état (pas par case).</p>
@@ -418,7 +598,7 @@ function SceneEditor(p: { doc: GameDocument; update: (f: (d: GameDocument) => vo
         <aside class="s-inspector">
           <LayersPanel scene={scene()} sel={sel()} onSelect={(li) => setSel({ layer: li, zone: -1 })} update={(f) => p.update((d) => { const sc = d.scenes[sceneIdx()]; if (sc !== undefined) f(sc); })} />
           <Show when={selectedZone()} fallback={<Panel title="Inspecteur"><p class="muted">Sélectionner une zone sur le canevas.</p></Panel>}>
-            {(z) => <ZoneInspector zone={z()} doc={p.doc} refHash={refHash()} edit={editZone} remove={() => p.update((d) => { const s = sel(); if (s !== null) d.scenes[sceneIdx()]?.layers[s.layer]?.zones.splice(s.zone, 1); setSel(null); })} />}
+            {(z) => <ZoneInspector zone={z()} doc={p.doc} refHash={refHash()} edit={editZone} duplicate={duplicate} remove={() => p.update((d) => { const s = sel(); if (s !== null) d.scenes[sceneIdx()]?.layers[s.layer]?.zones.splice(s.zone, 1); setSel(null); })} />}
           </Show>
         </aside>
       </div>
@@ -478,7 +658,7 @@ function JsonField(p: { label: string; value: unknown; onChange: (v: Record<stri
   );
 }
 
-function ZoneInspector(p: { zone: Zone; doc: GameDocument; refHash: string | null; edit: (f: (z: Zone) => void) => void; remove: () => void }) {
+function ZoneInspector(p: { zone: Zone; doc: GameDocument; refHash: string | null; edit: (f: (z: Zone) => void) => void; duplicate: () => void; remove: () => void }) {
   const longest = () => longestText(p.doc, p.zone);
   const nine = () => ({ t: Number(p.zone.props["nineTop"] ?? 0), r: Number(p.zone.props["nineRight"] ?? 0), b: Number(p.zone.props["nineBottom"] ?? 0), l: Number(p.zone.props["nineLeft"] ?? 0) });
   const applyNine = async (f: File | undefined) => {
@@ -507,6 +687,7 @@ function ZoneInspector(p: { zone: Zone; doc: GameDocument; refHash: string | nul
       <JsonField label="États (style par état)" value={p.zone.states} onChange={(v) => p.edit((z) => { z.states = Object.fromEntries(Object.entries(v).filter(([, x]) => typeof x === "object" && x !== null).map(([k, x]) => [k, Object.fromEntries(Object.entries(x as object).map(([a, b]) => [a, String(b)]))])); })} /> {/* oxlint-disable-line typescript/no-unsafe-type-assertion -- filtered to objects above */}
       <div class="s-row">
         <Button kind="secondary" onClick={() => p.edit((z) => { z.states = deriveStates(z); })}>Dériver les états manquants</Button>
+        <Button kind="secondary" onClick={p.duplicate}>Dupliquer</Button>
         <Show when={p.refHash}>{(h) => <Button kind="secondary" onClick={() => p.edit((z) => { z.style["background-image"] = `url(${mediaUrl(h())})`; z.style["background-size"] = "1920px 1080px"; z.style["background-position"] = `-${z.rect.x}px -${z.rect.y}px`; })}>Découper le fond depuis la référence</Button>}</Show>
       </div>
       <details>
@@ -521,6 +702,43 @@ function ZoneInspector(p: { zone: Zone; doc: GameDocument; refHash: string | nul
       <Button kind="danger" onClick={p.remove}>Supprimer la zone</Button>
     </Panel>
   );
+}
+
+function zoneCanvas(w: number, h: number): HTMLCanvasElement {
+  const c = document.createElement("canvas");
+  c.width = w;
+  c.height = h;
+  const ctx = c.getContext("2d");
+  if (ctx !== null) {
+    ctx.fillStyle = "rgba(124, 92, 255, 0.25)";
+    ctx.fillRect(0, 0, w, h);
+  }
+  return c;
+}
+
+/**
+ * PSD template (doc 07 B): the SVG template as a locked background, then one group per scene layer with one layer per
+ * zone named `zone:<type>:<id>` — the designer paints inside, the studio re-imports it as is (« Importer un PSD »).
+ */
+async function templatePsd(sc: Scene, svg: string): Promise<Blob> {
+  const { writePsd } = await import("ag-psd");
+  const bg = document.createElement("canvas");
+  bg.width = sc.size.w;
+  bg.height = sc.size.h;
+  const img = new Image();
+  img.src = URL.createObjectURL(await svgToPng(svg, sc.size.w, sc.size.h));
+  await img.decode();
+  bg.getContext("2d")?.drawImage(img, 0, 0);
+  URL.revokeObjectURL(img.src);
+  const groups = new Map<string, { name: string; left: number; top: number; canvas: HTMLCanvasElement }[]>();
+  for (const l of psdTemplateLayers(sc)) groups.set(l.group, [...(groups.get(l.group) ?? []), { name: l.name, left: l.rect.x, top: l.rect.y, canvas: zoneCanvas(l.rect.w, l.rect.h) }]);
+  const buf = writePsd({
+    width: sc.size.w,
+    height: sc.size.h,
+    canvas: bg,
+    children: [{ name: "Gabarit (référence)", canvas: bg, left: 0, top: 0, protected: { position: true, composite: true, transparency: true } }, ...[...groups].map(([name, children]) => ({ name, opened: true, children }))],
+  });
+  return new Blob([buf], { type: "image/vnd.adobe.photoshop" });
 }
 
 // ───────────────────────────── Thème ─────────────────────────────

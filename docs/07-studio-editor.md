@@ -26,10 +26,20 @@
 - PSD avec calques nommés selon convention → zones créées automatiquement.
 - Pipette police/couleur sur la maquette.
 
+**Implémenté (phase 2)** — outils du canevas : Sélection (Maj + clic = sélection multiple, barre aligner /
+répartir), Tracer une zone (glisser sur la référence, type au choix), Pipette (couleur lue sur le calque de
+référence → primaire / accent / fond / texte). « Importer un PSD » (ag-psd, chargé à la demande) : l'image
+aplatie devient le calque de référence, chaque calque ou groupe nommé **`zone:<type>:<id>`** devient une zone
+(bornes = pixels du calque, groupe = union des enfants), les calques texte donnent polices / tailles / couleurs.
+Un calque vide (sans pixels) n'a pas de bornes dans un PSD : il est signalé « calque vide ».
+
 ### B. Gabarit → le graphiste livre propre
 - Export par scène : gabarit 1920×1080 (PNG + SVG) avec zones, noms, coordonnées, tailles, 9-slice,
   safe areas, texte le plus long posé ; fichier calques (PSD via ag-psd si validé, sinon SVG multi-calques) ;
   fiche assets (PDF + CSV : fichier, zone, x, y, w×h 1x, taille 2x, 9-slice, états).
+  **Implémenté** : gabarit PSD = gabarit SVG en fond verrouillé + un groupe par couche de scène, un calque par
+  zone déjà nommé `zone:<type>:<id>` (réimport direct, testé aller-retour) ; fiche PDF = page A4 imprimée par
+  le navigateur (« Enregistrer en PDF »), pas de librairie PDF embarquée.
 - Une zone répétée = un fichier par état, pas un par case.
 - Réimport par convention de nommage (`<zone>_<state>@2x.png`), rapport des manquants / mauvaises tailles.
 - Zone agrandie après livraison : 9-slice OK, sinon asset marqué « à refaire » et fiche régénérée.
