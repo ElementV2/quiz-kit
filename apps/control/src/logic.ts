@@ -205,3 +205,18 @@ export function ledgerRows(v: {
     return { id: e.id, at: e.at, who: names.get(id) ?? "(retiré)", delta: e.delta, why: e.note ?? REASON_LABEL[e.reason], question: e.questionId === null ? null : (questions.get(e.questionId) ?? null), voided: e.voided };
   });
 }
+
+type LayerZone = { readonly type: string; readonly bind?: string | undefined; readonly props?: Readonly<Record<string, unknown>> | undefined };
+
+/** What a manual layer puts on air, in words (Couches tab): « titre de la manche : « Manche 1 » », « « Pause » »… */
+export function layerShows(zones: readonly LayerZone[], roundTitle: string | null): string {
+  const parts = zones.map((z) => {
+    if (z.type !== "text") return z.type === "leaderboard" ? "le classement" : z.type === "timer" ? "le chrono" : z.type === "image" ? "une image" : z.type;
+    if (z.bind === "round.title") return `le titre de la manche (${roundTitle === null ? "aucune manche en cours" : `« ${roundTitle} »`})`;
+    if (z.bind === "question.prompt.text") return "le texte de la question";
+    if (z.bind !== undefined) return `la donnée ${z.bind}`;
+    const t = z.props?.["text"];
+    return typeof t === "string" && t !== "" ? `« ${t} »` : "un texte vide";
+  });
+  return parts.length === 0 ? "rien (couche vide)" : parts.join(", ");
+}

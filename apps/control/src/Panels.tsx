@@ -1,9 +1,9 @@
 import { For, Show, createMemo, createResource, createSignal, onCleanup, onMount, type JSX } from "solid-js";
-import { OUTPUT_SCENES, gameFromQuestions, parseQuestionsCsv, type Action, type ControlView, type Participant } from "@quiz/schema";
+import { OUTPUT_SCENES, gameFromQuestions, parseQuestionsCsv, type Action, type ControlView, type Participant, type Scene } from "@quiz/schema";
 import { Button, confirmDialog } from "@quiz/ui";
 import { api, hex, lanOrigin, type LinksResponse } from "./api.ts";
 import { copyText } from "./Integrations.tsx";
-import { parsePlayersCsv } from "./logic.ts";
+import { layerShows, parsePlayersCsv } from "./logic.ts";
 
 /** Right-column panels of the control room (players, layers, library, import, links). Intents or server calls only. */
 
@@ -32,18 +32,19 @@ export function useLayers(view: () => ControlView | null) {
   const [layers] = createResource(
     () => { const v = view(); return v === null ? undefined : `${v.sessionId}:${v.gameVersion}`; },
     async () => {
-      const r = await api<{ scenes: { layers: { id: string; name: string; mode: string }[] }[] }>("/api/presentation").catch(() => ({ scenes: [] }));
-      const scenes = r.scenes.length > 0 ? r.scenes : Object.values(OUTPUT_SCENES);
-      const seen = new Map<string, string>();
-      for (const s of scenes) for (const l of s.layers) if (l.mode !== "auto" && !seen.has(l.id)) seen.set(l.id, l.name);
-      return [...seen].map(([id, name]) => ({ id, name }));
+      type L = Scene["layers"][number];
+      const r = await api<{ scenes: Scene[] }>("/api/presentation").catch((): { scenes: Scene[] } => ({ scenes: [] }));
+      const scenes: readonly Scene[] = r.scenes.length > 0 ? r.scenes : Object.values(OUTPUT_SCENES);
+      const seen = new Map<string, L>();
+      for (const s of scenes) for (const l of s.layers) if (l.mode !== "auto" && !seen.has(l.id)) seen.set(l.id, l);
+      return [...seen.values()].map((l) => ({ id: l.id, name: l.name, zones: l.zones }));
     },
   );
   return () => layers() ?? [];
 }
 
 /** TAKE puts a layer on air, OUT takes it off. */
-export function LayersPanel(p: { readonly view: ControlView; readonly layers: readonly { id: string; name: string }[]; readonly act: Act }): JSX.Element {
+export function LayersPanel(p: { readonly view: ControlView; readonly layers: readonly { id: string; name: string; zones: Parameters<typeof layerShows>[0] }[]; readonly act: Act }): JSX.Element {
   return (
     <Show when={p.layers.length > 0} fallback={<p class="muted">Aucune couche manuelle dans les scènes.</p>}>
       <ul class="c-list">
@@ -52,7 +53,7 @@ export function LayersPanel(p: { readonly view: ControlView; readonly layers: re
             const onAir = () => p.view.layers[l.id] === true;
             return (
               <li class="c-list-row" data-air={String(onAir())}>
-                <span class="c-grow">{l.name}</span>
+                <span class="c-grow">{l.name}<br /><small class="muted">Affiche {layerShows(l.zones, p.view.round?.title ?? null)}. Réglable dans le studio, onglet Scènes.</small></span>
                 <Show when={onAir()}><span class="q-tally" data-on="air">Antenne</span></Show>
                 <Button kind={onAir() ? "danger" : "primary"} onClick={() => void p.act(onAir() ? { type: "layer.out", layerId: l.id } : { type: "layer.take", layerId: l.id })}>{onAir() ? "OUT" : "TAKE"}</Button>
               </li>

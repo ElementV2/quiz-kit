@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { AnswerSpec } from "@quiz/schema";
 import { splitCsvRow } from "@quiz/schema";
-import { DEFAULT_BUZZER_KEYS, REGRADABLE_KINDS, assignBuzzerKey, buzzerKey, keyLabel, keyOfSeat, parseAcceptedLines, parseBuzzerKeys, ledgerRows, parsePlayersCsv, regradeSpec } from "./logic.ts";
+import { DEFAULT_BUZZER_KEYS, REGRADABLE_KINDS, assignBuzzerKey, buzzerKey, keyLabel, keyOfSeat, parseAcceptedLines, parseBuzzerKeys, layerShows, ledgerRows, parsePlayersCsv, regradeSpec } from "./logic.ts";
 
 describe("players CSV", () => {
   it("parses ; , and tab separated lines, header optional", () => {
@@ -86,6 +86,15 @@ describe("ledgerRows (points history)", () => {
       ],
     });
     expect(rows.map((r) => [r.who, r.delta, r.why, r.question, r.voided])).toEqual([["équipe Rouges", -5, "réglage manuel", null, true], ["Ana", 100, "réponse", "Manche 1 · Q2", false]]);
+  });
+});
+
+describe("layerShows (Couches tab)", () => {
+  it("says what a manual layer puts on air", () => {
+    expect(layerShows([{ type: "text", bind: "round.title" }], "Manche 1")).toBe("le titre de la manche (« Manche 1 »)");
+    expect(layerShows([{ type: "text", bind: "round.title" }], null)).toBe("le titre de la manche (aucune manche en cours)");
+    expect(layerShows([{ type: "text", props: { text: "Pause" } }, { type: "leaderboard" }], null)).toBe("« Pause », le classement");
+    expect(layerShows([], null)).toBe("rien (couche vide)");
   });
 });
 

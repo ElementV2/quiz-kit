@@ -26,6 +26,32 @@ const ZONE_LABEL: Record<ZoneType, string> = {
   "board-grid": "Grille du plateau",
 };
 
+/** What a text zone can show, in words (the bound value is read from the live view). */
+const TEXT_SOURCES: readonly (readonly [string, string])[] = [
+  ["", "Texte fixe (écrit ci-dessous)"],
+  ["round.title", "Titre de la manche en cours"],
+  ["question.prompt.text", "Texte de la question à l'antenne"],
+];
+
+/** « Texte affiché » of a text zone: a fixed text, or a live value (round title…). */
+function TextSource(p: { readonly zone: Zone; readonly edit: (f: (z: Zone) => void, key?: string) => void }): JSX.Element {
+  const known = () => TEXT_SOURCES.some(([v]) => v === (p.zone.bind ?? ""));
+  return (
+    <>
+      <label class="s-field"><span class="s-label">Texte affiché</span>
+        <select value={known() ? (p.zone.bind ?? "") : "other"} onChange={(e) => { const v = e.currentTarget.value; if (v !== "other") p.edit((z) => { if (v === "") delete z.bind; else z.bind = v; }); }}>
+          <For each={TEXT_SOURCES}>{([v, label]) => <option value={v}>{label}</option>}</For>
+          <Show when={!known()}><option value="other">Autre donnée : {p.zone.bind}</option></Show>
+        </select>
+      </label>
+      <Show when={p.zone.bind === undefined}>
+        <label class="s-field"><span class="s-label">Texte</span><input value={typeof p.zone.props["text"] === "string" ? p.zone.props["text"] : ""} placeholder="ex. Grande finale" onInput={(e) => { const v = e.currentTarget.value; p.edit((z) => { z.props["text"] = v; }, "ztext"); }} /></label>
+      </Show>
+      <Show when={p.zone.bind === "round.title"}><p class="muted s-hint">Le titre se règle dans Format (nom de chaque manche) ; entre deux parties, rien ne s'affiche.</p></Show>
+    </>
+  );
+}
+
 /** The scenes a game without its own uses (programme, classement, mur). */
 const BUILT_IN_SCENES: readonly Scene[] = Object.values(OUTPUT_SCENES);
 
@@ -158,7 +184,7 @@ export function SceneEditor(p: { doc: GameDocument; update: Update }): JSX.Eleme
   let gesture = 0;
   /** Zones a rubber band / Ctrl+A may take: visible layer, on screen in the simulated phase, not locked. */
   const pickable = (): { ref: ZoneRef; z: Zone }[] =>
-    (scene()?.layers ?? []).flatMap((l, li) => (hiddenLayers().has(l.id) || !layerVisible(l, view()?.phase ?? "idle", {}) ? [] : l.zones.flatMap((z, zi) => (zoneLocked(l, z) ? [] : [{ ref: { layer: li, zone: zi }, z }]))));
+    (scene()?.layers ?? []).flatMap((l, li) => (hiddenLayers().has(l.id) || (!layerVisible(l, view()?.phase ?? "idle", {}) && previewed()?.id !== l.id) ? [] : l.zones.flatMap((z, zi) => (zoneLocked(l, z) ? [] : [{ ref: { layer: li, zone: zi }, z }]))));
 
   const onCanvasDown = (e: PointerEvent) => {
     if (e.button !== 0) return;
@@ -388,10 +414,23 @@ export function SceneEditor(p: { doc: GameDocument; update: Update }): JSX.Eleme
     const v = GameDocument.safeParse(snapshot(p.doc));
     return v.success ? simulateView(v.data, phase(), qIndex()) : null;
   });
+  // The selected layer is always previewed on the canvas, even when the simulated phase or the control room (manual
+  // layer, TAKE) would keep it off air: you see what you are editing.
+  const previewed = (): Layer | undefined => scene()?.layers[layerSel() ?? sel()[0]?.layer ?? -1];
   const shownScene = createMemo((): Scene | undefined => {
     const sc = scene();
+    if (sc === undefined) return sc;
     const hidden = hiddenLayers();
-    return sc === undefined || hidden.size === 0 ? sc : { ...sc, layers: sc.layers.filter((l) => !hidden.has(l.id)) };
+    const forced = previewed()?.id;
+    return { ...sc, layers: sc.layers.filter((l) => !hidden.has(l.id)).map((l) => (l.id === forced ? { ...l, mode: "auto" as const, phases: [] } : l)) };
+  });
+  /** Why the previewed layer would not be on air in the simulated phase (said above the canvas). */
+  const previewNote = createMemo((): string | null => {
+    const l = previewed();
+    if (l === undefined) return null;
+    if (l.mode === "manual") return `Aperçu de « ${l.name} » : à l'antenne seulement quand la régie le lance (onglet Couches → TAKE).`;
+    if (!layerVisible(l, view()?.phase ?? "idle", {})) return `Aperçu de « ${l.name} » : absent de l'écran dans la phase simulée, montré ici pour l'éditer.`;
+    return null;
   });
   const addZone = (type: Zone["type"], rect: Rect = { x: 760, y: 440, w: 400, h: 200 }) => {
     const made: { ref: ZoneRef | null } = { ref: null };
@@ -578,6 +617,7 @@ export function SceneEditor(p: { doc: GameDocument; update: Update }): JSX.Eleme
               <p class="muted s-hint">Les raccourcis ne s'appliquent pas pendant la saisie dans un champ.</p>
             </div>
           </Show>
+          <Show when={previewNote()}>{(n) => <p class="s-hint s-preview-note">{n()}</p>}</Show>
           <div ref={setViewport} class="s-viewport">
             <div class="s-canvas" data-tool={tool()} style={{ "--s": String(scale()), width: `${size().w * scale()}px`, height: `${size().h * scale()}px` }} onPointerDown={onCanvasDown}>
               <div ref={stage} class="s-stage" style={{ width: `${size().w}px`, height: `${size().h}px` }}>
@@ -601,7 +641,7 @@ export function SceneEditor(p: { doc: GameDocument; update: Update }): JSX.Eleme
                               data-locked={String(zoneLocked(l, z))}
                               data-warn={String(outsideSafe(z))}
                               data-overflow={String(overflows(z.rect, size()))}
-                              data-off={String(!layerVisible(l, view()?.phase ?? "idle", {}) && !selected())}
+                              data-off={String(!layerVisible(l, view()?.phase ?? "idle", {}) && !selected() && previewed()?.id !== l.id)}
                               style={{ left: `${z.rect.x}px`, top: `${z.rect.y}px`, width: `${z.rect.w}px`, height: `${z.rect.h}px` }}
                               onPointerDown={(e) => startMove(e, r())}
                             >
@@ -744,7 +784,7 @@ function ZoneInspector(p: { zone: Zone; size: { w: number; h: number }; doc: Gam
       </div>
       <div class="s-section">
         <label class="s-field"><span class="s-label">Identifiant</span><input value={p.zone.id} onChange={(e) => { const v = e.currentTarget.value.toLowerCase().replaceAll(/[^0-9a-z-]/g, "-"); if (v.length > 0) p.edit((z) => { z.id = v; }); }} /></label>
-        <Show when={p.zone.type === "question" || p.zone.type === "text"}><label class="s-field"><span class="s-label">Donnée affichée (binding)</span><input placeholder="par défaut selon le type" value={p.zone.bind ?? ""} onChange={(e) => { const v = e.currentTarget.value; p.edit((z) => { if (v === "") delete z.bind; else z.bind = v; }); }} /></label></Show>
+        <Show when={p.zone.type === "text"}><TextSource zone={p.zone} edit={p.edit} /></Show>
         <Show when={longest().length > 0}><p class="muted s-hint">Texte le plus long ({longest().length} car.) : « {longest().slice(0, 80)} »</p></Show>
       </div>
       <div class="s-section">
