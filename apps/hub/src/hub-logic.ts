@@ -3,6 +3,8 @@
 export type HubEntry = { readonly label: string; readonly id: string; readonly role: string; readonly path: string };
 export type HubData = {
   readonly title: string;
+  readonly players: number;
+  readonly maxPlayers: number;
   readonly joinCode: string;
   readonly origins: readonly string[];
   readonly local: boolean;

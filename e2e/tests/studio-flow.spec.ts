@@ -13,7 +13,7 @@ const watch = (page: Page): string[] => {
   const errors: string[] = [];
   page.on("pageerror", (e) => errors.push(e.message));
   page.on("console", (m) => { if (m.type() === "error") errors.push(m.text()); });
-  page.on("dialog", (d) => void d.accept());
+  page.on("dialog", () => { throw new Error("native browser dialog: use the app dialog"); });
   return errors;
 };
 
@@ -37,6 +37,7 @@ test("studio Format « Enchaînement »: main → (tie) barrage loop → final �
   const errors = watch(studio);
   await studio.goto(path("studio"));
   await studio.getByRole("button", { name: "+ Nouvelle" }).click();
+  await studio.getByRole("menuitem", { name: "QCM rapide (Kahoot-like)" }).click(); // the demo questions
   await studio.locator(".s-title").fill("Enchaînement e2e");
 
   // Three rounds in the list: main (the template's), final, barrage — each with a question of the bank.
@@ -126,7 +127,7 @@ test("studio Format « Enchaînement »: main → (tie) barrage loop → final �
   await studio.screenshot({ path: "screenshots/studio-flow.png" });
 
   // Saved document: the flow in priority order, the moved node's position.
-  await studio.getByRole("button", { name: /Enregistrer/ }).click();
+  await studio.getByRole("button", { name: /^(Enregistr|Modifications|Non enregistré)/ }).click();
   await expect(studio.getByText("Enregistré", { exact: true }).first()).toBeVisible();
   const games = (await (await request.get(`/api/games?t=${token("studio")}`)).json()) as { games: { id: string; title: string }[] }; // oxlint-disable-line typescript/no-unsafe-type-assertion -- own endpoint
   const id = games.games.find((g) => g.title === "Enchaînement e2e")?.id ?? "";

@@ -193,3 +193,29 @@ kbd { font: 11px var(--ui-mono); padding: 1px 5px; border: 1px solid var(--ui-bo
 .q-crowd-bar i { display: block; height: 100%; background: var(--ui-text); }
 .q-crowd-bars li[data-majority="true"] .q-crowd-bar i { background: var(--ui-accent); }
 .q-crowd-n { text-align: right; color: var(--ui-muted); }
+
+/* App dialogs (Dialog.tsx): a desk panel over a dimmed show, never the browser's confirm(). */
+.q-dialog { padding: 0; border: 1px solid var(--ui-border-strong); border-radius: var(--ui-radius); background: var(--ui-surface); color: var(--ui-text); width: min(480px, calc(100vw - 32px)); box-shadow: 0 18px 60px rgba(0, 0, 0, .55); }
+.q-dialog::backdrop { background: rgba(8, 7, 6, .72); }
+.q-dialog[open] { animation: q-dialog-in .12s ease-out; }
+@keyframes q-dialog-in { from { opacity: 0; transform: translateY(6px); } }
+.q-dialog-body { display: grid; gap: 14px; padding: 18px 20px 16px; margin: 0; }
+.q-dialog-title { font-size: 19px; font-stretch: 82%; font-weight: 700; line-height: 1.2; }
+.q-dialog-message { margin: 0; color: var(--ui-muted); line-height: 1.45; white-space: pre-line; }
+.q-dialog-keys { display: flex; justify-content: flex-end; gap: 8px; padding-top: 4px; border-top: 1px solid var(--ui-border); margin-top: 2px; padding-top: 14px; }
+.q-dialog-keys .q-btn { min-width: 110px; }
+.q-dialog-danger { background: var(--ui-danger); color: var(--ui-danger-ink); }
+.q-dialog-danger:hover:not(:disabled) { filter: brightness(1.08); background: var(--ui-danger); }
+.q-dialog-copy { width: 100%; font-size: 12px; }
+@media (prefers-reduced-motion: reduce) { .q-dialog[open] { animation: none; } }
+
+/* Live stakes (StakesBar): a strip of keys, the active one lit in amber. */
+.q-stakes { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
+.q-stakes-label { font-size: 10px; font-weight: 650; font-stretch: 75%; text-transform: uppercase; letter-spacing: .14em; color: var(--ui-muted); margin-right: 4px; }
+.q-stakes-key { font: inherit; font-size: 12px; font-weight: 650; min-height: 28px; padding: 3px 10px; border: 1px solid var(--ui-border-strong); border-radius: var(--ui-radius); background: var(--ui-surface-2); color: var(--ui-text); cursor: pointer; }
+.q-stakes-key:hover:not(:disabled) { border-color: var(--ui-muted); }
+.q-stakes-key[data-on="true"] { background: var(--ui-accent); border-color: var(--ui-accent); color: var(--ui-accent-ink); }
+.q-stakes-key:disabled { opacity: .35; cursor: default; }
+.q-stakes-form { display: inline-flex; gap: 4px; }
+.q-stakes-form input { width: 92px; min-height: 28px; padding: 2px 8px; }
+.q-stakes-badge { display: inline-block; padding: 1px 8px; border-radius: var(--ui-radius); background: var(--ui-accent); color: var(--ui-accent-ink); font: 700 12px var(--ui-mono); letter-spacing: .04em; }

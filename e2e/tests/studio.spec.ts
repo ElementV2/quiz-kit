@@ -17,6 +17,7 @@ test("studio: content, scene simulation, generated theme, save, then the output 
   await studio.goto(path("studio"));
 
   await studio.getByRole("button", { name: "+ Nouvelle" }).click();
+  await studio.getByRole("menuitem", { name: "QCM rapide (Kahoot-like)" }).click(); // the demo questions
   await studio.locator(".s-title").fill("Soirée e2e");
   await studio.getByRole("button", { name: "+ QCM" }).click();
   await expect(studio.locator(".s-table tbody tr")).toHaveCount(4);
@@ -32,7 +33,7 @@ test("studio: content, scene simulation, generated theme, save, then the output 
   await studio.getByRole("button", { name: "Thème" }).click();
   await studio.locator(".s-variant").nth(1).getByRole("button", { name: "Appliquer" }).click(); // "Clair"
   await studio.screenshot({ path: "screenshots/studio-theme.png" });
-  await studio.getByRole("button", { name: /Enregistrer/ }).click();
+  await studio.getByRole("button", { name: /^(Enregistr|Modifications|Non enregistré)/ }).click();
   await expect(studio.getByText("Enregistré", { exact: true }).first()).toBeVisible();
 
   const games = (await (await request.get(`/api/games?t=${token("studio")}`)).json()) as { games: { id: string; title: string }[] }; // oxlint-disable-line typescript/no-unsafe-type-assertion -- own endpoint
@@ -75,6 +76,7 @@ test("studio design import: PSD named layers become zones, fonts / colours liste
   studio.on("console", (m) => { if (m.type() === "error") errors.push(m.text()); });
   await studio.goto(path("studio"));
   await studio.getByRole("button", { name: "+ Nouvelle" }).click();
+  await studio.getByRole("menuitem", { name: /Partie vide/ }).click();
   await studio.getByRole("button", { name: "Scènes" }).click();
   await studio.getByRole("button", { name: "Personnaliser les scènes" }).click();
   // The 1920x1080 stage fills the canvas, also after leaving the tab and coming back (scale bug).
@@ -151,6 +153,7 @@ test("studio theme: material, logo palette, sound pack — exported with the gam
   studio.on("console", (m) => { if (m.type() === "error") errors.push(m.text()); });
   await studio.goto(path("studio"));
   await studio.getByRole("button", { name: "+ Nouvelle" }).click();
+  await studio.getByRole("menuitem", { name: "QCM rapide (Kahoot-like)" }).click(); // the demo questions
   await studio.locator(".s-title").fill("Thème e2e");
   await studio.getByRole("button", { name: "+ QCM" }).click();
   await studio.getByRole("button", { name: "Thème" }).click();
@@ -160,7 +163,7 @@ test("studio theme: material, logo palette, sound pack — exported with the gam
   await studio.locator(".s-sounds .s-row", { hasText: "Bonne réponse" }).locator('input[type="file"]').setInputFiles({ name: "bravo.wav", mimeType: "audio/wav", buffer: silentWav() });
   await expect(studio.locator(".s-sounds .s-row", { hasText: "Bonne réponse" }).getByRole("button", { name: "▶" })).toBeVisible();
   await studio.screenshot({ path: "screenshots/studio-theme-pack.png" });
-  await studio.getByRole("button", { name: /Enregistrer/ }).click();
+  await studio.getByRole("button", { name: /^(Enregistr|Modifications|Non enregistré)/ }).click();
   await expect(studio.getByText("Enregistré", { exact: true }).first()).toBeVisible();
 
   const games = (await (await request.get(`/api/games?t=${token("studio")}`)).json()) as { games: { id: string; title: string }[] }; // oxlint-disable-line typescript/no-unsafe-type-assertion -- own endpoint

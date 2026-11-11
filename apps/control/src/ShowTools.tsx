@@ -1,5 +1,5 @@
 import { For, Match, Show, Switch, createResource, createSignal, type JSX } from "solid-js";
-import { Button } from "@quiz/ui";
+import { Button, confirmDialog } from "@quiz/ui";
 import type { Action, ControlView } from "@quiz/schema";
 import { REGRADABLE_KINDS, initialRegradeDraft, questionOnAir, regradeSpec } from "./logic.ts";
 
@@ -21,8 +21,7 @@ export function ReserveList(p: { readonly view: ControlView; readonly round: Rou
   const replace = async (id: string, text: string) => {
     const onAir = questionOnAir(p.view);
     const target = onAir ? `la question à l'écran (n° ${(p.view.question?.index ?? 0) + 1})` : "la prochaine question";
-    // oxlint-disable-next-line no-alert -- irreversible action confirmation (doc 08)
-    if (!window.confirm(`Remplacer ${target} par « ${text} » ?`)) return;
+    if (!(await confirmDialog({ title: `Remplacer ${target} ?`, message: `Par la question de réserve « ${text} ». Les réponses déjà données à la question remplacée sont perdues.`, confirm: "Remplacer", danger: onAir }))) return;
     await p.act({ type: "question.replaceFromReserve", reserveId: id, ...(onAir && p.view.question !== null ? { questionIndex: p.view.question.index } : {}) }, "Question remplacée");
   };
   return (
@@ -107,10 +106,9 @@ export function RegradeEditor(p: { readonly question: RundownQuestion; readonly 
       setPreview({ kind: "error", error: "serveur injoignable" });
     }
   };
-  const confirm = async () => {
+  const applyRegrade = async () => {
     const answerSpec = next();
-    // oxlint-disable-next-line no-alert -- irreversible action confirmation (doc 08)
-    if (answerSpec === null || !window.confirm("Corriger la réponse et recalculer les points de cette question ?")) return;
+    if (answerSpec === null || !(await confirmDialog({ title: "Corriger la réponse ?", message: "Les points de cette question sont recalculés pour tous les joueurs (annulable par undo).", confirm: "Corriger et recalculer" }))) return;
     if (await p.act({ type: "question.regrade", questionId: p.question.id, answerSpec }, "Réponse corrigée, points recalculés")) p.onClose();
   };
   return (
@@ -162,7 +160,7 @@ export function RegradeEditor(p: { readonly question: RundownQuestion; readonly 
                       <tbody><For each={changes()}>{(c) => <tr><td>{c.name}</td><td>{c.before}</td><td><b>{c.after}</b></td></tr>}</For></tbody>
                     </table>
                   </Show>
-                  <Button kind="danger" onClick={() => void confirm()}>Valider la correction</Button>
+                  <Button kind="danger" onClick={() => void applyRegrade()}>Valider la correction</Button>
                 </>
               )}
             </Show>
@@ -190,8 +188,7 @@ export function RehearsalPanel(p: { readonly withToken: WithToken }): JSX.Elemen
     }
   });
   const start = async () => {
-    // oxlint-disable-next-line no-alert -- adds fake players to the game (doc 08 confirmation)
-    if (!window.confirm(`Ajouter ${bots()} bot(s) à la partie ? Uniquement pour une répétition, jamais pendant un vrai show.`)) return;
+    if (!(await confirmDialog({ title: `Ajouter ${bots()} bot(s) à la partie ?`, message: "Uniquement pour une répétition, jamais pendant un vrai show : les bots sont des joueurs du journal.", confirm: "Lancer la répétition" }))) return;
     try {
       const r = await fetch(p.withToken("/api/rehearsal"), { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ bots: bots(), accuracy: accuracy() / 100, latencyMs: Math.round(latency() * 1000) }) });
       const body: unknown = await r.json();
@@ -203,8 +200,7 @@ export function RehearsalPanel(p: { readonly withToken: WithToken }): JSX.Elemen
     void refetch();
   };
   const stop = async () => {
-    // oxlint-disable-next-line no-alert -- removes players (doc 08 confirmation)
-    if (!window.confirm("Arrêter la répétition et retirer tous les bots ?")) return;
+    if (!(await confirmDialog({ title: "Arrêter la répétition ?", message: "Tous les bots sont retirés, avec leurs points.", confirm: "Retirer les bots", danger: true }))) return;
     try {
       const r = await fetch(p.withToken("/api/rehearsal"), { method: "DELETE" });
       const body: unknown = await r.json();

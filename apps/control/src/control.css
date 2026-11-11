@@ -182,3 +182,21 @@ a.q-btn { text-decoration: none; text-align: center; display: inline-flex; align
 .c-big-code { font-size: 20px; letter-spacing: .12em; }
 .c-then { margin: 0; padding: 8px 14px; border: 1px dashed var(--ui-border); border-radius: var(--ui-radius); color: var(--ui-muted); display: flex; gap: 10px; align-items: baseline; min-width: 0; }
 .c-then span:last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.c-stakes { grid-column: 1 / -1; padding-top: 6px; border-top: 1px solid var(--ui-border); }
+
+/* Live game in the top bar: always visible, one click to change it. */
+.c-game-btn { display: inline-flex; align-items: baseline; gap: 8px; max-width: 46vw; min-width: 0; padding: 5px 10px; border: 1px solid var(--ui-border-strong); border-radius: var(--ui-radius); background: var(--ui-surface-2); color: var(--ui-text); cursor: pointer; font: inherit; }
+.c-game-btn:hover { border-color: var(--ui-accent); }
+.c-game-label { font-size: 10px; font-weight: 650; font-stretch: 75%; text-transform: uppercase; letter-spacing: .12em; color: var(--ui-muted); white-space: nowrap; }
+.c-game-title { font-weight: 700; font-stretch: 85%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.c-game-meta { font-size: 11px; color: var(--ui-muted); white-space: nowrap; }
+.c-game-change { font-size: 11px; font-weight: 650; color: var(--ui-accent); white-space: nowrap; }
+.c-live-game { padding: 12px; border: 1px solid var(--ui-border-strong); border-left: 3px solid var(--ui-onair); border-radius: var(--ui-radius); background: var(--ui-sunken); display: grid; gap: 4px; }
+.c-live-game p { margin: 0; }
+.c-live-title { font-size: 20px; font-stretch: 80%; }
+.c-full { color: var(--ui-danger); font-weight: 700; }
+.c-warn-line { color: var(--ui-warn); font-size: 13px; }
+.c-small { font-size: 12px; margin: 0; }
+.c-list-row[data-live="true"] { box-shadow: inset 3px 0 0 var(--ui-onair); }
+.c-live-tag { font: 600 10px var(--ui-mono); text-transform: uppercase; letter-spacing: .1em; color: var(--ui-onair); }

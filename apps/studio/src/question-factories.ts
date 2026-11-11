@@ -1,4 +1,4 @@
-import type { AnswerKind, AnswerSpec, NormRect, Question } from "@quiz/schema";
+import type { AnswerKind, AnswerSpec, GameDocument, NormRect, Question } from "@quiz/schema";
 
 /** Question bank (Content tab): the "+ question" menu and starting content per answer kind. Pure, tested. */
 
@@ -77,4 +77,25 @@ export function normRectFromDrag(a: { x: number; y: number }, b: { x: number; y:
 /** Hints / tags typed one per line or comma separated → clean list. */
 export function splitList(text: string, sep: RegExp): string[] {
   return text.split(sep).map((s) => s.trim()).filter((s) => s.length > 0);
+}
+
+/**
+ * A new, empty game: one round and one blank question to write (a game needs at least one question to be valid,
+ * so it can be saved, listed and launched at once). No demo content.
+ */
+export function blankGame(suffix: string): GameDocument {
+  const q = { ...newQuestion("single", `q_${suffix}`), prompt: { text: "Écrivez votre première question" } };
+  return {
+    schemaVersion: 1,
+    title: "Nouvelle partie",
+    questions: [q],
+    scenes: [],
+    format: {
+      id: `f_${suffix}`,
+      name: "Nouvelle partie",
+      participants: { mode: "solo", min: 1, max: 500 },
+      tieBreak: "control",
+      rounds: [{ id: `r_${suffix}`, title: "Manche 1", mechanic: "choice", mechanicConfig: {}, questions: [q.id], reserve: [], timer: { durationMs: 20_000, autoLock: true }, scoring: [{ type: "base", points: 100 }, { type: "timeDecay", minPoints: 50 }] }],
+    },
+  };
 }

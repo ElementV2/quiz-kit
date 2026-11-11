@@ -173,3 +173,5 @@ body { overscroll-behavior: none; }
 .h-then { margin: auto 0 0; padding-top: 12px; border-top: 1px solid var(--ui-border); color: var(--ui-muted); font-size: 16px; line-height: 1.35; }
 .h-then .q-label { display: block; margin-bottom: 2px; }
 .h-clock-none { font-size: 13px; font-weight: 650; font-stretch: 78%; text-transform: uppercase; letter-spacing: .12em; color: var(--ui-faint); align-self: center; }
+
+.h-stakes { grid-column: 1 / -1; }

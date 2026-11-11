@@ -1,5 +1,5 @@
 import { For, Match, Show, Switch, createResource, createSignal, onCleanup, type JSX } from "solid-js";
-import { Button } from "@quiz/ui";
+import { Button, confirmDialog, copyDialog } from "@quiz/ui";
 
 /**
  * « API de contrôle » (Companion / Stream Deck / OSC, docs/api/control.md) and « Chat » (Twitch / YouTube vote,
@@ -14,7 +14,7 @@ export async function copyText(text: string): Promise<boolean> {
     await navigator.clipboard.writeText(text);
     return true;
   } catch {
-    window.prompt("Copier :", text); // oxlint-disable-line no-alert -- clipboard API needs a secure context; manual copy fallback
+    void copyDialog("Copier ce texte", text); // the clipboard API needs a secure context (plain HTTP on the LAN)
     return false;
   }
 }
@@ -155,8 +155,7 @@ export function StaffCode(p: { readonly withToken: WithToken }): JSX.Element {
   const [msg, setMsg] = createSignal<string | null>(null);
   const [code, setCode] = createSignal<string | null>(null);
   const rotate = async () => {
-    // oxlint-disable-next-line no-alert -- irreversible action confirmation (doc 08)
-    if (!window.confirm("Générer un nouveau code équipe ? Les postes qui l'ont retenu devront le ressaisir.")) return;
+    if (!(await confirmDialog({ title: "Générer un nouveau code équipe ?", message: "L'ancien code ne marchera plus : les postes qui l'avaient retenu devront saisir le nouveau.", confirm: "Nouveau code", danger: true }))) return;
     try {
       const r = await fetch(p.withToken("/api/staff/rotate"), { method: "POST" });
       const body: unknown = await r.json().catch(() => ({}));

@@ -1,7 +1,7 @@
 import { For, Match, Show, Switch, createMemo, createSignal, type JSX } from "solid-js";
 import { defaultRegistry } from "@quiz/engine";
 import { parseQuestionsCsv, type AnswerKind, type AnswerSpec, type GameDocument, type NormRect, type Question } from "@quiz/schema";
-import { Button, Panel } from "@quiz/ui";
+import { Button, Panel, confirmDialog } from "@quiz/ui";
 import { api, mediaUrl } from "./api.ts";
 import { NumField } from "./fields.tsx";
 import { deleteQuestion, moveItem, roundIssues, roundsOf } from "./format-logic.ts";
@@ -50,7 +50,7 @@ export function ContentEditor(p: { doc: GameDocument; update: Update }): JSX.Ele
     addQuestions(pasted().questions.map((q) => ({ ...q, id: `q_${hex(6)}` })));
     setPaste("");
   };
-  const remove = (q: Question) => {
+  const remove = async (q: Question) => {
     const where = roundsOf(p.doc, q.id);
     // Dry run on a copy first: a refused delete must not even ask (nor leave an empty undo step).
     const dry = deleteQuestion(snapshot(p.doc), q.id);
@@ -58,7 +58,7 @@ export function ContentEditor(p: { doc: GameDocument; update: Update }): JSX.Ele
       setMsg(`Suppression impossible : ${dry.reason}.`);
       return;
     }
-    if (!window.confirm(`Supprimer la question « ${q.prompt.text.slice(0, 60)} »${where.length > 0 ? ` ? Elle sera retirée de : ${where.join(", ")}` : " ?"}`)) return;
+    if (!(await confirmDialog({ title: "Supprimer cette question ?", message: `« ${q.prompt.text.slice(0, 80)} »${where.length > 0 ? `\nElle sera retirée de : ${where.join(", ")}.` : ""}\nAnnulable (Ctrl+Z).`, confirm: "Supprimer", danger: true }))) return;
     p.update((d) => { deleteQuestion(d, q.id); });
     setMsg("Question supprimée.");
   };
@@ -103,7 +103,7 @@ export function ContentEditor(p: { doc: GameDocument; update: Update }): JSX.Ele
                   <td class="s-actions">
                     <Button kind="ghost" title="Monter" disabled={i() === 0} onClick={() => p.update((d) => moveItem(d.questions, i(), i() - 1))}>↑</Button>
                     <Button kind="ghost" title="Descendre" disabled={i() === p.doc.questions.length - 1} onClick={() => p.update((d) => moveItem(d.questions, i(), i() + 1))}>↓</Button>
-                    <Button kind="ghost" title="Supprimer la question" disabled={p.doc.questions.length <= 1} onClick={() => remove(q)}>✕</Button>
+                    <Button kind="ghost" title="Supprimer la question" disabled={p.doc.questions.length <= 1} onClick={() => void remove(q)}>✕</Button>
                   </td>
                 </tr>
               );

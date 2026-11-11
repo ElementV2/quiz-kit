@@ -13,7 +13,7 @@ const watch = (page: Page): string[] => {
   const errors: string[] = [];
   page.on("pageerror", (e) => errors.push(e.message));
   page.on("console", (m) => { if (m.type() === "error") errors.push(m.text()); });
-  page.on("dialog", (d) => void d.accept()); // confirm() of deletions
+  page.on("dialog", () => { throw new Error("native browser dialog: use the app dialog"); });
   return errors;
 };
 
@@ -23,6 +23,7 @@ test("studio Format: a 2-round format (free text + order) built from the bank, s
   const errors = watch(studio);
   await studio.goto(path("studio"));
   await studio.getByRole("button", { name: "+ Nouvelle" }).click();
+  await studio.getByRole("menuitem", { name: "QCM rapide (Kahoot-like)" }).click(); // the demo questions
   await studio.locator(".s-title").fill("Format e2e");
 
   // Round 1 becomes "Réponse libre": the boolean and multi questions are flagged by the engine's own init.
@@ -57,6 +58,7 @@ test("studio Format: a 2-round format (free text + order) built from the bank, s
   // Incompatible questions of round 1 are deleted from the bank (and so from the round).
   for (const kind of [/^Vrai \/ faux$/, /^Plusieurs réponses$/]) {
     await studio.locator(".s-table tbody tr").filter({ has: studio.locator(".s-col-q > .s-kind", { hasText: kind }) }).getByTitle("Supprimer la question").click();
+    await studio.getByRole("dialog").getByRole("button", { name: "Supprimer" }).click();
   }
   await expect(studio.locator(".s-table tbody tr")).toHaveCount(3);
   await studio.screenshot({ path: "screenshots/studio-content-bank.png" });
@@ -67,7 +69,7 @@ test("studio Format: a 2-round format (free text + order) built from the bank, s
   await expect(studio.locator(".s-round").nth(0).locator(".s-qlist").first().locator("li")).toHaveCount(2);
   await expect(studio.locator(".s-round").nth(1).locator(".s-qlist").first().locator("li")).toHaveCount(1);
 
-  await studio.getByRole("button", { name: /Enregistrer/ }).click();
+  await studio.getByRole("button", { name: /^(Enregistr|Modifications|Non enregistré)/ }).click();
   await expect(studio.getByText("Enregistré", { exact: true }).first()).toBeVisible();
   const games = (await (await request.get(`/api/games?t=${token("studio")}`)).json()) as { games: { id: string; title: string }[] }; // oxlint-disable-line typescript/no-unsafe-type-assertion -- own endpoint
   const id = games.games.find((g) => g.title === "Format e2e")?.id ?? "";
@@ -89,6 +91,7 @@ for (const vp of [{ width: 1366, height: 768 }, { width: 1920, height: 1080 }]) 
     const errors = watch(studio);
     await studio.goto(path("studio"));
     await studio.getByRole("button", { name: "+ Nouvelle" }).click();
+    await studio.getByRole("menuitem", { name: /Partie vide/ }).click();
     await studio.getByRole("button", { name: "Scènes" }).click();
     await studio.getByRole("button", { name: "Personnaliser les scènes" }).click();
     await expect(studio.getByText("Cliquez une zone pour la modifier.")).toBeVisible();

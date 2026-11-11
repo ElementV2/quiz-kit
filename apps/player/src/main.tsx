@@ -1,8 +1,8 @@
 import { For, Match, Show, Switch, createEffect, createMemo, createSignal, onCleanup } from "solid-js";
 import { render } from "solid-js/web";
 import { asChoice, asLadder, asPollBoard, nameOf, optionLetter, optionState, secondsLeft } from "@quiz/renderer";
-import type { AnswerValue, PlayerView } from "@quiz/schema";
-import { StatusPill, createQuizConnection, tokenFromUrl } from "@quiz/ui";
+import type { AnswerValue, PlayerView, Viewer } from "@quiz/schema";
+import { StatusPill, createQuizConnection, tokenFromUrl, stakesLabel } from "@quiz/ui";
 import "@quiz/ui/ui.css";
 import "./player.css";
 import { createKeepAwake, enterFullscreen } from "./keep-awake.ts";
@@ -168,10 +168,7 @@ function Game(props: { token: string }) {
           </div>
         </Match>
         <Match when={view()?.me === null}>
-          <div class="p-center">
-            <p class="p-big">Tablette prête</p>
-            <p class="muted">La régie va vous attribuer ce siège.</p>
-          </div>
+          <ClaimSeat seat={seatOf(conn.viewer())} />
         </Match>
         <Match when={view()?.question === null || view()?.mechanic === null}>
           <div class="p-center">
@@ -184,6 +181,7 @@ function Game(props: { token: string }) {
             <main class="p-question">
               <div class="p-meta">
                 <span>Question {(v().question?.index ?? 0) + 1} / {v().question?.count}</span>
+                <Show when={stakesLabel(v().stakes)}>{(t) => <span class="q-stakes-badge">{t()}</span>}</Show>
                 <Show when={v().timer}>{(t) => <span class={`p-timer${secondsLeft(t().endsAt, now()) <= 5 ? " p-timer-low" : ""}`}>{secondsLeft(t().endsAt, now())}<small> s</small></span>}</Show>
               </div>
               <h1 class="p-prompt">{v().question?.prompt.text}</h1>
@@ -274,6 +272,46 @@ function feedbackTone(v: PlayerView, sending: boolean, error: boolean): string {
   if (v.myAnswer !== null) return "ok";
   if (v.phase === "open" && v.canAnswer) return "busy";
   return "idle";
+}
+
+const seatOf = (v: Viewer | null): number | null => (v !== null && v.role === "seat" ? v.seat : null);
+
+/** Free seat: the player types their name and sits down (or the control room seats someone). */
+function ClaimSeat(p: { seat: number | null }) {
+  const [name, setName] = createSignal("");
+  const [err, setErr] = createSignal<string | null>(null);
+  const [busy, setBusy] = createSignal(false);
+  const submit = async (e: SubmitEvent) => {
+    e.preventDefault();
+    if (name().trim() === "") return;
+    setBusy(true);
+    setErr(null);
+    try {
+      const r = await fetch(`/api/seat/claim?t=${encodeURIComponent(tokenFromUrl())}`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ name: name().trim() }) });
+      if (!r.ok) {
+        const body: unknown = await r.json().catch(() => ({}));
+        setErr(typeof body === "object" && body !== null && "error" in body && typeof body.error === "string" ? body.error : `refusé (${r.status})`);
+      }
+      // Accepted: the next view carries `me` and this screen goes away by itself.
+    } catch {
+      setErr("Serveur injoignable : réessayer");
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <form class="p-center p-claim" onSubmit={(e) => void submit(e)}>
+      <p class="p-claim-seat q-mono">SIÈGE {p.seat ?? "?"}</p>
+      <p class="p-big">Siège libre</p>
+      <label class="p-claim-field">
+        <span>Votre prénom ou pseudo</span>
+        <input value={name()} maxlength={40} autocomplete="off" autocapitalize="words" onInput={(e) => setName(e.currentTarget.value)} />
+      </label>
+      <Show when={err()}>{(m) => <p class="p-claim-err">{m()}</p>}</Show>
+      <button class="q-btn q-btn-big" type="submit" disabled={busy() || name().trim() === ""}>Je m'installe</button>
+      <p class="muted">Ou attendez : la régie peut aussi vous attribuer ce siège.</p>
+    </form>
+  );
 }
 
 function App() {

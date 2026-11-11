@@ -219,7 +219,7 @@ function App(): JSX.Element {
           <span class="h-eyebrow">Serveur de show</span>
         </div>
         <span class="h-spacer" />
-        <Show when={data()}>{(d) => <span class="h-title">{d().title}</span>}</Show>
+        <Show when={data()}>{(d) => <span class="h-title"><span class="h-eyebrow">Partie en cours</span>{d().title} <span class="q-mono h-players">{d().players}/{d().maxPlayers} joueurs</span></span>}</Show>
         <span class={`q-status ${online() ? "q-status-open" : "q-status-stopped"}`}>{online() ? "en ligne" : "serveur injoignable"}</span>
       </header>
       <main class="h-main">

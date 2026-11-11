@@ -1,6 +1,6 @@
 import { For, Show, createMemo, createSignal, onCleanup, onMount, type JSX } from "solid-js";
 import type { FlowCondition, GameDocument, Round } from "@quiz/schema";
-import { Button } from "@quiz/ui";
+import { Button, isDialogOpen } from "@quiz/ui";
 import {
   CONDITION_LABEL, END, END_H, END_LAYOUT_KEY, END_W, NODE_H, NODE_W, SCENARIOS, SCENARIO_LABEL, addTransition, edgeGeometry, edgeLanes, fitView, flowIssues, graphEdges, hitNode,
   movePriority, nodePositions, nodeRect, questionCount, removeTransition, resetNodePos, setCondition, setNodePos, setTarget, simulate, toGraph, zoomAt,
@@ -204,6 +204,7 @@ export function FlowEditor(p: { doc: GameDocument; update: Update }): JSX.Elemen
 
   // ── Keyboard: Suppr deletes the selected transition / resets the node position, Échap deselects ──
   const onKey = (e: KeyboardEvent) => {
+    if (isDialogOpen()) return; // our dialog owns the keyboard (Entrée / Échap)
     if (inField(e) || e.ctrlKey || e.metaKey || e.altKey) return;
     if (e.key === "Escape") {
       if (drag()?.kind === "connect") setDrag(null);

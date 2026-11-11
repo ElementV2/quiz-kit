@@ -1,6 +1,6 @@
 import { For, Show, createMemo, createResource, createSignal, onCleanup, onMount, type JSX } from "solid-js";
 import { OUTPUT_SCENES, gameFromQuestions, parseQuestionsCsv, type Action, type ControlView, type Participant } from "@quiz/schema";
-import { Button } from "@quiz/ui";
+import { Button, confirmDialog } from "@quiz/ui";
 import { api, hex, lanOrigin, type LinksResponse } from "./api.ts";
 import { copyText } from "./Integrations.tsx";
 import { parsePlayersCsv } from "./logic.ts";
@@ -65,15 +65,15 @@ export function LayersPanel(p: { readonly view: ControlView; readonly layers: re
 }
 
 /** Games prepared in the studio: launch one live (screens follow, links unchanged). */
-export function LibraryPanel(): JSX.Element {
-  const [games, { refetch }] = createResource(() => api<{ games: { id: string; title: string; questions: number }[] }>("/api/games").then((r) => r.games).catch(() => []));
+export function LibraryPanel(p: { readonly current?: string }): JSX.Element {
+  const [games, { refetch }] = createResource(() => api<{ games: { id: string; title: string; questions: number; rounds: number; updatedAt: number }[] }>("/api/games").then((r) => r.games.toSorted((a, b) => b.updatedAt - a.updatedAt)).catch(() => []));
   const [msg, setMsg] = createSignal<string | null>(null);
   const launch = async (id: string, title: string) => {
-    // oxlint-disable-next-line no-alert -- irreversible action confirmation (doc 08)
-    if (!window.confirm(`Lancer « ${title} » maintenant ? La partie en cours reste dans le journal.`)) return;
+    if (!(await confirmDialog({ title: `Lancer « ${title} » maintenant ?`, message: "Tous les écrans passent sur cette partie. La partie en cours reste dans le journal.", confirm: "Lancer", danger: true }))) return;
     try {
       const r = await api<{ joinCode: string }>(`/api/games/${id}/launch`, { method: "POST" });
       setMsg(`« ${title} » lancée · code joueurs ${r.joinCode}`);
+      void refetch();
     } catch (e) {
       setMsg(`Échec : ${e instanceof Error ? e.message : String(e)}`);
     }
@@ -83,9 +83,10 @@ export function LibraryPanel(): JSX.Element {
       <ul class="c-list">
         <For each={games() ?? []} fallback={<li class="muted">Aucune partie enregistrée dans le studio.</li>}>
           {(g) => (
-            <li class="c-list-row">
-              <span class="c-grow">{g.title} <span class="muted q-mono">{g.questions} q.</span></span>
-              <Button kind="secondary" onClick={() => void launch(g.id, g.title)}>Lancer</Button>
+            <li class="c-list-row" data-live={String(g.title === p.current)}>
+              <span class="c-grow">{g.title} <span class="muted q-mono">{g.rounds} m. · {g.questions} q.</span></span>
+              <Show when={g.title === p.current}><span class="c-live-tag">en cours</span></Show>
+              <Button kind="secondary" onClick={() => void launch(g.id, g.title)}>{g.title === p.current ? "Relancer" : "Lancer"}</Button>
             </li>
           )}
         </For>
@@ -134,8 +135,7 @@ export function GameImport(): JSX.Element {
   const launch = async () => {
     const { questions } = parsed();
     if (questions.length === 0) return;
-    // oxlint-disable-next-line no-alert -- irreversible action confirmation (doc 08)
-    if (!window.confirm(`Lancer « ${title()} » (${questions.length} questions) ? La partie en cours reste dans le journal.`)) return;
+    if (!(await confirmDialog({ title: `Lancer « ${title()} » (${questions.length} questions) ?`, message: "Tous les écrans passent sur cette partie. La partie en cours reste dans le journal.", confirm: "Lancer", danger: true }))) return;
     try {
       const game = gameFromQuestions(title().trim() || "Partie", questions, { timerSeconds: seconds(), points: 100, maxPlayers: 1000 });
       const r = await api<{ sessionId: string; joinCode: string }>("/api/session", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ game }) });
@@ -276,7 +276,7 @@ export function Players(p: { readonly view: ControlView; readonly readonly: bool
                     </select>
                   </label>
                   <div class="c-span c-row c-row-tight">
-                    <Button kind="danger" onClick={() => { if (window.confirm(`Retirer ${pl.displayName} ?`)) void p.act({ type: "player.remove", participantId: pl.id }); }}>Retirer</Button> {/* oxlint-disable-line no-alert -- irreversible action confirmation (doc 08) */}
+                    <Button kind="danger" onClick={() => void confirmDialog({ title: `Retirer ${pl.displayName} ?`, message: "Le joueur et ses points quittent la partie.", confirm: "Retirer", danger: true }).then((ok) => ok && p.act({ type: "player.remove", participantId: pl.id }))}>Retirer</Button>
                     <Button kind="ghost" onClick={() => setEditing(null)}>Fermer</Button>
                   </div>
                 </div>

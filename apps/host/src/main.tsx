@@ -3,7 +3,7 @@ import { render } from "solid-js/web";
 import type { Action, HostView } from "@quiz/schema";
 import { nextStep } from "@quiz/protocol";
 import { secondsLeft } from "@quiz/renderer";
-import { ConfirmKey, CrowdVotePanel, HomeLink, ON_AIR_PHASES, PHASE_LABEL, StatusPill, createQuizConnection, nextTarget, onAirTarget, questionAt, type Target } from "@quiz/ui";
+import { ConfirmKey, CrowdVotePanel, HomeLink, ON_AIR_PHASES, PHASE_LABEL, StatusPill, createQuizConnection, nextTarget, onAirTarget, questionAt, type Target, StakesBar } from "@quiz/ui";
 import "@quiz/ui/ui.css";
 import "./host.css";
 import { DriveTools, Judge } from "./Judge.tsx";
@@ -135,6 +135,7 @@ function App() {
                           </Show>
                         </Show>
                         <DriveTools view={v()} act={act} />
+                        <StakesBar class="h-stakes" view={v()} act={(a) => act(a)} />
                         <Show when={inQuestion()}>
                           <ConfirmKey class="h-key h-key-wide" label="Passer la question" confirmLabel="Confirmer : passer sans révéler ?" onConfirm={() => void act({ type: "question.next" })} />
                         </Show>

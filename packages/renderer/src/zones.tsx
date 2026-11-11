@@ -150,10 +150,20 @@ const LeaderboardZone: Component<ZoneProps> = (p) => {
   );
 };
 
+/** « ×5 · 500 pts » on air when the control room raised the stakes of the question. */
+const stakesText = (s: ZoneProps["view"]["stakes"]): string | null => {
+  if (s === null) return null;
+  const parts = [s.points === null ? null : `${s.points} pts`, s.multiplier === null ? null : `×${String(s.multiplier).replace(".", ",")}`].filter((x) => x !== null);
+  return parts.length === 0 ? null : parts.join(" · ");
+};
+
 const RoundInfoZone: Component<ZoneProps> = (p) => (
   <div style={{ width: "100%", height: "100%", display: "flex", "align-items": "center", gap: "16px", "font-size": `${Math.round(p.zone.rect.h * 0.55)}px`, color: "var(--q-color-muted)" }}>
     <Show when={p.view.round}>{(r) => <span>{r().title}</span>}</Show>
     <Show when={p.view.question}>{(q) => <span style={{ color: "var(--q-color-accent)" }}>· Question {q().index + 1} / {q().count}</span>}</Show>
+    <Show when={stakesText(p.view.stakes)}>
+      {(t) => <span class="q-stakes-onair" style={{ padding: "0 0.45em", "border-radius": "var(--q-radius)", background: "var(--q-color-accent)", color: "var(--q-color-surface)", "font-weight": 800, "font-variant-numeric": "tabular-nums" }}>{t()}</span>}
+    </Show>
   </div>
 );
 

@@ -10,6 +10,8 @@ const view = (over: Partial<HostView>): HostView => ({
   round: { index: 0, count: 2, title: "M1" },
   question: null,
   timer: null,
+  stakes: null,
+  stakesTarget: null,
   mechanic: null,
   leaderboard: [],
   layers: {},

@@ -2,7 +2,7 @@ import { For, Show, createMemo, createResource, createSignal, onCleanup, onMount
 import { render } from "solid-js/web";
 import type { Action, ControlView } from "@quiz/schema";
 import { asChoice, optionLetter, secondsLeft } from "@quiz/renderer";
-import { Button, HomeLink, MECHANIC_LABEL, MechanicPanel, ON_AIR_PHASES, PHASE_LABEL, StatusPill, createQuizConnection, formatAnswer, nextTarget, onAirTarget, questionAt, sameTarget } from "@quiz/ui";
+import { Button, HomeLink, MECHANIC_LABEL, MechanicPanel, ON_AIR_PHASES, PHASE_LABEL, StatusPill, createQuizConnection, formatAnswer, nextTarget, onAirTarget, questionAt, sameTarget, confirmDialog, isDialogOpen, StakesBar } from "@quiz/ui";
 import "@quiz/ui/ui.css";
 import "./control.css";
 import { api, lanOrigin, token, withToken, type LinksResponse, type StatusResponse } from "./api.ts";
@@ -19,7 +19,7 @@ import { QuestionTextEdit, RegradeEditor, RehearsalPanel, ReserveList, ResultsPa
  */
 
 type Act = (a: Action, ok?: string) => Promise<boolean>;
-type Tab = "players" | "layers" | "tools" | "check";
+type Tab = "games" | "players" | "layers" | "tools" | "check";
 
 function App() {
   const conn = createQuizConnection({ token });
@@ -49,6 +49,7 @@ function App() {
 
   // Keyboard (doc 08): armed buzzer keys first, then space = next step, Ctrl+Z = undo. Ignored while typing.
   const onKey = (e: KeyboardEvent) => {
+    if (isDialogOpen()) return; // our dialog owns the keyboard (Entrée / Échap)
     const t = e.target;
     if (t instanceof HTMLInputElement || t instanceof HTMLTextAreaElement || t instanceof HTMLSelectElement) return;
     const v = view();
@@ -76,10 +77,15 @@ function App() {
     <div class="c-app" data-buzzers={String(kb.armed())}>
       <header class="c-top">
         <span class="c-brand">Régie</span>
-        <Show when={links()?.title}>{(t) => <span class="c-show" title={t()}>{t()}</span>}</Show>
         <Show when={view()}>
           {(v) => (
             <>
+              <button type="button" class="c-game-btn" title="Voir la partie en cours et en lancer une autre" onClick={() => setTab("games")}>
+                <span class="c-game-label">Partie en cours</span>
+                <span class="c-game-title">{v().game.title}</span>
+                <span class="c-game-meta q-mono">{v().participants.length}/{v().game.maxPlayers} j.</span>
+                <span class="c-game-change">Changer</span>
+              </button>
               <span class="q-tally" data-on={ON_AIR_PHASES.has(v().phase) ? "air" : undefined}>{ON_AIR_PHASES.has(v().phase) ? "Antenne" : "Hors antenne"}</span>
               <span class="c-phase">{v().round?.title ?? "—"} · {PHASE_LABEL[v().phase]}</span>
             </>
@@ -134,12 +140,16 @@ function App() {
                   <Show when={programUrl()} fallback={<div class="c-preview c-preview-off">Aperçu indisponible</div>}>{(u) => <ProgramPreview src={u()} />}</Show>
                 </div>
                 <div class="q-tabs" role="tablist">
+                  <TabKey id="games" tab={tab()} setTab={setTab} label="Parties" badge={null} />
                   <TabKey id="players" tab={tab()} setTab={setTab} label="Joueurs" badge={String(v().participants.length)} />
                   <TabKey id="layers" tab={tab()} setTab={setTab} label="Couches" badge={onAirLayers() > 0 ? `${onAirLayers()} ant.` : null} tone="air" />
                   <TabKey id="tools" tab={tab()} setTab={setTab} label="Outils" badge={null} />
                   <TabKey id="check" tab={tab()} setTab={setTab} label="Check-list" badge={`${checks().filter((c) => c.ok).length}/${checks().length}`} tone={checks().every((c) => c.ok) ? "ok" : "warn"} />
                 </div>
                 <div class="c-tabpanel" role="tabpanel">
+                  <Show when={tab() === "games"}>
+                    <GamesTab view={v()} readonly={readonly()} />
+                  </Show>
                   <Show when={tab() === "players"}>
                     <Players view={v()} readonly={readonly()} act={act} connected={new Set(status()?.presence?.seats ?? [])} connectedPlayers={new Set(status()?.presence?.players ?? [])} />
                     <Show when={!readonly()}>
@@ -156,8 +166,6 @@ function App() {
                       <Show when={!readonly()}>
                         <Tool title="Buzzers clavier (USB)"><KeyBuzzersPanel kb={kb} view={v()} /></Tool>
                         <Tool title="Chat Twitch / YouTube"><ChatPanel withToken={withToken} /></Tool>
-                        <Tool title="Bibliothèque du studio"><LibraryPanel /></Tool>
-                        <Tool title="Nouvelle partie (import CSV)"><GameImport /></Tool>
                         <Tool title="Répétition (bots)"><RehearsalPanel withToken={withToken} /></Tool>
                         <Tool title="Code équipe (accueil)"><StaffCode withToken={withToken} /></Tool>
                         <Tool title="API de contrôle (Companion, OSC)"><ApiInfo origin={lanOrigin(links())} token={token} /></Tool>
@@ -175,6 +183,32 @@ function App() {
             </div>
           );
         }}
+      </Show>
+    </div>
+  );
+}
+
+/** « Parties » tab: what is live (and who may play), then every game of the studio with « Lancer ». */
+function GamesTab(p: { readonly view: ControlView; readonly readonly: boolean }): JSX.Element {
+  const g = () => p.view.game;
+  const full = () => p.view.participants.length >= g().maxPlayers;
+  return (
+    <div class="c-stack">
+      <section class="c-live-game">
+        <span class="c-game-label">En cours sur tous les écrans</span>
+        <h3 class="c-live-title">{g().title}</h3>
+        <p class="muted">
+          {g().rounds} manche{g().rounds > 1 ? "s" : ""} · {g().mode === "teams" ? "en équipes" : g().mode === "crowd" ? "public" : "joueurs individuels"} ·{" "}
+          <span class="q-mono" classList={{ "c-full": full() }}>{p.view.participants.length} / {g().maxPlayers} joueur{g().maxPlayers > 1 ? "s" : ""}</span>
+        </p>
+        <Show when={full()}><p class="c-warn-line">Partie complète : plus aucun joueur ni siège ne peut rejoindre. Lancer une autre partie, ou augmenter le maximum dans le studio (onglet Format).</p></Show>
+      </section>
+      <Show when={!p.readonly} fallback={<p class="muted">Poste en lecture seule : changer de partie depuis la régie.</p>}>
+        <h3 class="q-panel-title c-subtitle">Lancer une autre partie</h3>
+        <p class="muted c-small">Les parties créées dans le studio. Lancer bascule régie, sorties, animateur et tablettes ; la partie en cours reste dans le journal.</p>
+        <LibraryPanel current={g().title} />
+        <h3 class="q-panel-title c-subtitle">Partie express (coller un CSV)</h3>
+        <GameImport />
       </Show>
     </div>
   );
@@ -228,9 +262,10 @@ function Transport(p: { readonly view: ControlView; readonly readonly: boolean; 
         <div class="c-keys">
           <Button kind="secondary" disabled={p.view.phase !== "open"} onClick={() => void p.act({ type: "timer.set", remainingMs: Math.max(0, (p.view.timer?.endsAt ?? p.now) - p.now) + 10_000 })}>+10 s</Button>
           <Button kind="secondary" disabled={p.view.phase !== "open" || p.view.timer === null} onClick={() => void p.act({ type: "timer.stop" })}>Stop chrono</Button>
-          <Button kind="secondary" disabled={!inQuestion()} onClick={() => { if (window.confirm("Passer cette question sans la révéler ?")) void p.act({ type: "question.next" }, "Question passée"); }}>Passer la question</Button> {/* oxlint-disable-line no-alert -- irreversible action confirmation (doc 08) */}
+          <Button kind="secondary" disabled={!inQuestion()} onClick={() => void confirmDialog({ title: "Passer cette question sans la révéler ?", message: "Aucun point n'est attribué pour cette question.", confirm: "Passer la question", danger: true }).then((ok) => ok && p.act({ type: "question.next" }, "Question passée"))}>Passer la question</Button>
           <Button kind="ghost" title="Ctrl+Z" onClick={() => void p.act({ type: "undo" }, "Dernière action annulée")}>↶ Annuler</Button>
         </div>
+        <StakesBar class="c-stakes" view={p.view} act={(a, label) => p.act(a, label)} />
       </Show>
     </section>
   );

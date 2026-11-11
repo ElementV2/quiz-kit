@@ -25,7 +25,14 @@
 .s-games li { min-width: 0; display: flex; align-items: center; justify-content: space-between; gap: 6px; padding: 0 6px; border-bottom: 1px solid var(--ui-border); }
 .s-games li > span { flex: none; font-size: 11px; }
 .s-games li[data-on="true"] { background: var(--ui-surface-2); box-shadow: inset 2px 0 0 var(--ui-accent); }
-.s-games button { font: inherit; font-size: 13px; color: var(--ui-text); background: none; border: 0; cursor: pointer; text-align: left; padding: 6px 0; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.s-games li { position: relative; }
+.s-games .s-game-open { font: inherit; font-size: 13px; color: var(--ui-text); background: none; border: 0; cursor: pointer; text-align: left; padding: 6px 0; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.s-game-more { font: 700 14px var(--ui-font); width: 26px; height: 24px; flex: none; padding: 0; border: 1px solid transparent; border-radius: var(--ui-radius); background: none; color: var(--ui-muted); cursor: pointer; opacity: .55; }
+.s-games li:hover .s-game-more, .s-games li[data-menu="true"] .s-game-more, .s-game-more:focus-visible { opacity: 1; border-color: var(--ui-border-strong); color: var(--ui-text); }
+.s-game-menu { position: absolute; z-index: 30; right: 4px; top: calc(100% - 2px); min-width: 170px; display: grid; padding: 4px; background: var(--ui-surface); border: 1px solid var(--ui-border-strong); border-radius: var(--ui-radius); box-shadow: 0 10px 30px rgba(0, 0, 0, .5); }
+.s-game-menu > button, .s-game-menu > a { font: inherit; font-size: 13px; text-align: left; padding: 7px 10px; background: none; border: 0; border-radius: 2px; color: var(--ui-text); cursor: pointer; text-decoration: none; }
+.s-game-menu > button:hover, .s-game-menu > a:hover, .s-game-menu > :focus-visible { background: var(--ui-surface-2); }
+.s-game-menu > .s-game-danger { color: var(--ui-danger); border-top: 1px solid var(--ui-border); border-radius: 0; margin-top: 2px; }
 
 /* ── Shared bits ── */
 .s-label { font-size: 11px; font-weight: 650; font-stretch: 75%; text-transform: uppercase; letter-spacing: .1em; color: var(--ui-muted); }
@@ -343,3 +350,11 @@
   .s-body[data-tab="scenes"] { grid-template-columns: minmax(0, 1fr); }
   .s-body[data-tab="scenes"] .s-library { display: none; }
 }
+
+/* « + Nouvelle » : empty game or template */
+.s-new { position: relative; }
+.s-new-btn { width: 100%; }
+.s-new-menu { left: 0; right: 0; top: calc(100% + 4px); max-height: 60vh; overflow: auto; }
+.s-new-menu > button { display: grid; gap: 1px; }
+.s-new-menu > button > span { font-size: 11px; }
+.s-menu-label { margin: 6px 10px 2px; font-size: 10px; font-weight: 650; font-stretch: 75%; text-transform: uppercase; letter-spacing: .12em; color: var(--ui-faint); }

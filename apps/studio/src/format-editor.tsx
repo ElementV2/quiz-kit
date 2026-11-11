@@ -1,7 +1,7 @@
 import { For, Match, Show, Switch, createMemo, createSignal, type JSX } from "solid-js";
 import { defaultRegistry } from "@quiz/engine";
 import { GameDocument, type Round, type ScoringComponent } from "@quiz/schema";
-import { Button, Panel } from "@quiz/ui";
+import { Button, Panel, confirmDialog } from "@quiz/ui";
 import { JsonField, NumField } from "./fields.tsx";
 import { FlowEditor } from "./flow-editor.tsx";
 import { MECHANICS, SCORING_LABEL, addToRound, configValues, deleteRound, duplicateRound, mechanicOptions, moveItem, newRound, newScoring, parseNumberList, removeFromRound, roundIssues, setConfigField, setMechanic, swapList, type ConfigField, type RoundIssue, type RoundList } from "./format-logic.ts";
@@ -79,8 +79,8 @@ function RoundCard(p: { doc: GameDocument; round: Round; ri: number; count: numb
   const edit = (f: (r: Round) => void, key?: string) => p.update((d) => { const r = d.format.rounds[p.ri]; if (r !== undefined) f(r); }, key === undefined ? undefined : `${p.round.id}:${key}`);
   const info = () => MECHANICS[p.round.mechanic];
   const general = () => p.issues.filter((i) => i.questionId === null || !p.doc.questions.some((q) => q.id === i.questionId));
-  const remove = () => {
-    if (!window.confirm(`Supprimer la manche « ${p.round.title} » ? Ses questions restent dans la banque.`)) return;
+  const remove = async () => {
+    if (!(await confirmDialog({ title: `Supprimer la manche « ${p.round.title} » ?`, message: "Ses questions restent dans la banque. Annulable (Ctrl+Z).", confirm: "Supprimer", danger: true }))) return;
     p.update((d) => { deleteRound(d, p.ri); });
   };
   return (
@@ -92,7 +92,7 @@ function RoundCard(p: { doc: GameDocument; round: Round; ri: number; count: numb
         <Button kind="ghost" title="Monter la manche" disabled={p.ri === 0} onClick={() => p.update((d) => moveItem(d.format.rounds, p.ri, p.ri - 1))}>↑</Button>
         <Button kind="ghost" title="Descendre la manche" disabled={p.ri === p.count - 1} onClick={() => p.update((d) => moveItem(d.format.rounds, p.ri, p.ri + 1))}>↓</Button>
         <Button kind="secondary" onClick={() => p.update((d) => duplicateRound(d, p.ri, `r_${hex(4)}`))}>Dupliquer</Button>
-        <Button kind="danger" disabled={p.count <= 1} title={p.count <= 1 ? "Un format a au moins une manche" : "Supprimer la manche"} onClick={remove}>Supprimer</Button>
+        <Button kind="danger" disabled={p.count <= 1} title={p.count <= 1 ? "Un format a au moins une manche" : "Supprimer la manche"} onClick={() => void remove()}>Supprimer</Button>
       </header>
       <Show when={general().length + p.schemaIssues.length > 0}>
         <ul class="s-issues">

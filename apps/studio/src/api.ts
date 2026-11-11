@@ -25,6 +25,7 @@ export const api = {
     await json(await fetch(withToken(`/api/games/${id}`), { method: "DELETE" }));
   },
   exportUrl: (id: string): string => withToken(`/api/games/${id}/export`),
+  launch: async (id: string): Promise<{ joinCode: string }> => json(await fetch(withToken(`/api/games/${id}/launch`), { method: "POST" })),
   importQuiz: async (file: File): Promise<{ id: string; title: string; media: number; missing: number }> =>
     json(await fetch(withToken("/api/import"), { method: "POST", headers: { "content-type": "application/zip" }, body: file })),
   /**

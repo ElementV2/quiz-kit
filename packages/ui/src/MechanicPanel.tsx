@@ -1,3 +1,4 @@
+import { confirmDialog } from "./Dialog.tsx";
 import { For, Show, createSignal, type JSX } from "solid-js";
 import { asBuzzer, asLadder, asPollBoard, nameOf } from "@quiz/renderer";
 import type { Action, ControlView, HostView } from "@quiz/schema";
@@ -110,7 +111,7 @@ export function MechanicPanel(p: {
               <div class="q-mech-row">
                 <Button kind="secondary" disabled={m().jokers.fifty !== "available"} onClick={() => void p.act({ type: "joker.use", joker: "fifty" })}>50:50</Button>
                 <Button kind="secondary" disabled={m().jokers.audience !== "available"} onClick={() => void p.act({ type: "joker.use", joker: "audience" })}>Sondage du public</Button>
-                <Button kind="ghost" disabled={m().status !== "playing"} onClick={() => { if (window.confirm("Le candidat s'arrête et garde son gain ?")) void p.act({ type: "ladder.stop" }, "Le candidat s'arrête"); }}>Je m'arrête</Button> {/* oxlint-disable-line no-alert -- irreversible action confirmation (doc 08) */}
+                <Button kind="ghost" disabled={m().status !== "playing"} onClick={() => void confirmDialog({ title: "Le candidat s'arrête ?", message: "Il garde le gain atteint ; la partie des paliers se termine.", confirm: "Il s'arrête", danger: true }).then((ok) => ok && p.act({ type: "ladder.stop" }, "Le candidat s'arrête"))}>Je m'arrête</Button>
               </div>
             </Show>
           </div>

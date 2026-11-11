@@ -104,6 +104,20 @@ test("ladder: the candidate climbs a step, 50:50 hides two answers on air", asyn
   await expect(output.locator('.q-answer[data-state="correct"]')).toContainText("8");
   await expect(output.locator(".q-zone-ladder")).toContainText("200");
   await output.screenshot({ path: "screenshots/ladder-output.png" });
+  // « Je m'arrête »: our own dialog, never the browser's confirm() (a native dialog fails the test).
+  control.on("dialog", (d) => {
+    errors.push(`native dialog: ${d.message()}`);
+    void d.dismiss();
+  });
+  await next(2); // next question, presented
+  await control.getByRole("button", { name: "Je m'arrête" }).click();
+  const dialog = control.getByRole("dialog");
+  await expect(dialog).toContainText("Le candidat s'arrête ?");
+  await dialog.getByRole("button", { name: "Annuler" }).click();
+  await expect(dialog).toBeHidden();
+  await control.getByRole("button", { name: "Je m'arrête" }).click();
+  await dialog.getByRole("button", { name: "Il s'arrête" }).click();
+  await expect(output.locator(".q-zone-ladder")).toContainText("200");
   expect(errors).toEqual([]);
 });
 

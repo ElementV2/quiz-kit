@@ -122,3 +122,12 @@ body { overscroll-behavior: none; user-select: none; -webkit-user-select: none; 
   .p-question { gap: 12px; }
   .p-prompt { font-size: 22px; }
 }
+
+/* Free seat tablet: the player seats themselves. */
+.p-claim { gap: 14px; max-width: 420px; margin: 0 auto; width: 100%; padding: 0 16px; }
+.p-claim-seat { font-size: 13px; letter-spacing: .2em; color: var(--ui-accent); }
+.p-claim-field { display: grid; gap: 6px; width: 100%; text-align: left; }
+.p-claim-field > span { font-size: 11px; font-weight: 650; font-stretch: 75%; text-transform: uppercase; letter-spacing: .14em; color: var(--ui-muted); }
+.p-claim-field input { font-size: 22px; padding: 12px 14px; }
+.p-claim-err { color: var(--ui-danger); margin: 0; }
+.p-claim .q-btn-big { width: 100%; }

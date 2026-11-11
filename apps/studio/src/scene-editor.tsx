@@ -1,7 +1,7 @@
 import { For, Show, createEffect, createMemo, createSignal, onCleanup, onMount, type JSX } from "solid-js";
 import { DEFAULT_THEME, GameDocument, OUTPUT_SCENES, ZoneState, ZoneType, type Layer, type Scene, type Theme, type Zone } from "@quiz/schema";
 import { SceneRenderer, layerVisible } from "@quiz/renderer";
-import { Button, Panel } from "@quiz/ui";
+import { Button, Panel, confirmDialog, isDialogOpen } from "@quiz/ui";
 import { api, download, imageSize, mediaUrl, svgToPng } from "./api.ts";
 import { HANDLES, ZONE_CODE, bandRect, fitScale, intersects, keepInside, moveRects, overflows, removeZones, resizeFrom, toggleRef, type Handle, type Rect, type ZoneRef } from "./canvas-logic.ts";
 import { alignRects, assetSheetHtml, distributeRects, duplicateZone, freeId, pickColor, psdTemplateLayers, rectFromDrag, sceneIds, zonesFromPsd } from "./design-import.ts";
@@ -248,6 +248,7 @@ export function SceneEditor(p: { doc: GameDocument; update: Update }): JSX.Eleme
   const fixOverflow = (refs: readonly ZoneRef[]) => editScene((sc) => refs.forEach((r) => { const z = sc.layers[r.layer]?.zones[r.zone]; if (z !== undefined) z.rect = keepInside(z.rect, sc.size); }));
 
   const onKey = (e: KeyboardEvent) => {
+    if (isDialogOpen()) return; // our dialog owns the keyboard (Entrée / Échap)
     if (inField(e) || e.altKey) return;
     const mod = e.ctrlKey || e.metaKey;
     const k = e.key;
@@ -629,7 +630,7 @@ export function SceneEditor(p: { doc: GameDocument; update: Update }): JSX.Eleme
                   <p class="muted">Ou choisissez-la dans la liste de gauche (même si sa couche n'est pas à l'écran dans la phase simulée). Glisser sur le vide sélectionne plusieurs zones ; <kbd>?</kbd> affiche les raccourcis.</p>
                 </div>
               }>
-                {(l) => <LayerInspector layer={l()} edit={(f) => editScene((s) => { const x = s.layers[layerSel() ?? -1]; if (x !== undefined) f(x); })} remove={() => { const li = layerSel(); if (li === null) return; if (l().zones.length > 0 && !window.confirm(`Supprimer la couche « ${l().name} » et ses ${l().zones.length} zone(s) ?`)) return; editScene((s) => { s.layers.splice(li, 1); }); setLayerSel(null); }} />}
+                {(l) => <LayerInspector layer={l()} edit={(f) => editScene((s) => { const x = s.layers[layerSel() ?? -1]; if (x !== undefined) f(x); })} remove={() => void (async () => { const li = layerSel(); if (li === null) return; if (l().zones.length > 0 && !(await confirmDialog({ title: `Supprimer la couche « ${l().name} » ?`, message: `Et ses ${l().zones.length} zone(s). Annulable (Ctrl+Z).`, confirm: "Supprimer", danger: true }))) return; editScene((s) => { s.layers.splice(li, 1); }); setLayerSel(null); })()} />}
               </Show>
             }>
               <Show when={sel().length > 1}>
