@@ -76,6 +76,8 @@ export function correctText(m: MechanicView | null): string | null {
       return m.input === "choice" ? labelIn(m.options, m.correct) : m.correct;
     case "poll-board":
       return null;
+    case "chain":
+      return m.expected;
     default:
       return null;
   }
@@ -111,6 +113,7 @@ export function answerText(m: MechanicView | null, value: readonly string[] | nu
     }
     case "poll-board":
     case "crowd-vote":
+    case "chain":
       return value.join(", ");
     default:
       return value.join(", ");
@@ -134,6 +137,7 @@ function optionList(m: MechanicView): readonly { id: string; label: string }[] |
     case "number-answer":
     case "pairs":
     case "pin":
+    case "chain":
       return null;
     default:
       return null;

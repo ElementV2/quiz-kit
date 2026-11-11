@@ -54,6 +54,7 @@ export function botAction(m: MechanicView, participantId: string, rand: Rand, ac
     case "board":
       return m.winner === null ? { type: "buzz", participantId } : null;
     case "poll-board":
+    case "chain":
       return null; // answers are spoken and judged by the host
     case "crowd-vote":
       return null; // the chat votes, not the players

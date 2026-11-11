@@ -63,6 +63,8 @@ Règle : une phase n'est terminée que quand ses critères de sortie passent. Co
 - [x] Questions de réserve, `question.regrade` (+ aperçu), `question.edit`, départage
 - [x] Mode Répétition avec bots
 - [x] Export des résultats (CSV / PDF), replay (studio)
+- [x] Mécanique `chain` « La chaîne » (façon Maillon faible) côté moteur : tours, banque, vote d'élimination, duel final, modèle (ADR-0016)
+- [ ] Écrans de « La chaîne » (régie, animateur, tablettes, sorties)
 
 ## Phase 4 — Diffusion élargie
 

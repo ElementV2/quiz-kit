@@ -21,6 +21,7 @@ export { boardMechanic as board, BoardConfig, BoardState } from "./mechanics/boa
 export { hints, HintsConfig, HintsState } from "./mechanics/hints/hints.ts";
 export { revealImage, RevealImageConfig, RevealImageState } from "./mechanics/reveal-image/reveal-image.ts";
 export { crowdVote, CrowdVoteConfig, CrowdVoteState } from "./mechanics/crowd-vote/crowd-vote.ts";
+export { chain, ChainConfig, ChainState } from "./mechanics/chain/chain.ts";
 export { normalizeAnswer, matchesText } from "./mechanics/shared/text-match.ts";
 export { boardCells } from "./mechanics/board/board.ts";
 
@@ -42,7 +43,8 @@ import { boardMechanic } from "./mechanics/board/board.ts";
 import { hints } from "./mechanics/hints/hints.ts";
 import { revealImage } from "./mechanics/reveal-image/reveal-image.ts";
 import { crowdVote } from "./mechanics/crowd-vote/crowd-vote.ts";
+import { chain } from "./mechanics/chain/chain.ts";
 
 /** Mechanics available in this build. */
-export const defaultRegistry = createRegistry([mixed, choice, pollBoard, buzzer, ladder, textAnswer, numberAnswer, order, pairs, pin, allocation, boardMechanic, hints, revealImage, crowdVote]);
+export const defaultRegistry = createRegistry([mixed, choice, pollBoard, buzzer, ladder, textAnswer, numberAnswer, order, pairs, pin, allocation, boardMechanic, hints, revealImage, crowdVote, chain]);
 export { applyVerdicts, autoVerdicts, type ForcedVerdict } from "./verdicts.ts";

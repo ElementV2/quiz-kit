@@ -284,10 +284,88 @@ export const CrowdVoteMechanicView = z.strictObject({
 });
 export type CrowdVoteMechanicView = z.infer<typeof CrowdVoteMechanicView>;
 
+/** Per-round figures of one player of a chain round (strongest / weakest link), or their duel score. Public. */
+export const ChainStat = z.strictObject({
+  participantId: ParticipantId,
+  right: z.number().int().min(0),
+  wrong: z.number().int().min(0),
+  /** Amount this player put in the bank this round (auto-bank at the top step included). */
+  banked: z.number().int().min(0),
+});
+export type ChainStat = z.infer<typeof ChainStat>;
+
+/** Elimination vote after a chain round. */
+export const ChainVoteView = z.strictObject({
+  /** `open`: players vote; `tie`: the strongest link picks among `tied`; `done`: `eliminated` is out. */
+  status: z.enum(["open", "tie", "done"]),
+  /** Who votes (the active players of the round when the vote opened); each votes against another one. */
+  voters: z.array(ParticipantId),
+  /** Number of ballots cast so far (public). */
+  cast: z.number().int().min(0),
+  /** SECRET while open: who voted against whom. Host / control always; players and outputs once closed. */
+  ballots: z.array(z.strictObject({ voter: ParticipantId, against: ParticipantId })).nullable(),
+  /** SECRET while open (same rule as `ballots`): votes received by each voter, most first. */
+  tally: z.array(z.strictObject({ participantId: ParticipantId, votes: z.number().int().min(0) })).nullable(),
+  /** Tie: the players with the most votes (empty otherwise). */
+  tied: z.array(ParticipantId),
+  /** Tie: the strongest link of the round, who picks (`chain.pick`). */
+  picker: ParticipantId.nullable(),
+  eliminated: ParticipantId.nullable(),
+  /** The viewing player's own ballot (players only; null for other audiences or before voting). */
+  myVote: ParticipantId.nullable(),
+});
+export type ChainVoteView = z.infer<typeof ChainVoteView>;
+
+/**
+ * « La chaîne » (façon Maillon faible): players answer in turn, each right answer climbs the chain one step, a wrong
+ * one drops it to 0; the player on turn may bank it first. After each chain round, an elimination vote; with two players
+ * left, the final duel: its winner takes every bank of the game. Shown on air, between questions and between rounds.
+ */
+export const ChainMechanicView = z.strictObject({
+  mechanic: z.literal("chain"),
+  /** `chain`: a chain round; `duel`: the final duel. */
+  stage: z.enum(["chain", "duel"]),
+  /** Players of the round, in turn order. */
+  order: z.array(ParticipantId),
+  /** Player whose question it is (null between rounds, or nobody left). */
+  turn: ParticipantId.nullable(),
+  /** SECRET: expected answer of the question on air. Host / control always; players and outputs once revealed. */
+  expected: z.string().nullable(),
+  /** Verdict on the question on air (said aloud: public). */
+  verdict: z.enum(["right", "wrong"]).nullable(),
+  /** Amounts of the chain, increasing (index 0 = first step). Empty in a duel. */
+  steps: z.array(z.number().int()),
+  /** Steps climbed by the current chain (0 = nothing at stake); `steps[level - 1]` is its value. */
+  level: z.number().int().min(0),
+  /** What banking now would put in the bank. */
+  chainValue: z.number().int().min(0),
+  /** Banked this round. */
+  bank: z.number().int().min(0),
+  /** The round ends when the bank reaches it (bankTarget, else the last step). 0 in a duel. */
+  bankTarget: z.number().int().min(0),
+  /** Banks of every chain round so far, this one included: what the winner of the final duel takes. */
+  totalBank: z.number().int().min(0),
+  /** Why the chain round is over (`target`: bank full; `questions`: none left; `ended`: stopped by the control room). */
+  over: z.enum(["target", "questions", "ended"]).nullable(),
+  /** Per-player figures of this round (duel: the duel score). */
+  stats: z.array(ChainStat),
+  /** Most right answers, then most banked (null without stats). */
+  strongest: ParticipantId.nullable(),
+  /** Fewest right answers, then least banked. */
+  weakest: ParticipantId.nullable(),
+  vote: ChainVoteView.nullable(),
+  /** Players voted off so far, by round. */
+  eliminations: z.array(z.strictObject({ roundIndex: z.number().int().min(0), participantId: ParticipantId })),
+  /** Final duel (stage `duel`): questions each, sudden death once they are all asked and still tied, winner. */
+  duel: z.strictObject({ questionsEach: z.number().int().min(1), suddenDeath: z.boolean(), winner: ParticipantId.nullable() }).nullable(),
+});
+export type ChainMechanicView = z.infer<typeof ChainMechanicView>;
+
 export const MechanicView = z.discriminatedUnion("mechanic", [
   ChoiceMechanicView, PollBoardMechanicView, BuzzerMechanicView, LadderMechanicView,
   TextAnswerMechanicView, NumberAnswerMechanicView, OrderMechanicView, PairsMechanicView, PinMechanicView,
   AllocationMechanicView, BoardMechanicView, HintsMechanicView, RevealImageMechanicView, CrowdVoteMechanicView,
+  ChainMechanicView,
 ]);
 export type MechanicView = z.infer<typeof MechanicView>;
 

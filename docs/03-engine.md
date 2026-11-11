@@ -19,7 +19,8 @@ Pur : mêmes entrées → même sortie. Aucun accès horloge, réseau, disque, `
 ## État de jeu
 
 `GameState` = { session, game (contenu + format figés), participants, teams, scoreLedger, roundIndex,
-questionIndex, phase, mechanicState, revealed, timer (échéance en heure murale), layers (TAKE/OUT), jokersUsed }.
+questionIndex, phase, mechanicState, revealed, timer (échéance en heure murale), layers (TAKE/OUT), jokersUsed,
+across (état des mécaniques qui traversent les manches, ADR-0016) }.
 Pas de `history` : l'undo passe par le journal (ADR-0010).
 
 ## Cycle par défaut d'une question
@@ -44,7 +45,7 @@ interface Mechanic<C, S> {
 Mécaniques de base (phase 0 → 3) : `choice` (QCM, vrai/faux, multi), `poll-board` (Famille en or),
 `buzzer` (priorité + blocage), `ladder` (paliers), `oral` (validation animateur), `text-answer` (fuzzy),
 `number-answer`, `order`, `pairs`, `pin`, `board` (Jeopardy), `hints` (indices dégressifs), `reveal-image`,
-`allocation`, `crowd-vote` (majorité chat).
+`allocation`, `crowd-vote` (majorité chat), `chain` (« La chaîne », façon Maillon faible : mécanique de partie, ADR-0016).
 `ladder` est une **mécanique de manche** (progression sur paliers). Ses paliers sont dans sa config
 (`steps`, `safeSteps`), pas dans une `ScoringRule` : la règle de score de la manche est ignorée.
 
@@ -130,6 +131,51 @@ tous) : `fifty` masque 2 mauvaises options tirées par `ctx.rng` ; `audience` : 
 hasard entre les autres options visibles, total 100. Avant révélation, `status`, `level` et `gain` ne
 dépendent pas de la justesse de la réponse (testé).
 
+### `chain` (« La chaîne », façon Maillon faible, ADR-0016)
+
+Mécanique **de partie** (`spansRounds`) : ses banques, ses statistiques, son vote et ses éliminations passent d'une
+question à l'autre (`RoundContext.previous`) et d'une manche à l'autre (`GameState.across`, `RoundContext.earlier`).
+Questions `oral` (réponse attendue) ou `text` (première réponse acceptée), lues par l'animateur. Points propres
+(`ownPoints`), pas de mise (`noStakes`), pas de regrade (jugée par un humain). La `ScoringRule` de la manche est ignorée.
+
+Config : `stage` (`chain` | `duel`, défaut `chain`), `steps` (montants strictement croissants, **aucun montant par
+défaut** : une liste vide est refusée à la présentation, « la chaîne n'a aucun montant… », et listée dans les problèmes
+de manche du studio), `bankTarget` (optionnel, défaut = dernier montant), `questionsEach` (duel, défaut 5).
+
+**Manche de chaîne.** Ordre de passage = joueurs actifs à la première question (ordre d'inscription), figé pour la
+manche ; une question par tour, au joueur actif suivant (un joueur éliminé ou retiré est sauté). Réponse orale : la
+régie / l'animateur juge `answer.judge { correct, participantId? }` (une fois ; `participantId`, s'il est donné, doit
+être le joueur au tour ; corriger = undo), de `presenting` à `judging` — ouvrir / verrouiller / révéler n'est pas
+nécessaire (révéler montre la réponse attendue à tous). Juste : la chaîne monte d'un cran ; faux : elle retombe à 0.
+`chain.bank { participantId }` (le joueur au tour, ou l'animateur / la régie pour lui, avant le jugement) : la valeur
+de la chaîne passe en banque, la chaîne repart de 0. Le dernier cran se met en banque tout seul. La banque est plafonnée
+à `bankTarget` : pleine, la manche est finie. Fin aussi quand les questions sont épuisées, ou `chain.end` (régie : le
+temps est écoulé ; à l'antenne ou entre deux tours). Ce qui n'est pas en banque est perdu. Statistiques par joueur
+(bonnes, mauvaises réponses, montant mis en banque) ; maillon fort = le plus de bonnes réponses puis le plus mis en
+banque, maillon faible = l'inverse (publics).
+
+**Vote d'élimination** (entre deux manches, aucune question à l'antenne, phases `round.end` ou `idle`) :
+`chain.openVote` (régie, manche finie, au moins 3 joueurs actifs) → `chain.vote { participantId, against }` (chaque
+joueur actif de la manche, contre un autre, pas lui-même ; un nouveau vote remplace le sien ; la régie peut voter pour
+un joueur) → `chain.closeVote` (régie) : le plus de voix est éliminé (statut `eliminated`, posé par le cœur). Égalité :
+le maillon fort de la manche choisit parmi les ex aequo (`chain.pick { participantId: maillon fort, eliminated }`, depuis
+sa tablette ou par la régie pour lui). Vote secret : bulletins et décompte à `null` pour joueurs et sorties tant qu'il est
+ouvert (testé), chacun voit son propre vote (`myVote`) ; régie et animateur voient tout. Un vote ouvert bloque la
+présentation de la manche suivante. Un vote par manche (annuler pour le refaire).
+
+**Duel final** (`stage: duel`) : exactement deux joueurs actifs (sinon refus à la présentation). Le plus fort de la
+dernière manche de chaîne commence ; ils répondent à tour de rôle (le moins interrogé répond), `questionsEach` chacun,
+puis mort subite par paires. Le duel s'arrête dès que l'un ne peut plus être rattrapé. Le vainqueur reçoit la
+**cagnotte** = toutes les banques de la partie, écrite une fois au registre : à la révélation de la question décisive,
+sinon au `question.next` qui clôt le duel. Personne ne marque avant. Questions épuisées sans vainqueur : rien n'est
+versé (prévoir assez de questions, sinon points à la main). Pas de banque ni de `chain.end` pendant le duel.
+
+Vue `ChainMechanicView` (à l'antenne, entre deux tours, entre deux manches, en fin de partie) : `stage`, `order`, `turn`,
+`expected` (secret : régie / animateur, tout le monde à la révélation), `verdict`, `steps`, `level`, `chainValue`,
+`bank`, `bankTarget`, `totalBank`, `over`, `stats`, `strongest`, `weakest`, `vote`, `eliminations`, `duel`.
+Limite connue : pas de chrono de manche (le moteur n'a qu'un chrono par question) ; la régie termine la manche
+(`chain.end`) quand son temps est écoulé.
+
 ### Mécaniques de la phase 3 (implémentées)
 
 Capacités optionnelles du contrat : ADR-0013 (`freeOrder`, `hidesPromptMedia`, `projectIdle`, `regrade`,
@@ -201,7 +247,8 @@ incrémentent `gameVersion`. Règles de ce qui peut changer : `live-patch.ts` (`
   `answer.judge`, `element.reveal`, `question.reveal`, `question.next`, `score.adjust`, `score.void`,
   `question.regrade`, `question.replaceFromReserve`, `question.edit`, `timer.set`, `joker.use`,
   `layer.take`, `layer.out`, `player.add|rename|setStatus|setTeam|setSeat|remove`, `undo`.
-- Joueurs : `answer.submit`, `buzz`, `vote`.
+- Joueurs : `answer.submit`, `buzz`, `vote`, `chain.bank`, `chain.vote`, `chain.pick` (pour eux-mêmes).
+- Chaîne (régie) : `chain.end`, `chain.openVote`, `chain.closeVote` ; l'animateur peut `chain.bank` pour le joueur au tour.
 - Système : `timer.expired`, `client.connected`, `client.disconnected`.
 
 Les rôles autorisés par action sont dans `schema` (`actionPermissions`) et vérifiés par le serveur **et** le moteur.

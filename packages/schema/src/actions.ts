@@ -106,6 +106,22 @@ export const Action = z.discriminatedUnion("type", [
   action("poll.control", { teamId: TeamId.optional(), participantId: ParticipantId.optional() }),
   /** After the last strike, hands the steal attempt to another team (poll-board). */
   action("poll.steal", { teamId: TeamId.optional(), participantId: ParticipantId.optional() }),
+  // Chain (« La chaîne », façon Maillon faible)
+  /**
+   * The player whose turn it is banks the chain (before their answer is judged): its value goes to the round bank and
+   * the chain restarts at 0. `participantId` = the player on turn (the host / control room bank on their behalf).
+   */
+  action("chain.bank", { participantId: ParticipantId }),
+  /** Ends the chain round now (its time is up, or the host stops it): the chain not banked is lost. */
+  action("chain.end", {}),
+  /** After a chain round: opens the elimination vote (every active player of the round votes). */
+  action("chain.openVote", {}),
+  /** A player votes against another active player of the round (not themselves); a new vote replaces theirs. */
+  action("chain.vote", { participantId: ParticipantId, against: ParticipantId }),
+  /** Closes the vote: most votes is eliminated; a tie is settled by the strongest link (`chain.pick`). */
+  action("chain.closeVote", {}),
+  /** Tie: the strongest link (`participantId`) picks who goes among the tied players (control may pick for them). */
+  action("chain.pick", { participantId: ParticipantId, eliminated: ParticipantId }),
   // Scores (overrides, always accepted)
   action("score.adjust", {
     target: ScoreTarget,
@@ -165,7 +181,7 @@ const CONTROL_ONLY: readonly ActionType[] = [
   "question.next", "timer.set", "timer.stop", "player.add", "player.rename", "player.setStatus",
   "player.setTeam", "player.setSeat", "player.remove", "team.add", "undo", "layer.take", "layer.out",
   "element.reveal", "joker.use", "ladder.stop", "poll.control", "poll.steal", "question.replaceFromReserve", "question.edit",
-  "host.setDrive", "question.setStakes", "game.patch", "question.skip",
+  "host.setDrive", "question.setStakes", "game.patch", "question.skip", "chain.end", "chain.openVote", "chain.closeVote",
 ];
 
 /**
@@ -175,19 +191,23 @@ const CONTROL_ONLY: readonly ActionType[] = [
 export const HOST_DRIVE_ACTIONS: ReadonlySet<ActionType> = new Set<ActionType>([
   "game.start", "round.start", "question.present", "question.open", "question.lock", "question.reveal", "question.next",
   "element.reveal", "timer.set", "timer.stop", "joker.use", "ladder.stop", "poll.control", "poll.steal", "question.setStakes", "question.skip",
+  "chain.end", "chain.openVote", "chain.closeVote",
 ]);
 const SCORING: readonly ActionType[] = ["score.adjust", "score.setTotal", "score.void", "question.regrade", "answer.verdict"];
+
+/** What a player does from their tablet (or a seat): answer, buzz, bank the chain, vote, pick on a tied vote. */
+const PLAYER_ACTIONS: readonly ActionType[] = ["answer.submit", "buzz", "chain.bank", "chain.vote", "chain.pick"];
 
 /** Role → allowed actions (doc 01). Checked by the server AND the engine. */
 export const actionPermissions: Readonly<Record<Role, ReadonlySet<ActionType>>> = {
   // Control may answer / buzz on behalf of a player (no tablet, operator-entered buzzer order).
-  control: new Set<ActionType>([...CONTROL_ONLY, ...SCORING, "answer.submit", "answer.judge", "buzz"]),
+  control: new Set<ActionType>([...CONTROL_ONLY, ...SCORING, ...PLAYER_ACTIONS, "answer.judge"]),
   "control-readonly": new Set<ActionType>(),
   scorer: new Set<ActionType>([...SCORING, "answer.judge"]),
-  host: new Set<ActionType>(["answer.judge"]),
+  host: new Set<ActionType>(["answer.judge", "chain.bank"]),
   output: new Set<ActionType>(),
-  player: new Set<ActionType>(["answer.submit", "buzz"]),
-  seat: new Set<ActionType>(["answer.submit", "buzz"]),
+  player: new Set<ActionType>(PLAYER_ACTIONS),
+  seat: new Set<ActionType>(PLAYER_ACTIONS),
   studio: new Set<ActionType>(),
   system: new Set<ActionType>(["timer.expired", "crowd.tally"]),
 };
@@ -197,11 +217,11 @@ export function isAllowed(role: Role, type: ActionType): boolean {
 }
 
 /**
- * Actions that `undo` without target may cancel: everything except player answers (submit, buzz) and undos.
+ * Actions that `undo` without target may cancel: everything except player answers (submit, buzz, chain vote) and undos.
  * `timer.expired` is included so that "undo" right after an auto-lock simply re-opens answers.
  */
 export function isUndoableByDefault(type: ActionType): boolean {
-  return type !== "answer.submit" && type !== "buzz" && type !== "undo" && type !== "crowd.tally" && !NEVER_UNDONE.has(type);
+  return type !== "answer.submit" && type !== "buzz" && type !== "chain.vote" && type !== "undo" && type !== "crowd.tally" && !NEVER_UNDONE.has(type);
 }
 
 /**

@@ -14,6 +14,10 @@
 - [x] Accès équipe distant : blocage **par IP** (sur le LAN chaque appareil a sa propre IP) (2026-11-11).
 - [x] `participants.mode` / `min` / `teamSize` : **supprimés** des documents par migration (2026-11-11).
 - [x] Format « Maillon faible » : **à ajouter** (2026-11-11).
+- [ ] « La chaîne » : faut-il un **chrono de manche** (chaîne jouée contre la montre, comme à la télé) ? Aujourd'hui la
+      régie termine la manche (`chain.end`) ; un chrono de manche demande un échéancier côté serveur (`timer.expired`
+      n'existe que par question). Autres points à trancher : qui commence une manche de chaîne (aujourd'hui l'ordre
+      d'inscription ; à la télé, le maillon fort de la manche précédente) ; nombre minimum de votants (aujourd'hui 3).
 
 ## Vérifié (2026-11-10)
 

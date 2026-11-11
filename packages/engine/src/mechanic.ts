@@ -12,6 +12,13 @@ export type MechanicEnv = {
   readonly phase: Phase;
   /** When answers were locked (null while open): stream-delay windows (crowd-vote). */
   readonly lockedAt?: number | null | undefined;
+  /**
+   * Active participants, in registration order (chain: turn order, voters). Absent in a static check (studio round
+   * issues): no player is known, the mechanic only checks the question and its settings.
+   */
+  readonly activePlayers?: readonly ParticipantId[] | undefined;
+  /** Current round index (null before the first round; absent in a static check). */
+  readonly roundIndex?: number | null | undefined;
 };
 
 export type ProjectEnv = {
@@ -59,6 +66,13 @@ export type RoundContext<S> = {
   readonly questionsLeft: number;
   /** Every question of the round, in round order (board: the grid is built from them). */
   readonly questions: readonly Question[];
+  /** Index of the round in the format (absent in a static check). */
+  readonly roundIndex?: number | undefined;
+  /**
+   * Round-spanning mechanics (`spansRounds`, ADR-0016): the last state this mechanic left in an EARLIER round
+   * (`GameState.across`), null the first time. Only read when `previous` is null (first question of the round).
+   */
+  readonly earlier?: { readonly state: S; readonly roundIndex: number } | null | undefined;
 };
 
 /**
@@ -137,6 +151,15 @@ export interface Mechanic<C, S> {
   readonly noStakes?: boolean;
   /** Smaller state kept in the reveal history (must judge / regrade / project identically). Absent: as is. */
   compact?(state: S): S;
+  /**
+   * Round-spanning mechanic (chain, ADR-0016): the state it leaves at each `question.next` outlives the round
+   * (`GameState.across`, never cleared by `round.start`). The next round it plays starts from it (`RoundContext.earlier`);
+   * while no question is on air, its round-spanning actions (`chain.*`) go to that state (`onAction` with phase idle,
+   * round.end) and it is projected (idle, round.end, game.end).
+   */
+  readonly spansRounds?: boolean;
+  /** Participants an accepted action eliminates (chain vote): the core sets their status to `eliminated`. */
+  eliminates?(before: S, after: S): readonly ParticipantId[];
 }
 
 /** Type-erased mechanic stored in the registry. */

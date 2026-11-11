@@ -73,6 +73,19 @@ export const MECHANICS: Readonly<Record<string, MechanicInfo>> = {
       { key: "lockoutOnWrong", kind: "boolean", label: "Qui se trompe ne peut plus buzzer sur cette case" },
     ],
   },
+  chain: {
+    label: "La chaîne (banque et élimination)",
+    explain: "Chacun son tour, à l'oral : une bonne réponse fait monter la chaîne, une erreur la remet à zéro ; on met en banque avant sa question. Vote d'élimination après chaque manche, duel final à deux : le gagnant remporte toutes les banques.",
+    usesScoring: false,
+    fields: [
+      { key: "stage", kind: "enum", label: "Type de manche", options: [{ value: "chain", label: "Manche de chaîne" }, { value: "duel", label: "Duel final (deux derniers joueurs)" }] },
+      { key: "steps", kind: "numbers", label: "Montants de la chaîne (croissants, manche de chaîne)", hint: "à renseigner, ex. 20, 50, 100, 200" },
+      { key: "bankTarget", kind: "number", label: "Banque maximale de la manche (vide = le dernier montant)", min: 1, max: 100_000_000 },
+      { key: "questionsEach", kind: "number", label: "Duel final : questions par joueur avant la mort subite", min: 1, max: 20 },
+    ],
+    // No amount imposed: the steps are left empty (a round without steps is refused when played, and listed in the issues).
+    seed: { stage: "chain", steps: [] },
+  },
   hints: { label: "Indices dégressifs", explain: "Les indices de la question tombent un à un ; plus on répond tôt, plus on marque.", usesScoring: false, fields: progressive },
   "crowd-vote": {
     label: "Vote du chat (majorité)",

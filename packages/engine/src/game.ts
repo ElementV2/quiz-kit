@@ -87,7 +87,8 @@ function isUsableSnapshot(snap: Snapshot, events: readonly Event[], cancelledBy:
   // Shape first (an older snapshot may lack fields), then mechanic states with their own schemas (boundary: DB read).
   const parsed = GameState.safeParse(snap.state);
   if (!parsed.success) return false;
-  for (const m of [parsed.data.mechanic, parsed.data.carry]) {
+  const across = Object.entries(parsed.data.across).map(([id, a]) => ({ id, state: a.state }));
+  for (const m of [parsed.data.mechanic, parsed.data.carry, ...across]) {
     if (m === null) continue;
     const mech = registry.get(m.id);
     if (mech === null || !mech.stateSchema.safeParse(m.state).success) return false;

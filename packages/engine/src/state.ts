@@ -55,6 +55,12 @@ export const GameState = z.strictObject({
    * (round-level mechanics such as ladder). Cleared by `round.start`. Validated like `mechanic`.
    */
   carry: z.strictObject({ id: z.string(), state: z.unknown(), revealed: z.boolean(), questionIndex: z.number().int().min(0) }).nullable(),
+  /**
+   * Round-spanning mechanics (`spansRounds`, ADR-0016), by mechanic id: the last state left by a `question.next`
+   * (or changed between questions / rounds by its own actions), with its round. Never cleared by `round.start`.
+   * Default: snapshots written before stay readable.
+   */
+  across: z.record(z.string(), z.strictObject({ state: z.unknown(), roundIndex: z.number().int().min(0) })).default({}),
   /** Ledger length at the last `round.start`: replaying a question only voids points of the current round. */
   roundLedgerStart: z.number().int().min(0),
   timer: TimerState.nullable(),
@@ -98,6 +104,7 @@ export function initialState(session: Session): GameState {
     ledger: [],
     mechanic: null,
     carry: null,
+    across: {},
     roundLedgerStart: 0,
     timer: null,
     openedAt: null,

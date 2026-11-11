@@ -180,6 +180,24 @@ describe("permissions", () => {
     }
     expect(isAllowed("host", "answer.judge")).toBe(true);
   });
+  it("chain: players bank, vote and pick for themselves; the control room runs the vote; the host banks on their behalf", () => {
+    for (const t of ["chain.bank", "chain.vote", "chain.pick"] as const) {
+      expect(isAllowed("player", t)).toBe(true);
+      expect(isAllowed("seat", t)).toBe(true);
+      expect(isAllowed("control", t)).toBe(true);
+      expect(isAllowed("output", t)).toBe(false);
+    }
+    for (const t of ["chain.end", "chain.openVote", "chain.closeVote"] as const) {
+      expect(isAllowed("control", t)).toBe(true);
+      expect(isAllowed("player", t)).toBe(false);
+      expect(isAllowed("host", t)).toBe(false); // unless the control room lets the host drive
+    }
+    expect(isAllowed("host", "chain.bank")).toBe(true);
+    expect(isAllowed("host", "chain.vote")).toBe(false);
+    expect(isUndoableByDefault("chain.vote")).toBe(false); // a player's ballot, like an answer
+    expect(Action.safeParse({ type: "chain.vote", participantId: "p_1", against: "p_2" }).success).toBe(true);
+    expect(Action.safeParse({ type: "chain.bank" }).success).toBe(false);
+  });
   it("parses mechanic actions", () => {
     expect(Action.safeParse({ type: "answer.judge", correct: false }).success).toBe(true);
     expect(Action.safeParse({ type: "answer.judge", optionId: "a", correct: true }).success).toBe(true);

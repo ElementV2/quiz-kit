@@ -57,7 +57,7 @@ function base(s: GameState, audience: Audience, participantId: string | null, re
         ? { id: q.id, index: s.questionIndex, count: round.questions.length, prompt: audience === "player" && m?.hidesPromptMedia === true ? { text: q.prompt.text } : q.prompt }
         : null,
     timer: s.timer === null ? null : { endsAt: s.timer.endsAt, durationMs: s.timer.durationMs },
-    mechanic: m === null || s.mechanic === null ? idleMechanic(s, audience, participantId, registry) : m.project(s.mechanic.state, { audience, phase: s.phase, participantId }),
+    mechanic: m === null || s.mechanic === null ? (idleMechanic(s, audience, participantId, registry) ?? spanningMechanic(s, audience, participantId, registry)) : m.project(s.mechanic.state, { audience, phase: s.phase, participantId }),
     // Players get the top only: a full 500-row board in every tablet view would make each broadcast O(n²).
     leaderboard: audience === "player" ? leaderboard(s).slice(0, PLAYER_LEADERBOARD_ROWS) : leaderboard(s),
     layers: s.layers,
@@ -149,6 +149,19 @@ function idleMechanic(s: GameState, audience: Audience, participantId: string | 
   const v = m.projectIdle(cfg.data, questions, previous, { audience, phase: s.phase, participantId });
   byAudience.set(audience, v);
   return v;
+}
+
+/**
+ * No question on air in a round of a round-spanning mechanic (chain, ADR-0016): the state it left (chain and bank
+ * between turns, elimination vote between rounds, the final's winner at game end). Small: projected per viewer.
+ */
+function spanningMechanic(s: GameState, audience: Audience, participantId: string | null, registry: Registry): BaseView["mechanic"] {
+  if (s.phase !== "idle" && s.phase !== "round.end" && s.phase !== "game.end") return null;
+  const round = currentRound(s);
+  const m = round === null ? null : registry.get(round.mechanic);
+  if (m === null || m.spansRounds !== true) return null;
+  const held = s.across[m.id];
+  return held === undefined ? null : m.project(held.state, { audience, phase: s.phase, participantId });
 }
 
 /** Memoised per (ledger, teams) identity like the player leaderboard. Teams are few: sent to everyone. */

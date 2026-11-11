@@ -167,6 +167,8 @@ function reduceAllowed(s: GameState, a: Action, ctx: Ctx, registry: Registry): R
       const endsRound = m !== null && s.mechanic !== null && m.endsRound(s.mechanic.state, s.phase);
       const isLastQuestion = round === null || endsRound || (m?.freeOrder !== true && qi + 1 >= round.questions.length);
       const carry = s.mechanic === null ? s.carry : { id: s.mechanic.id, state: s.mechanic.state, revealed: s.phase === "revealed", questionIndex: qi };
+      // A round-spanning mechanic (chain) keeps its state past the round (ADR-0016).
+      const across = m?.spansRounds === true && s.mechanic !== null ? { ...s.across, [s.mechanic.id]: { state: s.mechanic.state, roundIndex: s.roundIndex ?? 0 } } : s.across;
       // A round ending here lets the mechanic bank what was not scored by a reveal (ladder skipped / stopped).
       const question = currentQuestion(s);
       const closing = isLastQuestion && m !== null && s.mechanic !== null && question !== null ? m.closeRound(s.mechanic.state, s.phase) : [];
@@ -180,7 +182,7 @@ function reduceAllowed(s: GameState, a: Action, ctx: Ctx, registry: Registry): R
       const phase = !isLastQuestion ? "idle" : isLastRound ? "game.end" : "round.end";
       // Stakes belong to one question: gone once it is left (unless set ahead for the next one).
       const stakes = s.stakes !== null && s.stakes.roundIndex === s.roundIndex && s.stakes.questionIndex === qi ? null : s.stakes;
-      return ok({ ...s, phase, ledger, mechanic: null, carry, timer: null, openedAt: null, lockedAt: null, windowMs: null, stakes, verdicts: [] });
+      return ok({ ...s, phase, ledger, mechanic: null, carry, across, timer: null, openedAt: null, lockedAt: null, windowMs: null, stakes, verdicts: [] });
     }
 
     case "answer.submit": {
@@ -219,6 +221,22 @@ function reduceAllowed(s: GameState, a: Action, ctx: Ctx, registry: Registry): R
     case "ladder.stop":
     case "crowd.tally":
       return mechanicAction(s, a, ctx, registry);
+
+    case "chain.bank":
+    case "chain.vote":
+    case "chain.pick": {
+      // The player acts for themselves and only while active (control / host on their behalf).
+      const who = checkPlayerIntent(s, a.participantId, ctx);
+      if (!who.ok) return who;
+      if (a.type === "chain.vote" && !s.participants.some((p) => p.id === a.against)) return err("not-found", "joueur visé inconnu");
+      if (a.type === "chain.pick" && !s.participants.some((p) => p.id === a.eliminated)) return err("not-found", "joueur désigné inconnu");
+      return spanningAction(s, a, ctx, registry);
+    }
+
+    case "chain.end":
+    case "chain.openVote":
+    case "chain.closeVote":
+      return spanningAction(s, a, ctx, registry);
 
     case "score.adjust":
       return addEntry(s, a.target, a.delta, a.reason, a.note ?? null, ctx);
@@ -275,7 +293,14 @@ function reduceAllowed(s: GameState, a: Action, ctx: Ctx, registry: Registry): R
       // Purge their answer (and carried progression): an id reused later must not inherit it (no leak, no phantom score).
       const carryMechanic = s.carry === null ? null : registry.get(s.carry.id);
       // Unknown carried mechanic (cannot purge it): drop the carry rather than keep stale progression.
-      const purged = s.carry === null ? without : carryMechanic === null ? { ...without, carry: null } : { ...without, carry: { ...s.carry, state: carryMechanic.removeParticipant(s.carry.state, a.participantId) } };
+      const carried = s.carry === null ? without : carryMechanic === null ? { ...without, carry: null } : { ...without, carry: { ...s.carry, state: carryMechanic.removeParticipant(s.carry.state, a.participantId) } };
+      // Round-spanning states too (chain: stats, votes, turn order of the game).
+      const across: GameState["across"] = {};
+      for (const [id, x] of Object.entries(s.across)) {
+        const am = registry.get(id);
+        if (am !== null) across[id] = { ...x, state: am.removeParticipant(x.state, a.participantId) };
+      }
+      const purged = { ...carried, across };
       // History too: a regrade must never give points to a later player reusing this id.
       const history = purged.history.map((h) => {
         const hm = registry.get(h.mechanicId);
@@ -339,7 +364,7 @@ export function nextRoundIndex(s: GameState): number | null {
 }
 
 function envOf(s: GameState, ctx: Ctx): MechanicEnv {
-  return { at: ctx.at, rng: ctx.rng, phase: s.phase, lockedAt: s.lockedAt };
+  return { at: ctx.at, rng: ctx.rng, phase: s.phase, lockedAt: s.lockedAt, activePlayers: s.participants.filter((p) => p.status === "active").map((p) => p.id), roundIndex: s.roundIndex };
 }
 
 /**
@@ -367,7 +392,7 @@ function skipUpcoming(s: GameState, a: ActionOf<"question.skip">, ctx: Ctx, regi
     const question = questions[index];
     const played = question === undefined ? null : playedBy(round, question, registry);
     const init = played !== null && played.ok && played.value.mechanic.id === m.id && question !== undefined
-      ? m.init(played.value.config, question, envOf(s, ctx), { previous: { state: s.carry.state, revealed: s.carry.revealed, questionIndex: s.carry.questionIndex }, questionIndex: index, questionsLeft: 0, questions })
+      ? m.init(played.value.config, question, envOf(s, ctx), { previous: { state: s.carry.state, revealed: s.carry.revealed, questionIndex: s.carry.questionIndex }, questionIndex: index, questionsLeft: 0, questions, roundIndex: s.roundIndex })
       : null;
     // Unplayable here (the usual reason to pass it): nothing is built, nothing banked — never a refusal.
     if (init !== null && init.ok) carried = m.closeRound(init.value, "presenting");
@@ -402,7 +427,9 @@ function present(s: GameState, a: ActionOf<"question.present">, ctx: Ctx, regist
     if (!played.ok) return played;
     const pm = played.value.mechanic;
     const previous = s.carry !== null && s.carry.id === pm.id ? { state: s.carry.state, revealed: s.carry.revealed, questionIndex: s.carry.questionIndex } : null;
-    const init = pm.init(played.value.config, question, envOf(s, ctx), { previous, questionIndex: index, questionsLeft: round.questions.length - index - 1, questions });
+    // Round-spanning mechanic (chain, ADR-0016): where it left off in an earlier round.
+    const earlier = pm.spansRounds === true ? (s.across[pm.id] ?? null) : null;
+    const init = pm.init(played.value.config, question, envOf(s, ctx), { previous, questionIndex: index, questionsLeft: round.questions.length - index - 1, questions, roundIndex: s.roundIndex ?? 0, earlier });
     return init.ok ? ok({ index, id: pm.id, state: init.value }) : init;
   };
   let picked: Picked;
@@ -684,6 +711,41 @@ function checkPlayerIntent(s: GameState, participantId: string, ctx: Ctx): Resul
 
 function mechanicAction(s: GameState, a: Action, ctx: Ctx, registry: Registry): R {
   return withMechanic(s, registry, (m, state) => m.onAction(state, a, envOf(s, ctx)) ?? err("unsupported", `impossible de ${actionLabel(a.type)} dans une manche « ${mechanicLabel(m.id)} »`));
+}
+
+/**
+ * Actions of a round-spanning mechanic (chain, ADR-0016): to the question on air if any, else — between questions or
+ * between rounds — to the state the mechanic of the current round left in `GameState.across` (kept in `carry` too
+ * while inside its round, so the next question starts from it). Players it eliminates get the status `eliminated`.
+ */
+function spanningAction(s: GameState, a: Action, ctx: Ctx, registry: Registry): R {
+  const unsupported = (id: string): R => err("unsupported", `impossible de ${actionLabel(a.type)} dans une manche « ${mechanicLabel(id)} »`);
+  if (s.mechanic !== null) {
+    const m = registry.get(s.mechanic.id);
+    const before = s.mechanic.state;
+    const r = mechanicAction(s, a, ctx, registry);
+    return r.ok && m?.eliminates !== undefined && r.value.mechanic !== null ? ok(eliminate(r.value, m.eliminates(before, r.value.mechanic.state))) : r;
+  }
+  const round = currentRound(s);
+  if (round === null) return err("wrong-phase", "aucune manche en cours");
+  const m = registry.get(round.mechanic);
+  if (m === null || m.spansRounds !== true) return unsupported(round.mechanic);
+  const held = s.across[m.id];
+  if (held === undefined) return err("wrong-phase", "aucune question jouée dans ce jeu pour l'instant");
+  const r = m.onAction(held.state, a, envOf(s, ctx)) ?? unsupported(m.id);
+  if (!r.ok) return r;
+  // Inside its round the carried state is the same one (both set by the last `question.next`; never by identity:
+  // a snapshot read back from disk has two equal copies).
+  const carry = s.carry !== null && s.carry.id === m.id && held.roundIndex === s.roundIndex ? { ...s.carry, state: r.value } : s.carry;
+  const next: GameState = { ...s, across: { ...s.across, [m.id]: { ...held, state: r.value } }, carry };
+  return ok(m.eliminates === undefined ? next : eliminate(next, m.eliminates(held.state, r.value)));
+}
+
+/** Sets the status `eliminated` (active players only: a status changed by hand meanwhile is kept). */
+function eliminate(s: GameState, ids: readonly string[]): GameState {
+  if (ids.length === 0) return s;
+  const out = new Set(ids);
+  return { ...s, participants: s.participants.map((p) => (out.has(p.id) && p.status === "active" ? { ...p, status: "eliminated" } : p)) };
 }
 
 function withMechanic(s: GameState, registry: Registry, f: (m: AnyMechanic, state: unknown) => Result<unknown, Rejection>): R {

@@ -429,7 +429,7 @@ describe("cleanup of older templates (ADR-0015)", () => {
     expect(existsSync(join(dataDir, "games", "g_modele_ordre.json"))).toBe(true);
     const lib = new GameLibrary(dataDir);
     expect(lib.get("g_modele_ordre")?.format.rounds[0]?.mechanic).toBe("mixed"); // kept, read as « Mixte »
-    expect(lib.get("g_modele_sondage")?.title).toMatch(/famille en or/i);
+    expect(lib.get("g_modele_sondage")?.title).toMatch(/sondage en équipes/i);
   });
 
   it("a truncated library file never stops the server from starting", async () => {

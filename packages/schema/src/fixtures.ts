@@ -335,6 +335,99 @@ export const DEMO_LADDER_GAME: GameDocument = {
   },
 };
 
+/** Spoken question of the chain template (the host reads it, the control room judges). */
+const oral = (id: string, text: string, expected: string, notes?: string): GameDocument["questions"][number] => ({
+  id,
+  prompt: { text },
+  answerSpec: { kind: "oral", expected },
+  hints: [],
+  tags: ["chaîne"],
+  ...(notes === undefined ? {} : { notes }),
+});
+
+/** Amounts of the template's chain. The mechanic imposes none: a round without steps is refused when presented. */
+const CHAIN_STEPS = [20, 50, 100, 200, 300, 450, 600, 800, 1000];
+
+/**
+ * "La chaîne" template (chain, façon Maillon faible): two chain rounds (players answer in turn; right = the chain
+ * climbs, wrong = back to 0, bank before your question), an elimination vote after each, then the final duel of the two
+ * last players (5 questions each, sudden death) whose winner takes every bank. Plan for 4 players.
+ */
+export const DEMO_CHAIN_GAME: GameDocument = {
+  schemaVersion: 1,
+  title: "Démo La chaîne",
+  scenes: [],
+  questions: [
+    oral("q_ch1_1", "Quelle planète est surnommée la planète rouge ?", "Mars"),
+    oral("q_ch1_2", "Combien de côtés a un hexagone ?", "6"),
+    oral("q_ch1_3", "Quel est le plus long fleuve de France ?", "La Loire", "Environ 1 000 km."),
+    oral("q_ch1_4", "Qui a écrit « Les Misérables » ?", "Victor Hugo"),
+    oral("q_ch1_5", "Quel gaz les plantes absorbent-elles pour la photosynthèse ?", "Le dioxyde de carbone (CO2)"),
+    oral("q_ch1_6", "Dans quel pays se trouve la ville de Kyoto ?", "Le Japon"),
+    oral("q_ch1_7", "Combien de minutes dure une heure et demie ?", "90"),
+    oral("q_ch1_8", "Quel est le symbole chimique de l'or ?", "Au", "Du latin aurum."),
+    oral("q_ch1_9", "Quel instrument à clavier compte en général 88 touches ?", "Le piano"),
+    oral("q_ch1_10", "Quelle est la capitale de l'Italie ?", "Rome"),
+    oral("q_ch2_1", "Combien de joueurs une équipe de football aligne-t-elle sur le terrain ?", "11"),
+    oral("q_ch2_2", "Quel est le plus grand mammifère du monde ?", "La baleine bleue (rorqual bleu)"),
+    oral("q_ch2_3", "Quelle est la monnaie du Royaume-Uni ?", "La livre sterling"),
+    oral("q_ch2_4", "Qui a peint « Les Tournesols » ?", "Vincent van Gogh"),
+    oral("q_ch2_5", "Quel est le plus petit nombre premier ?", "2"),
+    oral("q_ch2_6", "Combien de jours compte une année bissextile ?", "366"),
+    oral("q_ch2_7", "Quel est le plus grand océan du monde ?", "L'océan Pacifique"),
+    oral("q_ch2_8", "Dans quel pays se trouve la ville de Marrakech ?", "Le Maroc"),
+    oral("q_duel_1", "Quelle est la capitale du Canada ?", "Ottawa", "Pas Toronto ni Montréal."),
+    oral("q_duel_2", "Combien de cordes a une guitare classique ?", "6"),
+    oral("q_duel_3", "Qui a composé « La Flûte enchantée » ?", "Wolfgang Amadeus Mozart"),
+    oral("q_duel_4", "Quel est l'os le plus long du corps humain ?", "Le fémur"),
+    oral("q_duel_5", "En quelle année a eu lieu la prise de la Bastille ?", "1789"),
+    oral("q_duel_6", "Quelle est la langue officielle du Brésil ?", "Le portugais"),
+    oral("q_duel_7", "Combien font 12 fois 12 ?", "144"),
+    oral("q_duel_8", "Quel pays a pour capitale Lisbonne ?", "Le Portugal"),
+    oral("q_duel_9", "Quel métal est liquide à température ambiante ?", "Le mercure"),
+    oral("q_duel_10", "Qui a écrit « Le Petit Prince » ?", "Antoine de Saint-Exupéry"),
+    oral("q_duel_11", "Combien de planètes compte le système solaire ?", "8"),
+    oral("q_duel_12", "Quelle est la capitale de l'Espagne ?", "Madrid"),
+    oral("q_duel_13", "Quel organe pompe le sang dans le corps ?", "Le cœur"),
+    oral("q_duel_14", "Combien de faces a un cube ?", "6"),
+  ],
+  format: {
+    id: "f_demo_chain",
+    name: "La chaîne",
+    participants: { max: 8 },
+    tieBreak: "control",
+    rounds: [
+      {
+        id: "r_chain_1",
+        title: "Chaîne 1",
+        mechanic: "chain",
+        mechanicConfig: { stage: "chain", steps: CHAIN_STEPS },
+        questions: ["q_ch1_1", "q_ch1_2", "q_ch1_3", "q_ch1_4", "q_ch1_5", "q_ch1_6", "q_ch1_7", "q_ch1_8", "q_ch1_9", "q_ch1_10"],
+        reserve: [],
+        scoring: [{ type: "base", points: 0 }],
+      },
+      {
+        id: "r_chain_2",
+        title: "Chaîne 2",
+        mechanic: "chain",
+        mechanicConfig: { stage: "chain", steps: CHAIN_STEPS },
+        questions: ["q_ch2_1", "q_ch2_2", "q_ch2_3", "q_ch2_4", "q_ch2_5", "q_ch2_6", "q_ch2_7", "q_ch2_8"],
+        reserve: [],
+        scoring: [{ type: "base", points: 0 }],
+      },
+      {
+        id: "r_chain_duel",
+        title: "Duel final",
+        mechanic: "chain",
+        mechanicConfig: { stage: "duel", questionsEach: 5 },
+        questions: ["q_duel_1", "q_duel_2", "q_duel_3", "q_duel_4", "q_duel_5", "q_duel_6", "q_duel_7", "q_duel_8", "q_duel_9", "q_duel_10", "q_duel_11", "q_duel_12", "q_duel_13", "q_duel_14"],
+        reserve: [],
+        scoring: [{ type: "base", points: 0 }],
+      },
+    ],
+  },
+};
+
 /** Built-in templates (roadmap phase 1): mechanics only, original look — never a broadcast show's branding. */
 
 /** Every answer kind in one « Mixte » round (solo): QCM, true / false, several answers, spoken, free text, number, order, pairs, allocation. */
@@ -352,8 +445,9 @@ const MIXED_SHOWCASE: GameDocument = (() => {
 
 export const TEMPLATES: readonly { readonly id: string; readonly game: GameDocument }[] = [
   { id: "g_modele_mixte", game: MIXED_SHOWCASE },
-  { id: "g_modele_sondage", game: toMixedRounds({ ...DEMO_POLL_GAME, title: "Modèle — Une famille en or (sondages, équipes)" }) },
+  { id: "g_modele_sondage", game: toMixedRounds({ ...DEMO_POLL_GAME, title: "Modèle — Sondage en équipes" }) },
   { id: "g_modele_paliers", game: { ...DEMO_LADDER_GAME, title: "Modèle — QCM à paliers" } },
+  { id: "g_modele_chaine", game: { ...DEMO_CHAIN_GAME, title: "Modèle — La chaîne (banque et élimination)" } },
   { id: "g_modele_buzzer", game: { ...DEMO_BUZZER_GAME, title: "Modèle — Buzzer culture G" } },
   { id: "g_modele_plateau", game: { ...DEMO_BOARD_GAME, title: "Modèle — Plateau catégories × valeurs" } },
   { id: "g_modele_indices", game: { ...DEMO_HINTS_GAME, title: "Modèle — Indices dégressifs" } },
@@ -366,7 +460,7 @@ export const TEMPLATES: readonly { readonly id: string; readonly game: GameDocum
  * removed at start, or replaced by the template of the same id. Edited copies are the user's: always kept.
  */
 export const RETIRED_TEMPLATES: readonly { readonly id: string; readonly game: GameDocument }[] = [
-  { id: "g_modele_qcm", game: { ...DEMO_GAME, title: "Modèle — QCM rapide (Kahoot-like)" } },
+  { id: "g_modele_qcm", game: { ...DEMO_GAME, title: "Modèle — QCM rapide" } },
   { id: "g_modele_texte", game: { ...DEMO_TEXT_GAME, title: "Modèle — Réponse libre" } },
   { id: "g_modele_estimation", game: { ...DEMO_NUMBER_GAME, title: "Modèle — Estimation (le plus proche)" } },
   { id: "g_modele_ordre", game: { ...DEMO_ORDER_GAME, title: "Modèle — Remettre dans l'ordre" } },

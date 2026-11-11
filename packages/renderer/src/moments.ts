@@ -52,6 +52,8 @@ const correctShown = (v: View): boolean => {
       return m.correct !== null;
     case "crowd-vote":
       return m.correct !== null && m.majority?.length === 1 && m.majority[0] === m.correct;
+    case "chain":
+      return m.verdict === "right";
     default:
       return false;
   }

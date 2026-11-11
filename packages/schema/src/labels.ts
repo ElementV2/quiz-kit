@@ -24,6 +24,7 @@ export const MECHANIC_LABEL_FR: Readonly<Record<string, string>> = {
   hints: "indices",
   "reveal-image": "image révélée",
   "crowd-vote": "vote du chat",
+  chain: "chaîne (banque et élimination)",
 };
 
 /**
@@ -89,6 +90,12 @@ export const ACTION_LABEL_FR: Readonly<Partial<Record<ActionType, string>>> = {
   "ladder.stop": "arrêter le candidat",
   "poll.control": "donner la main",
   "poll.steal": "donner le vol",
+  "chain.bank": "mettre la chaîne en banque",
+  "chain.end": "terminer la manche de chaîne",
+  "chain.openVote": "ouvrir le vote d'élimination",
+  "chain.vote": "voter",
+  "chain.closeVote": "clore le vote d'élimination",
+  "chain.pick": "départager le vote",
   "crowd.tally": "compter les votes du chat",
   "score.adjust": "corriger un score",
   "score.setTotal": "fixer un total",
@@ -163,5 +170,6 @@ export const OWN_POINTS_FR: Readonly<Record<string, string>> = {
   hints: "selon le nombre d'indices",
   "reveal-image": "selon les cases dévoilées",
   "crowd-vote": "points du vote du chat",
+  chain: "toutes les banques, au vainqueur du duel final",
 };
 

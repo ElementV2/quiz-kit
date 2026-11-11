@@ -103,6 +103,7 @@ export function optionState(m: MechanicView, optionId: string, myAnswer: readonl
     case "order":
     case "pairs":
     case "pin":
+    case "chain":
       return "idle";
     default:
       return "idle";
@@ -130,6 +131,7 @@ export function optionsOf(m: MechanicView | null): readonly { id: string; label:
     case "order":
     case "pairs":
     case "pin":
+    case "chain":
       return [];
     default:
       return [];
