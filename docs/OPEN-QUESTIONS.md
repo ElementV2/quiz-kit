@@ -2,13 +2,18 @@
 
 ## Décisions produit (Morgan)
 
-- [ ] Premier show réel visé → premier template à rendre irréprochable.
-- [ ] Parc de tablettes (iPad, Android, mixte) et qui les fournit. **Conditionne ADR-0012 (HTTPS LAN)** et
-      Wake Lock en PWA (iOS ≥ 18.4 requis pour une PWA écran d'accueil).
-- [ ] Buzzers physiques dès la phase 1, ou buzzer sur tablette suffisant ?
-- [ ] Studio sur la machine show, ou serveur interne séparé qui pousse les jeux ?
-- [ ] Nom du produit.
-- [ ] HTTPS sur le LAN : CA locale installée sur les tablettes, ou certificat public sur un nom DNS interne (ADR-0012).
+- [x] Premier show réel visé : **Quiz mixte** (tranché le 2026-11-11).
+- [x] Parc de tablettes : **tout** (iPad, Android, téléphones des joueurs) — tester les trois familles (2026-11-11).
+- [x] Buzzers physiques : **non**, le buzzer sur tablette suffit (2026-11-11).
+- [x] Studio : **sur la machine du show** (2026-11-11).
+- [x] Nom du produit : **Quizzkit** (2026-11-11).
+- [x] HTTPS sur le LAN : **rester en HTTP** tant qu'aucun besoin réel n'apparaît (2026-11-11, ADR-0012 à mettre à jour).
+- [x] Rejeu des journaux d'une version à l'autre : **non requis** ; un journal se rejoue avec la version qui l'a écrit
+      (en show le serveur redémarre toujours avec la même version) (2026-11-11).
+- [x] Sortie `reveal-image` : image complète sur le PC de sortie **acceptée** (poste de confiance) (2026-11-11).
+- [x] Accès équipe distant : blocage **par IP** (sur le LAN chaque appareil a sa propre IP) (2026-11-11).
+- [x] `participants.mode` / `min` / `teamSize` : **supprimés** des documents par migration (2026-11-11).
+- [x] Format « Maillon faible » : **à ajouter** (2026-11-11).
 
 ## Vérifié (2026-11-10)
 
@@ -81,9 +86,9 @@ Règle : une question vérifiée devient un ADR ou une ligne dans le doc concern
 - [ ] Bots de répétition et vote du chat : jamais testés contre une vraie session de 50 tablettes + chat réel.
 - [ ] Historique des révélations dans les snapshots (`GameState.history`) : ~2–3 Mo en fin de show à 500 joueurs,
       sérialisés à chaque snapshot (revue phase 3, m2). Mesurer la durée sur la machine show (`pnpm load`).
-- [ ] Sortie `reveal-image` : la sortie (PC OBS / vMix) reçoit l'image complète, masquée par les cases à l'écran.
+- [x] Sortie `reveal-image` : la sortie (PC OBS / vMix) reçoit l'image complète, masquée par les cases à l'écran.
       Accepté (poste de confiance, jeton de sortie) ; à revoir si une sortie est un jour exposée au public.
-- [ ] Accès équipe distant : 30 échecs / min toutes IP bloquent l'accès distant 5 min (déni de service possible
+- [x] Accès équipe distant : 30 échecs / min toutes IP bloquent l'accès distant 5 min (déni de service possible
       depuis le Wi-Fi joueurs ; l'accès `localhost` et `links.txt` restent disponibles). Réseau équipe séparé
       recommandé ; à revoir si gênant (revue 4, m4).
 - [ ] Desktop : la surveillance du lanceur par PID (`QUIZ_PARENT_PID`) peut être trompée par une réutilisation de PID
@@ -92,7 +97,7 @@ Règle : une question vérifiée devient un ADR ou une ligne dans le doc concern
 - [ ] `QUIZ_APPS_DIR` lu hors de `config.ts` (module `http/app.ts`) — à rapatrier dans la config validée (revue 4, m8).
 - [ ] `game.patch` journalise le document complet à chaque envoi : taille du journal et durée du rejeu à mesurer
       sur un show avec beaucoup d'envois ; un diff (JSON Patch) serait plus léger (revue 7, m4).
-- [ ] Rejeu d'un journal ancien : depuis que la question à l'antenne (non révélée) prend les réglages envoyés au
+- [x] Rejeu d'un journal ancien : depuis que la question à l'antenne (non révélée) prend les réglages envoyés au
       direct (`reconfigure`), un journal enregistré avant ce changement avec un `game.patch` pendant une question
       peut donner d'autres points au rejeu. Sans effet en show (même version au redémarrage) ; à trancher si les
       journaux doivent rester rejouables d'une version à l'autre (versionner le réducteur ?) (revue 9, m3).
