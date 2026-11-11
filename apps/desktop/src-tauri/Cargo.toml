@@ -1,0 +1,17 @@
+[package]
+name = "quiz-desktop"
+version = "0.1.0"
+description = "Quiz — lanceur du serveur de show"
+edition = "2021"
+
+[build-dependencies]
+tauri-build = { version = "2.7.4", features = [] }
+
+[dependencies]
+tauri = { version = "2.12.5", features = [] }
+tauri-plugin-shell = "2.6.0"
+tauri-plugin-single-instance = "2.5.5"
+tokio = { version = "1.54.1", features = ["time"] }
+
+[profile.release]
+strip = true

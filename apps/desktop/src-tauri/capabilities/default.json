@@ -1,0 +1,7 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "The window only shows pages served by the local show server; no IPC permission is needed.",
+  "windows": ["main"],
+  "permissions": ["core:default"]
+}
