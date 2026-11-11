@@ -281,6 +281,8 @@ function Game(props: { token: string }) {
                   <Match when={v().myAnswer !== null && v().canAnswer}>Réponse enregistrée ✓<small>Modifiable jusqu'à la fin du chrono</small></Match>
                   <Match when={v().myAnswer !== null}>Réponse enregistrée ✓</Match>
                   <Match when={v().phase === "presenting"}>Lisez la question…</Match>
+                  {/* Survey: answered orally, by whoever has the hand (said above the board), never by every tablet. */}
+                  <Match when={asPollBoard(v().mechanic) !== null && v().phase !== "revealed"}>{null}</Match>
                   <Match when={v().phase === "open" && v().canAnswer}>À vous !</Match>
                   <Match when={v().phase === "locked" || v().phase === "judging"}>Réponses fermées</Match>
                 </Switch>

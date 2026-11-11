@@ -80,6 +80,8 @@ test("poll-board: hand to a team, found answers flip on the output, strikes, mas
   await expect(control.getByText("Main :")).toContainText("Rouges");
   // The side with the hand is told on its tablet; the screen says who has it.
   await expect(tablets[0]?.locator(".p-hand-mine") ?? output.locator("x")).toHaveText("À vous ! Vous avez la main");
+  // Answered orally: the footer never says « À vous ! » to every tablet (only the banner says who has the hand).
+  await expect(tablets[0]?.locator(".p-feedback") ?? output.locator("x")).not.toContainText("À vous");
   await expect(output.locator(".q-poll-hand")).toContainText("Rouges");
   // Before anything is found, the output and the tablets show no label.
   await expect(output.locator(".q-zone-poll-board")).not.toContainText("Banane");
