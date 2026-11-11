@@ -240,7 +240,7 @@ function controlView(game: Game, readonly: boolean, registry: Registry): Control
     readonly,
     hostDrives: s.hostDrives,
     studioPatchedAt: s.studioPatchedAt,
-    game: { title: s.game.title, mode: s.game.format.participants.mode, minPlayers: s.game.format.participants.min, maxPlayers: s.game.format.participants.max, rounds: s.game.format.rounds.length },
+    game: { title: s.game.title, maxPlayers: s.game.format.participants.max, rounds: s.game.format.rounds.length },
     notes: currentQuestion(s)?.notes ?? null,
     nextQuestion: next(s, registry),
     participants: s.participants,

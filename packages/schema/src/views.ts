@@ -424,7 +424,7 @@ export const ControlView = BaseView.extend({
   /** Last « Envoyer au direct » from the studio (server time), null if none. */
   studioPatchedAt: z.number().nullable().default(null),
   /** The live game: title and who may play (a full game refuses new players / seats). */
-  game: z.strictObject({ title: z.string(), mode: z.enum(["solo", "teams", "crowd"]), minPlayers: z.number().int(), maxPlayers: z.number().int(), rounds: z.number().int() }),
+  game: z.strictObject({ title: z.string(), maxPlayers: z.number().int(), rounds: z.number().int() }),
   notes: z.string().nullable(),
   nextQuestion: z.strictObject({ id: QuestionId, text: z.string() }).nullable(),
   participants: z.array(Participant),
