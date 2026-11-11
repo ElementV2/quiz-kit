@@ -20,6 +20,7 @@ const view = (over: Partial<HostView>): HostView => ({
   notes: null,
   nextQuestion: { id: "q_b", text: "Texte q_b" },
   drive: true,
+  verdicts: [],
   rundown: [
     { index: 0, title: "M1", mechanic: "choice", questions: [q(0, "q_a"), q(1, "q_b")], reserve: [] },
     { index: 1, title: "M2", mechanic: "choice", questions: [q(0, "q_c")], reserve: [] },

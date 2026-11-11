@@ -56,7 +56,8 @@ function TextReview(p: Props): JSX.Element {
                 <span class="q-mech-who">{nameOf(p.view, r.participantId)}</span>
                 <span class="q-mech-said">{r.text}</span>
                 <Show when={r.overruled}><span class="q-mech-tag">corrigé</span></Show>
-                <Verdict {...p} participantId={r.participantId} accepted={r.accepted} />
+                {/* A correction of the control room wins over the automatic verdict (shown as such). */}
+                <Verdict {...p} participantId={r.participantId} accepted={p.view.verdicts.find((x) => x.participantId === r.participantId)?.forced ?? r.accepted} />
               </li>
             )}
           </For>

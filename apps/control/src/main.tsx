@@ -162,7 +162,7 @@ function App() {
                           : `Correction en coulisse : « ${v().question?.prompt.text ?? ""} » reste à l'antenne, seuls les points de la question ci-dessous sont recalculés.`}
                       </p>
                       <Show when={q().id} keyed>{(_id: string) => <RegradeEditor question={q()} act={act} withToken={withToken} onClose={() => setRegrading(null)} />}</Show>
-                      <Show when={regrading()}>{(r) => <PastVerdicts round={r().round} question={r().question} ledgerSize={v().ledger.length} act={act} withToken={withToken} />}</Show>
+                      <Show when={regrading()}>{(r) => <PastVerdicts round={r().round} question={r().question} pointsKey={`${v().ledger.length}:${v().ledger.filter((e) => e.voided).length}`} act={act} withToken={withToken} />}</Show>
                     </section>
                   )}
                 </Show>

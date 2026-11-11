@@ -29,6 +29,7 @@ export function project(game: Game, viewer: Viewer, registry: Registry): View {
         notes: currentQuestion(s)?.notes ?? null,
         nextQuestion: next(s, registry),
         drive: s.hostDrives,
+        verdicts: verdictsOf(s, registry),
         rundown: rundownOf(s, registry),
         cursor: s.roundIndex === null ? null : { roundIndex: s.roundIndex, questionIndex: s.questionIndex },
       } satisfies HostView;
@@ -246,7 +247,7 @@ function controlView(game: Game, readonly: boolean, registry: Registry): Control
     teams: s.teams,
     ledger: s.ledger,
     answers: m === null || s.mechanic === null ? [] : m.answers(s.mechanic.state).map((x) => ({ ...x, optionIds: [...x.optionIds] })),
-    verdicts: m === null || s.mechanic === null ? [] : verdictRows(m.answers(s.mechanic.state).map((x) => x.participantId), autoVerdicts(m.judge(s.mechanic.state)), s.verdicts),
+    verdicts: verdictsOf(s, registry),
     skipped: [...game.skipped],
     rundown: rundownOf(s, registry),
     lastSeq: s.lastSeq,
@@ -353,6 +354,12 @@ function computeLeaderboard(s: GameState): LeaderboardRow[] {
     prev = { total: r.total, right: r.right, ms: r.ms };
     return { participantId: r.p.id, displayName: r.p.displayName, teamId: r.p.teamId, total: r.total, rank };
   });
+}
+
+/** Verdict rows of the question on air (control room and host). */
+function verdictsOf(s: GameState, registry: Registry): ControlView["verdicts"] {
+  const m = s.mechanic === null ? null : registry.get(s.mechanic.id);
+  return m === null || s.mechanic === null ? [] : verdictRows(m.answers(s.mechanic.state).map((x) => x.participantId), autoVerdicts(m.judge(s.mechanic.state)), s.verdicts);
 }
 
 /** One row per participant who answered or was forced: automatic verdict and forced one (control room). */

@@ -403,6 +403,8 @@ export type Rundown = z.infer<typeof Rundown>;
 
 export const HostView = BaseView.extend({
   role: z.literal("host"),
+  /** Verdicts of the question on air, the control room's corrections included (same as ControlView). */
+  verdicts: z.array(z.strictObject({ participantId: ParticipantId, auto: z.boolean().nullable(), forced: z.boolean().nullable() })).default([]),
   notes: z.string().nullable(),
   nextQuestion: z.strictObject({ id: QuestionId, text: z.string() }).nullable(),
   /** The control room lets the host drive the question flow (`host.setDrive`). */

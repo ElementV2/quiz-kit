@@ -276,10 +276,12 @@ type PastAnswers = { mechanic: MechanicView; rows: PastRow[] };
  * « Corriger » on a question already revealed: every player's answer with its verdict; ✓ / ✗ force it (cheating, a
  * fair answer refused…), the same key again goes back to automatic. Points are rewritten at once (journaled, undoable).
  */
-export function PastVerdicts(p: { readonly round: number; readonly question: number; readonly ledgerSize: number; readonly act: Act; readonly withToken: WithToken }): JSX.Element {
-  // Reloaded when the points change (a verdict, a regrade), not at every answer of the question on air.
+export function PastVerdicts(p: { readonly round: number; readonly question: number; readonly pointsKey: string; readonly act: Act; readonly withToken: WithToken }): JSX.Element {
+  // Reloaded after each correction made here and whenever the points change elsewhere (entries added OR voided:
+  // « wrong » voids without adding), never at every answer of the question on air.
+  const [mine, setMine] = createSignal(0);
   const [data] = createResource(
-    () => `${p.round}:${p.question}:${p.ledgerSize}`,
+    () => `${p.round}:${p.question}:${p.pointsKey}:${mine()}`,
     async (): Promise<PastAnswers | { error: string }> => {
       const r = await fetch(p.withToken(`/api/question-answers?round=${p.round}&question=${p.question}`)).catch(() => null);
       if (r === null) return { error: "serveur injoignable" };
@@ -290,7 +292,7 @@ export function PastVerdicts(p: { readonly round: number; readonly question: num
   );
   const ok = (): PastAnswers | null => { const d = data(); return d !== undefined && "rows" in d ? d : null; };
   const set = (row: PastRow, correct: boolean | null) =>
-    void p.act({ type: "answer.verdict", roundIndex: p.round, questionIndex: p.question, participantId: row.participantId, correct }, correct === null ? `${row.name} : verdict automatique` : `${row.name} compté ${correct ? "juste" : "faux"} — points recalculés`);
+    void p.act({ type: "answer.verdict", roundIndex: p.round, questionIndex: p.question, participantId: row.participantId, correct }, correct === null ? `${row.name} : verdict automatique` : `${row.name} compté ${correct ? "juste" : "faux"} — points recalculés`).then(() => setMine((n) => n + 1));
   return (
     <Show when={ok()} fallback={<p class="muted">{(() => { const d = data(); return d !== undefined && "error" in d ? d.error : "Chargement…"; })()}</p>}>
       {(d) => (
