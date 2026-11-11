@@ -163,7 +163,7 @@ export function themeVars(t: Theme, mediaUrl: (hash: string) => string = (h) => 
   vars["--q-font"] = t.font.family;
   vars["--q-font-weight"] = String(t.font.weight);
   vars["--q-radius"] = `${t.radius}px`;
-  vars["--q-motion"] = MOTION_MS[t.motion];
+  vars["--q-motion"] = MOTION[t.motion];
   return vars;
 }
 
@@ -183,7 +183,13 @@ export const MATERIALS: Record<Theme["material"], Record<string, string>> = {
   led: { ...FLAT, "--q-mat-image": "radial-gradient(circle, rgba(255,255,255,.16) 1.2px, transparent 1.8px)", "--q-mat-size": "6px 6px", "--q-mat-border": "2px solid rgba(0,0,0,.6)" },
 };
 
-const MOTION_MS: Record<Theme["motion"], string> = { snappy: "180ms", elegant: "420ms", bouncy: "320ms", dramatic: "700ms" };
+/** Theme motion: a duration AND its curve (`--q-motion` is used as `transition: <prop> var(--q-motion)`). */
+export const MOTION: Record<Theme["motion"], string> = {
+  snappy: "180ms cubic-bezier(.2, 0, 0, 1)", // sec : part vite, s'arrête net
+  elegant: "420ms cubic-bezier(.4, 0, .2, 1)", // doux : accélère puis ralentit
+  bouncy: "380ms cubic-bezier(.34, 1.56, .64, 1)", // rebond : dépasse un peu puis revient
+  dramatic: "700ms cubic-bezier(.7, 0, .2, 1)", // dramatique : lent au départ, arrivée marquée
+};
 
 /** Letters A, B, C… for option badges. */
 export const optionLetter = (i: number): string => String.fromCharCode(65 + (i % 26));

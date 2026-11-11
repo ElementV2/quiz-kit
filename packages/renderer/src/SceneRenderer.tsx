@@ -69,7 +69,7 @@ export function SceneRenderer(props: SceneRendererProps): JSX.Element {
                   inset: "0",
                   "z-index": layer.z,
                   opacity: layerVisible(layer, view().phase, taken()) ? 1 : 0,
-                  transition: "opacity var(--q-motion) ease",
+                  transition: "opacity var(--q-motion)",
                   "pointer-events": "none",
                 }}
               >
