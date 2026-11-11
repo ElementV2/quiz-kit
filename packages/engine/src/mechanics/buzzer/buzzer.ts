@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { Media, OptionId, type BuzzerMechanicView } from "@quiz/schema";
+import { Media, OptionId, type BuzzerMechanicView, unsupportedQuestion } from "@quiz/schema";
 import { defineMechanic, type Judgement } from "../../mechanic.ts";
 import { assertNever, err, ok } from "../../result.ts";
 import { Buzz, buzzMe, handOf, lockedOutOf, onBuzz, onJudge, queueOf, winnerOf } from "../shared/buzz-queue.ts";
@@ -55,7 +55,7 @@ export const buzzer = defineMechanic<BuzzerConfig, BuzzerState>({
       case "pairs":
       case "pin":
       case "allocation":
-        return err("unsupported", `la mécanique buzzer ne gère pas les questions ${spec.kind}`);
+        return err("unsupported", unsupportedQuestion("buzzer", spec.kind));
       default:
         return assertNever(spec);
     }

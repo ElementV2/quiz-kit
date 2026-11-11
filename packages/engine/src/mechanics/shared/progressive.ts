@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { Media, OptionId, ParticipantId, type AnswerValue, type Phase, type Question } from "@quiz/schema";
+import { Media, OptionId, ParticipantId, type AnswerValue, type Phase, type Question, unsupportedQuestion } from "@quiz/schema";
 import type { Judgement } from "../../mechanic.ts";
 import { err, ok, type Rejection, type Result } from "../../result.ts";
 import { Overrule, verdict } from "./answers.ts";
@@ -50,7 +50,7 @@ export function initCore(cfg: ProgressiveConfig, question: Question, total: numb
   if (a.kind === "single") {
     return ok({ input: "choice", accepted: [], maxDistance: null, options: a.options.map(({ id, label, media }) => (media ? { id, label, media } : { id, label })), correctOption: a.correct, ...common });
   }
-  return err("unsupported", `la mécanique ${mechanicId} ne gère que les questions text ou single (reçu ${a.kind})`);
+  return err("unsupported", `${unsupportedQuestion(mechanicId, a.kind)} (réponse libre ou QCM à une réponse seulement)`);
 }
 
 /** Points for a right answer given when `shown` steps are visible. */

@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { Media, OptionId, type BoardMechanicView, type Question } from "@quiz/schema";
+import { Media, OptionId, type BoardMechanicView, type Question, unsupportedQuestion } from "@quiz/schema";
 import { defineMechanic, type Judgement, type Mechanic } from "../../mechanic.ts";
 import { assertNever, err, ok } from "../../result.ts";
 import { Buzz, buzzMe, handOf, lockedOutOf, onBuzz, onJudge, queueOf, winnerOf } from "../shared/buzz-queue.ts";
@@ -97,7 +97,7 @@ export const board: Mechanic<BoardConfig, BoardState> = {
 
   init(cfg, question, _env, round) {
     const answer = spoken(question);
-    if (answer === null) return err("unsupported", `la mécanique board ne gère pas les questions ${question.answerSpec.kind}`);
+    if (answer === null) return err("unsupported", unsupportedQuestion("board", question.answerSpec.kind));
     const prev = round.previous;
     const played = prev === null ? [] : [...prev.state.played, prev.state.current];
     if (played.includes(round.questionIndex)) return err("conflict", "case déjà jouée");

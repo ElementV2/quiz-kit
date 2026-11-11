@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { OptionId, type PairsMechanicView } from "@quiz/schema";
+import { OptionId, type PairsMechanicView, unsupportedQuestion } from "@quiz/schema";
 import { defineMechanic, type Judgement } from "../../mechanic.ts";
 import { err, ok } from "../../result.ts";
 import { answerOfStored, answersOfStored, isPrivileged, Overrule, overrule, storeAnswer, StoredAnswer, verdict } from "../shared/answers.ts";
@@ -32,7 +32,7 @@ export const pairs = defineMechanic<PairsConfig, PairsState>({
 
   init(cfg, question, env) {
     const a = question.answerSpec;
-    if (a.kind !== "pairs") return err("unsupported", `la mécanique pairs ne gère pas les questions ${a.kind}`);
+    if (a.kind !== "pairs") return err("unsupported", unsupportedQuestion("pairs", a.kind));
     const shuffled = env.rng.shuffle(a.pairs).map((p, i) => ({ pair: p.id, id: `r${i}`, label: p.right }));
     return ok({
       left: a.pairs.map((p) => ({ id: p.id, label: p.left })),

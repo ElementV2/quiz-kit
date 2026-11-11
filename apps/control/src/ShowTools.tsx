@@ -1,3 +1,4 @@
+import { answerKindLabel } from "@quiz/schema";
 import { For, Match, Show, Switch, createResource, createSignal, type JSX } from "solid-js";
 import { Button, confirmDialog } from "@quiz/ui";
 import type { Action, ControlView } from "@quiz/schema";
@@ -114,7 +115,7 @@ export function RegradeEditor(p: { readonly question: RundownQuestion; readonly 
   return (
     <div class="c-regrade">
       <p class="c-prompt">{p.question.text}</p>
-      <Show when={REGRADABLE_KINDS.has(spec().kind)} fallback={<p class="muted">Ce type de réponse ({spec().kind}) ne se corrige pas ici.</p>}>
+      <Show when={REGRADABLE_KINDS.has(spec().kind)} fallback={<p class="muted">Une réponse « {answerKindLabel(spec().kind)} » ne se corrige pas ici.</p>}>
         <Switch>
           <Match when={options().length > 0}>
             <div class="c-regrade-opts">

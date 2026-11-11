@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { Media, OptionId, ParticipantId, type ChoiceMechanicView } from "@quiz/schema";
+import { Media, OptionId, ParticipantId, type ChoiceMechanicView, unsupportedQuestion } from "@quiz/schema";
 import { defineMechanic, type Judgement } from "../../mechanic.ts";
 import { assertNever, err, ok } from "../../result.ts";
 
@@ -56,7 +56,7 @@ export const choice = defineMechanic<ChoiceConfig, ChoiceState>({
       case "pairs":
       case "pin":
       case "allocation":
-        return err("unsupported", `la mécanique choice ne gère pas les questions ${spec.kind}`);
+        return err("unsupported", unsupportedQuestion("choice", spec.kind));
       default:
         return assertNever(spec);
     }

@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { Media, NormRect, type PinMechanicView } from "@quiz/schema";
+import { Media, NormRect, type PinMechanicView, unsupportedQuestion } from "@quiz/schema";
 import { defineMechanic, type Judgement } from "../../mechanic.ts";
 import { err, ok } from "../../result.ts";
 import { answerOfStored, answersOfStored, isPrivileged, Overrule, overrule, showsResults, storeAnswer, StoredAnswer, verdict } from "../shared/answers.ts";
@@ -47,7 +47,7 @@ export const pin = defineMechanic<PinConfig, PinState>({
 
   init(cfg, question) {
     const a = question.answerSpec;
-    if (a.kind !== "pin") return err("unsupported", `la mécanique pin ne gère pas les questions ${a.kind}`);
+    if (a.kind !== "pin") return err("unsupported", unsupportedQuestion("pin", a.kind));
     const image = question.prompt.media;
     if (image === undefined || !image.mime.startsWith("image/")) return err("invalid", "la question n'a pas d'image sur laquelle viser");
     return ok({ image: { ...image }, target: { ...a.target }, allowChange: cfg.allowChange, answers: [], overrules: [] });

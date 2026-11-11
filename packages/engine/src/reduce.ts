@@ -1,4 +1,4 @@
-import { HOST_DRIVE_ACTIONS, isAllowed, type Action, type ActionOf, type Actor, type Participant, type Round, type ScoreEntry, type ScoreTarget } from "@quiz/schema";
+import { HOST_DRIVE_ACTIONS, isAllowed, type Action, type ActionOf, type Actor, type Participant, type Round, type ScoreEntry, type ScoreTarget, ROLE_LABEL_FR, STATUS_LABEL_FR, actionLabel, answerKindLabel, mechanicLabel } from "@quiz/schema";
 import type { AnyMechanic, FixedJudgement, Judgement, MechanicEnv, Registry } from "./mechanic.ts";
 import { assertNever, err, ok, type Rejection, type Result } from "./result.ts";
 import type { Rng } from "./rng.ts";
@@ -19,7 +19,7 @@ const QUESTION_PHASES = new Set(["presenting", "open", "locked", "judging", "rev
 export function reduce(s: GameState, action: Action, ctx: Ctx, registry: Registry): R {
   const hostDriving = ctx.actor.role === "host" && s.hostDrives && HOST_DRIVE_ACTIONS.has(action.type);
   if (!isAllowed(ctx.actor.role, action.type) && !hostDriving) {
-    return err("forbidden", `le rôle ${ctx.actor.role} ne peut pas faire ${action.type}`);
+    return err("forbidden", `${ROLE_LABEL_FR[ctx.actor.role]} ne peut pas ${actionLabel(action.type)}`);
   }
   const r = reduceAllowed(s, action, ctx, registry);
   return r.ok ? ok({ ...r.value, lastSeq: ctx.seq }) : r;
@@ -301,7 +301,7 @@ function present(s: GameState, a: ActionOf<"question.present">, ctx: Ctx, regist
   const round = currentRound(s);
   if (round === null) return err("not-found", "manche inconnue");
   const m = registry.get(round.mechanic);
-  if (m === null) return err("unsupported", `mécanique inconnue : ${round.mechanic}`);
+  if (m === null) return err("unsupported", `type de manche inconnu de cette version : ${mechanicLabel(round.mechanic)}`);
   const cfg = m.configSchema.safeParse(round.mechanicConfig);
   if (!cfg.success) return err("invalid", `configuration de mécanique invalide : ${cfg.error.message}`);
   const previous = s.carry !== null && s.carry.id === m.id ? { state: s.carry.state, revealed: s.carry.revealed, questionIndex: s.carry.questionIndex } : null;
@@ -343,7 +343,7 @@ function reveal(s: GameState, ctx: Ctx, registry: Registry): R {
   const question = currentQuestion(s);
   if (round === null || question === null || s.mechanic === null) return err("conflict", "aucune question en cours");
   const m = registry.get(s.mechanic.id);
-  if (m === null) return err("unsupported", `mécanique inconnue : ${s.mechanic.id}`);
+  if (m === null) return err("unsupported", `type de manche inconnu de cette version : ${mechanicLabel(s.mechanic.id)}`);
   if (s.openedAt === null) return err("conflict", "réponses jamais ouvertes");
   const window = { openedAt: s.openedAt, durationMs: s.windowMs };
   const stakes = stakesFor(s);
@@ -463,7 +463,7 @@ function replaceFromReserve(s: GameState, a: ActionOf<"question.replaceFromReser
 function regrade(s: GameState, a: ActionOf<"question.regrade">, ctx: Ctx, registry: Registry): R {
   const old = s.game.questions.find((q) => q.id === a.questionId);
   if (old === undefined) return err("not-found", "question inconnue");
-  if (old.answerSpec.kind !== a.answerSpec.kind) return err("invalid", `même type de réponse attendu (${old.answerSpec.kind})`);
+  if (old.answerSpec.kind !== a.answerSpec.kind) return err("invalid", `même type de réponse attendu (« ${answerKindLabel(old.answerSpec.kind)} »)`);
   const question = { ...old, answerSpec: a.answerSpec };
   const records = s.history.filter((h) => h.questionId === a.questionId);
   const live = s.mechanic !== null && currentQuestion(s)?.id === a.questionId ? s.mechanic : null;
@@ -478,7 +478,7 @@ function regrade(s: GameState, a: ActionOf<"question.regrade">, ctx: Ctx, regist
     const m = registry.get(h.mechanicId);
     const round = s.game.format.rounds[h.roundIndex];
     const r = m?.regrade?.(h.state, question) ?? null;
-    if (m === null || round === undefined || r === null) return err("unsupported", `la mécanique ${h.mechanicId} ne se corrige pas après coup (juger / ajuster le score)`);
+    if (m === null || round === undefined || r === null) return err("unsupported", `une manche « ${mechanicLabel(h.mechanicId)} » ne se corrige pas après coup (juger / ajuster le score)`);
     if (!r.ok) return r;
     const voided = new Set(h.entryIds);
     // Team at the time of the original scoring (a player moved since keeps crediting their old team).
@@ -499,7 +499,7 @@ function regrade(s: GameState, a: ActionOf<"question.regrade">, ctx: Ctx, regist
   if (live !== null) {
     const m = registry.get(live.id);
     const r = m?.regrade?.(live.state, question) ?? null;
-    if (r === null) return err("unsupported", `la mécanique ${live.id} ne se corrige pas après coup`);
+    if (r === null) return err("unsupported", `une manche « ${mechanicLabel(live.id)} » ne se corrige pas après coup`);
     if (!r.ok) return r;
     mechanic = { id: live.id, state: r.value };
   }
@@ -558,18 +558,18 @@ function checkPlayerIntent(s: GameState, participantId: string, ctx: Ctx): Resul
   }
   const p = s.participants.find((x) => x.id === participantId);
   if (p === undefined) return err("not-found", "joueur inconnu");
-  if (p.status !== "active") return err("forbidden", `joueur ${p.status}`);
+  if (p.status !== "active") return err("forbidden", `joueur ${STATUS_LABEL_FR[p.status]}`);
   return ok(p);
 }
 
 function mechanicAction(s: GameState, a: Action, ctx: Ctx, registry: Registry): R {
-  return withMechanic(s, registry, (m, state) => m.onAction(state, a, envOf(s, ctx)) ?? err("unsupported", `la mécanique ${m.id} ne gère pas ${a.type}`));
+  return withMechanic(s, registry, (m, state) => m.onAction(state, a, envOf(s, ctx)) ?? err("unsupported", `impossible de ${actionLabel(a.type)} dans une manche « ${mechanicLabel(m.id)} »`));
 }
 
 function withMechanic(s: GameState, registry: Registry, f: (m: AnyMechanic, state: unknown) => Result<unknown, Rejection>): R {
   if (s.mechanic === null) return err("conflict", "aucune question en cours");
   const m = registry.get(s.mechanic.id);
-  if (m === null) return err("unsupported", `mécanique inconnue : ${s.mechanic.id}`);
+  if (m === null) return err("unsupported", `type de manche inconnu de cette version : ${mechanicLabel(s.mechanic.id)}`);
   const r = f(m, s.mechanic.state);
   if (!r.ok) return r;
   return ok({ ...s, mechanic: { id: m.id, state: r.value } });

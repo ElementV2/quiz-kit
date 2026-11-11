@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { Media, OptionId, type AllocationMechanicView } from "@quiz/schema";
+import { Media, OptionId, type AllocationMechanicView, unsupportedQuestion } from "@quiz/schema";
 import { defineMechanic, type Judgement } from "../../mechanic.ts";
 import { err, ok } from "../../result.ts";
 import { answerOfStored, answersOfStored, isPrivileged, showsResults, storeAnswer, StoredAnswer } from "../shared/answers.ts";
@@ -61,7 +61,7 @@ export const allocation = defineMechanic<AllocationConfig, AllocationState>({
 
   init(cfg, question) {
     const a = question.answerSpec;
-    if (a.kind !== "allocation") return err("unsupported", `la mécanique allocation ne gère pas les questions ${a.kind}`);
+    if (a.kind !== "allocation") return err("unsupported", unsupportedQuestion("allocation", a.kind));
     return ok({
       options: a.options.map(({ id, label, media }) => (media ? { id, label, media } : { id, label })),
       correct: a.correct,

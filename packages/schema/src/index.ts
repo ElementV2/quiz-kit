@@ -12,3 +12,4 @@ export * from "./fixtures-formats.ts";
 export * from "./scenes.ts";
 export * from "./scene-presets.ts";
 export * from "./import-csv.ts";
+export * from "./labels.ts";

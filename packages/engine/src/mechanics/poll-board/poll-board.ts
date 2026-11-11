@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { OptionId, TeamId, type ActionOf, type PollBoardMechanicView, type Phase } from "@quiz/schema";
+import { OptionId, TeamId, type ActionOf, type PollBoardMechanicView, type Phase, unsupportedQuestion } from "@quiz/schema";
 import { defineMechanic, type Judgement, type MechanicEnv } from "../../mechanic.ts";
 import { assertNever, err, ok, type Rejection, type Result } from "../../result.ts";
 import { roundHalfAway } from "../../scoring.ts";
@@ -124,7 +124,7 @@ export const pollBoard = defineMechanic<PollBoardConfig, PollBoardState>({
 
   init(cfg, question) {
     const spec = question.answerSpec;
-    if (spec.kind !== "poll") return err("unsupported", `la mécanique poll-board ne gère que les sondages (pas ${spec.kind})`);
+    if (spec.kind !== "poll") return err("unsupported", `${unsupportedQuestion("poll-board", spec.kind)} (sondages seulement)`);
     const slots: S["slots"] = [];
     for (const o of spec.options) {
       if (o.value === undefined || o.value < 0) return err("invalid", `la réponse « ${o.label} » n'a pas de valeur (%) positive`);

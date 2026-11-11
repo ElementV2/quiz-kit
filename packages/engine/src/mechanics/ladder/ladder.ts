@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { JokerKind, Media, OptionId, ParticipantId, type ActionOf, type LadderJokerState, type LadderMechanicView, type Phase } from "@quiz/schema";
+import { JokerKind, Media, OptionId, ParticipantId, type ActionOf, type LadderJokerState, type LadderMechanicView, type Phase, unsupportedQuestion } from "@quiz/schema";
 import { defineMechanic, type Judgement, type MechanicEnv } from "../../mechanic.ts";
 import { assertNever, err, ok, type Rejection, type Result } from "../../result.ts";
 import type { Rng } from "../../rng.ts";
@@ -155,7 +155,7 @@ export const ladder = defineMechanic<LadderConfig, LadderState>({
 
   init(cfg, question, _env, round) {
     const spec = question.answerSpec;
-    if (spec.kind !== "single") return err("unsupported", `la mécanique ladder ne gère que les QCM à une réponse (pas ${spec.kind})`);
+    if (spec.kind !== "single") return err("unsupported", `${unsupportedQuestion("ladder", spec.kind)} (QCM à une réponse seulement)`);
     let level = 0;
     let candidate: string | null = null;
     let jokersUsed: S["jokersUsed"] = [];

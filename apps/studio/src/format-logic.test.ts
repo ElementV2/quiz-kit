@@ -51,7 +51,7 @@ describe("roundIssues (compatibility through the mechanic init)", () => {
     setMechanic(g, 0, "order", defaultRegistry);
     const issues = roundIssues(g, 0, defaultRegistry);
     expect(issues.map((i) => i.questionId)).toEqual(["q_capital_fr", "q_earth_flat", "q_primes"]);
-    expect(issues[0]?.message).toMatch(/order/);
+    expect(issues[0]?.message).toContain("une manche « remise en ordre » ne peut pas jouer une question « QCM (une réponse) »");
   });
   it("flags an empty round, an invalid config and reserve questions", () => {
     const g = copy(DEMO_GAME);

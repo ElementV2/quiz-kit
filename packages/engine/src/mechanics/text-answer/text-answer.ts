@@ -1,3 +1,4 @@
+import { unsupportedQuestion } from "@quiz/schema";
 import { z } from "zod";
 import type { TextAnswerMechanicView } from "@quiz/schema";
 import { defineMechanic, type Judgement } from "../../mechanic.ts";
@@ -39,7 +40,7 @@ export const textAnswer = defineMechanic<TextAnswerConfig, TextAnswerState>({
       const right = a.options.find((o) => o.id === a.correct);
       if (right !== undefined) return ok({ accepted: [right.label, ...(right.synonyms ?? [])], maxDistance: null, allowChange: cfg.allowChange, answers: [], overrules: [] });
     }
-    return err("unsupported", `la mécanique text-answer ne gère pas les questions ${a.kind}`);
+    return err("unsupported", unsupportedQuestion("text-answer", a.kind));
   },
 
   submit(s, participantId, answer, env) {

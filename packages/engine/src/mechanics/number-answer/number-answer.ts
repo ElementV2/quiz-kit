@@ -1,3 +1,4 @@
+import { unsupportedQuestion } from "@quiz/schema";
 import { z } from "zod";
 import type { NumberAnswerMechanicView } from "@quiz/schema";
 import { defineMechanic, type Judgement } from "../../mechanic.ts";
@@ -74,7 +75,7 @@ export const numberAnswer = defineMechanic<NumberAnswerConfig, NumberAnswerState
 
   init(cfg, question) {
     const a = question.answerSpec;
-    if (a.kind !== "number") return err("unsupported", `la mécanique number-answer ne gère pas les questions ${a.kind}`);
+    if (a.kind !== "number") return err("unsupported", unsupportedQuestion("number-answer", a.kind));
     return ok({ mode: cfg.mode, correct: a.correct, tolerance: a.tolerance, unit: a.unit ?? null, min: a.min ?? null, max: a.max ?? null, allowChange: cfg.allowChange, answers: [], overrules: [] });
   },
 

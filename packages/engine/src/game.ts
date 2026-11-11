@@ -1,4 +1,4 @@
-import { isAllowed, isNeverUndone, isUndoableByDefault, type Action, type Actor, type Event, type Session } from "@quiz/schema";
+import { isAllowed, isNeverUndone, isUndoableByDefault, type Action, type Actor, type Event, type Session, ROLE_LABEL_FR } from "@quiz/schema";
 import type { Registry } from "./mechanic.ts";
 import { reduce } from "./reduce.ts";
 import { err, ok, type Rejection, type Result } from "./result.ts";
@@ -45,7 +45,7 @@ export function nextSeq(g: Game): number {
 export function decide(g: Game, intent: Intent, at: number, registry: Registry): Result<{ event: Event; game: Game }, Rejection> {
   const seq = nextSeq(g);
   if (intent.action.type === "undo") {
-    if (!isAllowed(intent.actor.role, "undo")) return err("forbidden", `le rôle ${intent.actor.role} ne peut pas annuler`);
+    if (!isAllowed(intent.actor.role, "undo")) return err("forbidden", `${ROLE_LABEL_FR[intent.actor.role]} ne peut pas annuler`);
     const target = undoTarget(g, intent.action.targetSeq);
     if (!target.ok) return target;
     const event: Event = { seq, at, actor: intent.actor, action: { type: "undo", targetSeq: target.value }, idempotencyKey: intent.idempotencyKey };

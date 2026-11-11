@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { Media, OptionId, type OrderMechanicView } from "@quiz/schema";
+import { Media, OptionId, type OrderMechanicView, unsupportedQuestion } from "@quiz/schema";
 import { defineMechanic, type Judgement } from "../../mechanic.ts";
 import { err, ok } from "../../result.ts";
 import { answerOfStored, answersOfStored, isPrivileged, Overrule, overrule, storeAnswer, StoredAnswer, verdict } from "../shared/answers.ts";
@@ -30,7 +30,7 @@ export const order = defineMechanic<OrderConfig, OrderState>({
 
   init(cfg, question, env) {
     const a = question.answerSpec;
-    if (a.kind !== "order") return err("unsupported", `la mécanique order ne gère pas les questions ${a.kind}`);
+    if (a.kind !== "order") return err("unsupported", unsupportedQuestion("order", a.kind));
     const options = a.options.map(({ id, label, media }) => (media ? { id, label, media } : { id, label }));
     const correct = options.map((o) => o.id);
     let shown = env.rng.shuffle(options);

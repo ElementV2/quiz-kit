@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { Media, OptionId, TeamId, type CrowdVoteMechanicView } from "@quiz/schema";
+import { Media, OptionId, TeamId, type CrowdVoteMechanicView, unsupportedQuestion } from "@quiz/schema";
 import { defineMechanic, type Judgement } from "../../mechanic.ts";
 import { err, ok } from "../../result.ts";
 import { isPrivileged } from "../shared/answers.ts";
@@ -72,7 +72,7 @@ export const crowdVote = defineMechanic<CrowdVoteConfig, CrowdVoteState>({
     const common = { streamDelayMs: cfg.streamDelayMs, showLive: cfg.showLive, teamId: cfg.teamId ?? null, points: cfg.points, votes: [] };
     if (a.kind === "single") return ok({ options: a.options.map(lite), correct: a.correct, frozen: null, ...common });
     if (a.kind === "poll") return ok({ options: a.options.map(lite), correct: null, frozen: null, ...common });
-    return err("unsupported", `la mécanique crowd-vote ne gère que les questions single ou poll (reçu ${a.kind})`);
+    return err("unsupported", `${unsupportedQuestion("crowd-vote", a.kind)} (QCM à une réponse ou sondage seulement)`);
   },
 
   submit() {
