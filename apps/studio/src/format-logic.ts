@@ -158,6 +158,13 @@ export function roundIssues(doc: GameDocument, ri: number, registry: Registry): 
     if (!r.ok) issues.push({ questionId: q.id, message: r.error.message });
   };
   questions.forEach((q, i) => check(q, i, questions));
+  // A question's own points that will not be used: say it (never silently ignored).
+  for (const q of questions) {
+    if (q.scoring === undefined) continue;
+    const played = playedBy(round, q, registry);
+    if (played.ok && played.value.mechanic.ownPoints === true) issues.push({ questionId: q.id, message: "ses points propres ne servent pas ici : ce type de question décide de ses points (régler la catégorie ou le format)" });
+    else if (q.scoring.some((c) => c.type === "timeDecay") && round.timer === undefined) issues.push({ questionId: q.id, message: "points dégressifs sans chrono : la question rapporte toujours le maximum (activer le chrono de la manche)" });
+  }
   // A reserve question replaces one of the round: checked as if it were played first.
   for (const id of round.reserve) {
     const q = byId.get(id);
@@ -395,5 +402,39 @@ export function mixedCategoryCounts(doc: GameDocument, round: Round): Map<MixedC
     if (cat !== undefined) out.set(cat, (out.get(cat) ?? 0) + 1);
   }
   return out;
+}
+
+// ───────────── Points of one question ─────────────
+
+/** How a question scores: by the barème (round / category), fixed points, a decay, or a custom rule. */
+export type QuestionPoints = { readonly mode: "round" } | { readonly mode: "fixed"; readonly points: number } | { readonly mode: "decay"; readonly max: number; readonly min: number } | { readonly mode: "custom" };
+
+export function questionPoints(q: Pick<Question, "scoring">): QuestionPoints {
+  const r = q.scoring;
+  if (r === undefined) return { mode: "round" };
+  const base = r.flatMap((c) => (c.type === "base" ? [c] : []));
+  const decay = r.flatMap((c) => (c.type === "timeDecay" ? [c] : []));
+  const only = base.length === 1 ? base[0] : undefined;
+  if (only !== undefined && r.length === 1) return { mode: "fixed", points: only.points };
+  if (only !== undefined && decay.length === 1 && r.length === 2) return { mode: "decay", max: only.points, min: decay[0]?.minPoints ?? 0 };
+  return { mode: "custom" };
+}
+
+/** The rule stored for a choice (min kept ≤ max so the question always plays). */
+export function pointsRule(p: QuestionPoints, current?: Question["scoring"]): Question["scoring"] {
+  switch (p.mode) {
+    case "round":
+      return undefined;
+    case "fixed":
+      return [{ type: "base", points: Math.round(p.points) }];
+    case "decay":
+      return [{ type: "base", points: Math.round(p.max) }, { type: "timeDecay", minPoints: Math.min(Math.round(p.min), Math.round(p.max)) }];
+    case "custom":
+      return current;
+    default: {
+      const never: never = p;
+      return never;
+    }
+  }
 }
 

@@ -4,7 +4,7 @@ import { parseQuestionsCsv, type AnswerKind, type AnswerSpec, type GameDocument,
 import { Button, Panel, confirmDialog } from "@quiz/ui";
 import { api, mediaUrl } from "./api.ts";
 import { NumField } from "./fields.tsx";
-import { deleteQuestion, moveItem, roundIssues, roundsOf } from "./format-logic.ts";
+import { deleteQuestion, moveItem, pointsRule, questionPoints, roundIssues, roundsOf, type QuestionPoints } from "./format-logic.ts";
 import { QUESTION_TYPES, freeOptionId, kindLabel, newQuestion, normRectFromDrag, splitList } from "./question-factories.ts";
 import { hex, snapshot, type Update } from "./util.ts";
 
@@ -99,6 +99,7 @@ export function ContentEditor(p: { doc: GameDocument; update: Update }): JSX.Ele
                     <label class="s-field"><span class="s-label">Indices (un par ligne)</span><textarea rows={2} value={q.hints.join("\n")} onChange={(e) => { const v = splitList(e.currentTarget.value, /\n/); edit((x) => { x.hints = v; }); }} /></label>
                     <label class="s-field"><span class="s-label">Catégories (la 1re = colonne du plateau)</span><input value={q.tags.join(", ")} onChange={(e) => { const v = splitList(e.currentTarget.value, /,/); edit((x) => { x.tags = v; }); }} /></label>
                     <label class="s-field"><span class="s-label">Notes animateur</span><textarea rows={2} value={q.notes ?? ""} onInput={(e) => { const v = e.currentTarget.value; edit((x) => { if (v === "") delete x.notes; else x.notes = v; }, "notes"); }} /></label>
+                    <QuestionPointsField q={q} edit={edit} />
                   </td>
                   <td class="s-actions">
                     <Button kind="ghost" title="Monter" disabled={i() === 0} onClick={() => p.update((d) => moveItem(d.questions, i(), i() - 1))}>↑</Button>
@@ -423,3 +424,42 @@ function PinEditor(p: { q: Question; target: NormRect | null; setTarget: (r: Nor
     </div>
   );
 }
+
+/**
+ * Points of this question: the barème (round / category) by default, or its own — fixed points, or a decay from a
+ * maximum to a minimum over the answer time. Wins over the round and category rules.
+ */
+const fixedOf = (p: QuestionPoints): { points: number } | null => (p.mode === "fixed" ? p : null);
+const decayOf = (p: QuestionPoints): { max: number; min: number } | null => (p.mode === "decay" ? p : null);
+
+function QuestionPointsField(p: { q: Question; edit: (f: (x: Question) => void, key?: string) => void }): JSX.Element {
+  const cur = () => questionPoints(p.q);
+  const set = (next: QuestionPoints) => p.edit((x) => { const r = pointsRule(next, x.scoring); if (r === undefined) delete x.scoring; else x.scoring = r; }, "points");
+  return (
+    <div class="s-field s-points">
+      <span class="s-label">Points de cette question</span>
+      <select value={cur().mode} onChange={(e) => {
+        const m = e.currentTarget.value;
+        if (m === "round") set({ mode: "round" });
+        else if (m === "fixed") set({ mode: "fixed", points: 100 });
+        else if (m === "decay") set({ mode: "decay", max: 100, min: 50 });
+      }}>
+        <option value="round">selon le barème (manche / catégorie)</option>
+        <option value="fixed">points fixes</option>
+        <option value="decay">dégressif (plus on répond vite, plus on marque)</option>
+        <Show when={cur().mode === "custom"}><option value="custom">règle personnalisée (JSON)</option></Show>
+      </select>
+      <Show when={fixedOf(cur())}>
+        {(c) => <label class="s-inline"><NumField min={-1_000_000} max={1_000_000} step={10} value={c().points} onChange={(v) => set({ mode: "fixed", points: v })} /> points</label>}
+      </Show>
+      <Show when={decayOf(cur())}>
+        {(d) => (
+          <span class="s-inline">
+            de <NumField min={0} max={1_000_000} step={10} value={d().max} onChange={(v) => set({ mode: "decay", max: v, min: d().min })} /> à <NumField min={0} max={1_000_000} step={10} value={d().min} onChange={(v) => set({ mode: "decay", max: d().max, min: v })} /> points
+          </span>
+        )}
+      </Show>
+    </div>
+  );
+}
+

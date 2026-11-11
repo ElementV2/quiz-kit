@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { MixedKinds, defaultRegistry } from "@quiz/engine";
 import { DEMO_EVENING_GAME, DEMO_GAME, DEMO_POLL_GAME, GameDocument, PER_KIND_MECHANICS, TEMPLATES, type Question } from "@quiz/schema";
-import { MECHANICS, MIXED_CATEGORIES, normalizeRule, mixedCategoryCounts, mixedCategoryValues, mixedScoring, setMixedField, setMixedScoring, addToRound, configValues, defaultConfig, deleteQuestion, deleteRound, duplicateRound, mechanicOptions, moveItem, newRound, newScoring, parseNumberList, removeFromRound, roundIssues, roundsOf, setConfigField, setMechanic, swapList } from "./format-logic.ts";
+import { MECHANICS, MIXED_CATEGORIES, normalizeRule, pointsRule, questionPoints, mixedCategoryCounts, mixedCategoryValues, mixedScoring, setMixedField, setMixedScoring, addToRound, configValues, defaultConfig, deleteQuestion, deleteRound, duplicateRound, mechanicOptions, moveItem, newRound, newScoring, parseNumberList, removeFromRound, roundIssues, roundsOf, setConfigField, setMechanic, swapList } from "./format-logic.ts";
 import { QUESTION_TYPES, newQuestion } from "./question-factories.ts";
 
 /** Keys of a mechanic config schema (zod object shape). */
@@ -53,6 +53,24 @@ describe("mechanic catalogue", () => {
   });
   it("a points rule stays valid while edited (decay minimum never above the base)", () => {
     expect(normalizeRule([{ type: "base", points: 300 }, { type: "timeDecay", minPoints: 500 }])).toEqual([{ type: "base", points: 300 }, { type: "timeDecay", minPoints: 300 }]);
+  });
+  it("points of one question: barème, fixed, decay (min kept ≤ max), custom kept", () => {
+    expect(questionPoints({})).toEqual({ mode: "round" });
+    expect(pointsRule({ mode: "fixed", points: 250 })).toEqual([{ type: "base", points: 250 }]);
+    expect(questionPoints({ scoring: [{ type: "base", points: 250 }] })).toEqual({ mode: "fixed", points: 250 });
+    expect(pointsRule({ mode: "decay", max: 100, min: 300 })).toEqual([{ type: "base", points: 100 }, { type: "timeDecay", minPoints: 100 }]);
+    const custom = [{ type: "base", points: 100 }, { type: "penalty", points: -50 }] as const;
+    expect(questionPoints({ scoring: [...custom] })).toEqual({ mode: "custom" });
+    expect(pointsRule({ mode: "custom" }, [...custom])).toEqual([...custom]);
+    expect(pointsRule({ mode: "round" }, [...custom])).toBeUndefined();
+    // own points that will not be used are said in Format
+    const g = copy(DEMO_GAME);
+    const q = g.questions[0];
+    const r0 = g.format.rounds[0];
+    if (q === undefined || r0 === undefined) throw new Error("fixture");
+    q.scoring = [{ type: "base", points: 100 }, { type: "timeDecay", minPoints: 10 }];
+    delete r0.timer;
+    expect(roundIssues(g, 0, defaultRegistry).map((i) => i.message).join()).toMatch(/sans chrono/);
   });
   it("shows defaults filled for a partial config", () => {
     expect(configValues(defaultRegistry, { mechanic: "mixed", mechanicConfig: { numberMode: "closest" } })).toEqual({ numberMode: "closest", allowChange: true, shuffleOptions: false, pollMaxStrikes: 3, pollMultiplier: 1, pollScoring: "bank", allocationKeepOneEmpty: true, buzzerLockout: true });

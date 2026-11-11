@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { ScoringRule } from "./format.ts";
 import { MediaHash, OptionId, QuestionId } from "./ids.ts";
 
 export const Media = z.strictObject({
@@ -117,5 +118,10 @@ export const Question = z.strictObject({
   difficulty: z.number().int().min(1).max(5).optional(),
   /** Host notes: never projected to player / output views. */
   notes: z.string().max(5000).optional(),
+  /**
+   * This question's own points rule (fixed points, decay…): wins over its category's rule (mixed round) and the
+   * round's barème. Absent: the category's / round's. Mechanics that decide their own points ignore it.
+   */
+  scoring: ScoringRule.optional(),
 });
 export type Question = z.infer<typeof Question>;

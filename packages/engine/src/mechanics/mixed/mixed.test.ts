@@ -191,3 +191,39 @@ describe("survey played individually — steal, removal", () => {
   });
 });
 
+describe("points of one question win over its category and the round", () => {
+  it("a QCM with its own fixed points scores them; the next QCM follows the barème", () => {
+    const doc = structuredClone(MIXED);
+    const r0 = doc.format.rounds[0];
+    const q0 = doc.questions.find((q) => q.id === "q_capital_fr");
+    if (r0 === undefined || q0 === undefined) throw new Error("fixture");
+    r0.mechanicConfig = { kinds: { choice: { scoring: [{ type: "base", points: 300 }] } } };
+    q0.scoring = [{ type: "base", points: 1000 }];
+    const correct = q0.answerSpec.kind === "single" ? q0.answerSpec.correct : "";
+    const g = run(reg, [...START, ctl({ type: "question.present" }), ctl({ type: "question.open" }), answer("p_1", correct), ctl({ type: "question.lock" }), ctl({ type: "question.reveal" })], createGame(makeSession(GameDocument.parse(doc))));
+    expect(total(g, "p_1")).toBe(1000);
+    // live stakes still apply on top (×2)
+    const staked = run(reg, [...START, ctl({ type: "question.setStakes", roundIndex: 0, questionIndex: 0, points: null, multiplier: 2 }), ctl({ type: "question.present" }), ctl({ type: "question.open" }), answer("p_1", correct), ctl({ type: "question.lock" }), ctl({ type: "question.reveal" })], createGame(makeSession(GameDocument.parse(doc))));
+    expect(total(staked, "p_1")).toBe(2000);
+  });
+
+  it("a regrade or a verdict correction keeps the question's points; a live edit may not change them once played", () => {
+    const doc = structuredClone(MIXED);
+    const q0 = doc.questions.find((q) => q.id === "q_capital_fr");
+    if (q0 === undefined || q0.answerSpec.kind !== "single") throw new Error("fixture");
+    q0.scoring = [{ type: "base", points: 1000 }];
+    const correct = q0.answerSpec.correct;
+    const wrong = q0.answerSpec.options.find((o) => o.id !== correct)?.id ?? "";
+    const g = run(reg, [...START, ctl({ type: "question.present" }), ctl({ type: "question.open" }), answer("p_1", wrong), ctl({ type: "question.lock" }), ctl({ type: "question.reveal" })], createGame(makeSession(GameDocument.parse(doc))));
+    expect(total(g, "p_1")).toBe(0);
+    const re = run(reg, [ctl({ type: "question.regrade", questionId: q0.id, answerSpec: { ...q0.answerSpec, correct: wrong } })], g);
+    expect(total(re, "p_1")).toBe(1000);
+    const forced = run(reg, [ctl({ type: "answer.verdict", roundIndex: 0, questionIndex: 0, participantId: "p_2", correct: true })], g);
+    expect(total(forced, "p_2")).toBe(1000);
+    const patched = structuredClone(g.state.game);
+    const pq = patched.questions.find((q) => q.id === q0.id);
+    if (pq !== undefined) pq.scoring = [{ type: "base", points: 5 }];
+    expect(() => run(reg, [ctl({ type: "game.patch", baseVersion: g.state.gameVersion, game: patched })], g)).toThrow(/question jouée/);
+  });
+});
+
