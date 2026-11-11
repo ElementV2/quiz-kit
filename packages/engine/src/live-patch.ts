@@ -11,6 +11,25 @@ import type { GameState } from "./state.ts";
 /** A question with its wording and host notes blanked: what must not change once it is on air / played. */
 const frozenPart = (q: GameDocument["questions"][number]): string => JSON.stringify({ ...q, notes: "", prompt: { ...q.prompt, text: "" } });
 
+/** The points rules of a mixed round's categories (what must not move once a question was scored). */
+function rulesOf(config: unknown): unknown {
+  if (typeof config !== "object" || config === null || !("kinds" in config) || typeof config.kinds !== "object" || config.kinds === null) return {};
+  // Only the categories that have a rule (a category with other settings only does not count).
+  return Object.fromEntries(
+    Object.entries(config.kinds)
+      .flatMap(([cat, v]: [string, unknown]) => (typeof v === "object" && v !== null && "scoring" in v && v.scoring !== undefined ? [[cat, v.scoring] as const] : []))
+      .toSorted(([a], [b]) => a.localeCompare(b)),
+  );
+}
+
+/**
+ * What must not move once a round scored: a mixed round's category points rules (its other settings only shape the
+ * questions to come — each played one keeps its own state); any other round's whole settings.
+ */
+function sameRules(before: { mechanic: string; mechanicConfig: unknown }, after: { mechanicConfig: unknown }): boolean {
+  return before.mechanic === "mixed" ? JSON.stringify(rulesOf(before.mechanicConfig)) === JSON.stringify(rulesOf(after.mechanicConfig)) : JSON.stringify(before.mechanicConfig) === JSON.stringify(after.mechanicConfig);
+}
+
 export function livePatchProblem(s: GameState, next: GameDocument, freeOrder = false): string | null {
   const cur = s.game;
   if (next.format.participants.max < s.participants.length) {
@@ -37,7 +56,7 @@ export function livePatchProblem(s: GameState, next: GameDocument, freeOrder = f
     const after = next.format.rounds[ri];
     if (before === undefined || after === undefined || after.id !== before.id) continue; // checked below for started rounds
     if (JSON.stringify(after.scoring) !== JSON.stringify(before.scoring)) return `le barème de la manche « ${before.title} » (déjà jouée) ne change plus`;
-    if (JSON.stringify(after.mechanicConfig) !== JSON.stringify(before.mechanicConfig)) return `les réglages de la manche « ${before.title} » (déjà jouée) ne changent plus`;
+    if (!sameRules(before, after)) return before.mechanic === "mixed" ? `les barèmes des catégories de la manche « ${before.title} » (déjà jouée) ne changent plus` : `les réglages de la manche « ${before.title} » (déjà jouée) ne changent plus`;
   }
   if (s.roundIndex === null) return null; // nothing started: anything goes
   // Rounds already started keep their place and their kind.
@@ -50,13 +69,17 @@ export function livePatchProblem(s: GameState, next: GameDocument, freeOrder = f
     // The scoring of a round already started is frozen: a later regrade must score like the reveal did.
     if (JSON.stringify(after.scoring) !== JSON.stringify(before.scoring)) return `le barème de la manche « ${before.title} » (déjà commencée) ne change plus`;
     // Rounds already over: their settings (a mixed round's per-category rules) still score corrections.
-    if (i < s.roundIndex && JSON.stringify(after.mechanicConfig) !== JSON.stringify(before.mechanicConfig)) return `les réglages de la manche « ${before.title} » (déjà jouée) ne changent plus`;
+    if (i < s.roundIndex && !sameRules(before, after)) return `les réglages de la manche « ${before.title} » (déjà jouée) ne changent plus`;
   }
   const round = cur.format.rounds[s.roundIndex];
   const nextRound = next.format.rounds[s.roundIndex];
   if (round === undefined || nextRound === undefined) return null;
-  if (JSON.stringify(round.mechanicConfig) !== JSON.stringify(nextRound.mechanicConfig) && s.questionIndex !== null) {
-    return `la manche « ${round.title} » est en cours : ses réglages ne changent qu'avant sa première question`;
+  // A mixed round in progress may change the settings of its categories for the questions to come (steal, strikes,
+  // shuffle…): each played question keeps its own state. Its points rules stay frozen (corrections score with them).
+  if (!sameRules(round, nextRound) && s.questionIndex !== null) {
+    return round.mechanic === "mixed"
+      ? `la manche « ${round.title} » est en cours : les barèmes de ses catégories ne changent plus (les autres réglages, oui)`
+      : `la manche « ${round.title} » est en cours : ses réglages ne changent qu'avant sa première question`;
   }
   // Questions already presented keep their place. Free order (board): cells are played in any order, so the
   // whole grid stays as it is — new questions only at the end.

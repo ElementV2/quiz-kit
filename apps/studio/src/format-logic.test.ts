@@ -51,6 +51,16 @@ describe("mechanic catalogue", () => {
     expect(mixedScoring(r(), "text")).toBeNull();
     expect(mixedCategoryCounts(g, r()).get("choice")).toBe(3);
   });
+  it("every category setting shows what the game applies, never a blank box (steal on by default, etc.)", () => {
+    const fresh = { mechanic: "mixed", mechanicConfig: {} };
+    for (const c of MIXED_CATEGORIES) {
+      const values = mixedCategoryValues(defaultRegistry, fresh, c.id);
+      expect(c.fields.filter((f) => values[f.key] === undefined).map((f) => `${c.id}.${f.key}`)).toEqual([]);
+    }
+    expect(mixedCategoryValues(defaultRegistry, fresh, "poll")).toMatchObject({ steal: true, revealAll: true, maxStrikes: 3 });
+    expect(mixedCategoryValues(defaultRegistry, { mechanic: "mixed", mechanicConfig: { kinds: { poll: { steal: false } } } }, "poll")).toMatchObject({ steal: false });
+    expect(mixedCategoryValues(defaultRegistry, fresh, "number")).toMatchObject({ winners: 1, tolerancePercent: 0, graded: false });
+  });
   it("a points rule stays valid while edited (decay minimum never above the base)", () => {
     expect(normalizeRule([{ type: "base", points: 300 }, { type: "timeDecay", minPoints: 500 }])).toEqual([{ type: "base", points: 300 }, { type: "timeDecay", minPoints: 300 }]);
   });

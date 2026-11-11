@@ -82,8 +82,16 @@ describe("mixed round — what must not break live", () => {
     const cfg = structuredClone(g.state.game);
     const r0 = cfg.format.rounds[0];
     if (r0 === undefined) throw new Error("fixture");
-    r0.mechanicConfig = { allowChange: false };
-    expect(() => run(reg, [ctl({ type: "game.patch", baseVersion: g.state.gameVersion, game: cfg })], g)).toThrow(/réglages/);
+    // Settings for the questions to come may change live (steal off)…
+    r0.mechanicConfig = { kinds: { poll: { steal: false } } };
+    const live = run(reg, [ctl({ type: "game.patch", baseVersion: g.state.gameVersion, game: cfg })], g);
+    expect(live.state.game.format.rounds[0]?.mechanicConfig).toEqual({ kinds: { poll: { steal: false } } });
+    // …its points rules may not.
+    const rules = structuredClone(live.state.game);
+    const rr = rules.format.rounds[0];
+    if (rr === undefined) throw new Error("fixture");
+    rr.mechanicConfig = { kinds: { poll: { steal: false }, choice: { scoring: [{ type: "base", points: 9 }] } } };
+    expect(() => run(reg, [ctl({ type: "game.patch", baseVersion: live.state.gameVersion, game: rules })], live)).toThrow(/barèmes/);
     // The next question (a survey) becomes a free text: played by text-answer at present.
     const kind = structuredClone(g.state.game);
     const poll = kind.questions.find((q) => q.id === "q_poll_breakfast");

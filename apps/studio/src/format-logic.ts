@@ -1,6 +1,7 @@
 import { MIXED_CATEGORY, createRng, playedBy, type MixedCategory, type Registry } from "@quiz/engine";
 import { ScoringComponent as ScoringComponentSchema, mechanicLabel as frenchMechanicLabel, type AnswerKind, type GameDocument, type Question, type Round, type ScoringComponent } from "@quiz/schema";
 import { pruneRound } from "./flow-logic.ts";
+import { newQuestion } from "./question-factories.ts";
 
 /**
  * Format mode (doc 07): rounds as cards. Pure helpers, tested. The studio may run the engine (ADR-0007):
@@ -372,17 +373,6 @@ export const MIXED_CATEGORIES: readonly MixedCategoryInfo[] = [
   { id: "allocation", label: "Répartition de mise", kinds: ["allocation"], explain: "Répartir une mise entre les réponses ; on garde ce qui est posé sur la bonne.", ownPoints: true, fields: [change, { key: "keepOneEmpty", kind: "boolean", label: "Obligation de laisser au moins une réponse vide" }] },
 ];
 
-/** Older flat keys of the mixed config (still read when the category says nothing). */
-const FLAT: Readonly<Record<string, string>> = {
-  "choice.shuffleOptions": "shuffleOptions",
-  "vote.shuffleOptions": "shuffleOptions",
-  "poll.mode": "pollScoring",
-  "poll.maxStrikes": "pollMaxStrikes",
-  "poll.multiplier": "pollMultiplier",
-  "number.mode": "numberMode",
-  "oral.lockoutOnWrong": "buzzerLockout",
-  "allocation.keepOneEmpty": "allocationKeepOneEmpty",
-};
 
 const kindsOf = (cfg: Record<string, unknown>): Record<string, Record<string, unknown>> => {
   const k = cfg["kinds"];
@@ -390,13 +380,25 @@ const kindsOf = (cfg: Record<string, unknown>): Record<string, Record<string, un
   return Object.fromEntries(Object.entries(k).flatMap(([c, v]) => (isRecord(v) ? [[c, v]] : [])));
 };
 
-/** Values shown for one category: its own, else the flat key of older games, else the defaults. */
+/** A category's field key → the key of the routed mechanic's settings (when they differ). */
+const ROUTED_KEY: Readonly<Partial<Record<MixedCategory, Readonly<Record<string, string>>>>> = { poll: { mode: "scoring" }, vote: { mode: "vote" } };
+
+/**
+ * Values shown for one category: exactly what the engine applies — the round's config routed for a question of that
+ * category (own value, else the flat key of older games), with the played mechanic's defaults filled. Never a blank
+ * box for a setting the game applies (« vol » shown off while the game allowed it).
+ */
 export function mixedCategoryValues(registry: Registry, round: Pick<Round, "mechanic" | "mechanicConfig">, cat: MixedCategory): Record<string, unknown> {
-  const flat = configValues(registry, round); // defaults filled
-  const own = kindsOf(isRecord(round.mechanicConfig) ? round.mechanicConfig : {})[cat] ?? {};
   const info = MIXED_CATEGORIES.find((c) => c.id === cat);
+  const kind = info?.kinds[0];
+  const mixed = registry.get("mixed");
+  const cfg = mixed?.configSchema.safeParse(round.mechanicConfig);
   const out: Record<string, unknown> = {};
-  for (const f of info?.fields ?? []) out[f.key] = own[f.key] ?? flat[FLAT[`${cat}.${f.key}`] ?? f.key];
+  if (info === undefined || kind === undefined || mixed?.route === undefined || cfg === undefined || !cfg.success) return out;
+  const routed = mixed.route(cfg.data, newQuestion(kind, "q_probe"));
+  const played = registry.get(routed.id)?.configSchema.safeParse(routed.config);
+  const values: Record<string, unknown> = played?.success === true && isRecord(played.data) ? played.data : {};
+  for (const f of info.fields) out[f.key] = values[ROUTED_KEY[cat]?.[f.key] ?? f.key];
   return out;
 }
 
