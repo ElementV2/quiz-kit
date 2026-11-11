@@ -146,7 +146,9 @@ body { overscroll-behavior: none; user-select: none; -webkit-user-select: none; 
   box-shadow: 0 -10px 18px var(--ui-bg);
 }
 .p-where { color: var(--ui-muted); font-weight: 400; text-transform: none; letter-spacing: 0; }
-.p-hand-mine { margin: 0 0 6px; padding: 14px 16px; border-radius: var(--ui-radius); background: var(--ui-ok-bg); border: 2px solid var(--ui-ok); color: var(--ui-ok); font-size: clamp(22px, 5vw, 32px); font-weight: 800; text-align: center; }
-.p-hand-other { margin: 0 0 6px; padding: 8px 12px; border-radius: var(--ui-radius); background: var(--ui-surface); color: var(--ui-muted); text-align: center; font-size: 18px; }
+/* Who has the survey hand: one banner, same size and place for everyone; only the colour says « it's you ». */
+.p-hand-mine, .p-hand-other { margin: 0 0 6px; padding: 14px 16px; border-radius: var(--ui-radius); border: 2px solid; font-size: clamp(20px, 4.5vw, 28px); font-weight: 800; line-height: 1.2; text-align: center; }
+.p-hand-mine { background: var(--ui-ok-bg); border-color: var(--ui-ok); color: var(--ui-ok); }
+.p-hand-other { background: var(--ui-surface); border-color: var(--ui-border-strong); color: var(--ui-text); }
 /* Zoom stays possible (pinch, WCAG 1.4.4); a quick double tap on an answer never zooms the page. */
 html, body { touch-action: manipulation; }
