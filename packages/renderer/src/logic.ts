@@ -1,4 +1,4 @@
-import type { Layer, MechanicView, Phase, Theme, View, ZoneState } from "@quiz/schema";
+import type { Layer, MechanicView, Phase, Theme, ZoneState } from "@quiz/schema";
 
 /**
  * Pure helpers of the renderer (unit-tested without a DOM). Zones only read their bound data and a state;
@@ -197,8 +197,6 @@ export function estimateFontSize(text: string, box: { w: number; h: number }, ma
   }
   return min;
 }
-
-export type AnyView = View;
 
 type SidesView = { readonly teamBoard: readonly { teamId: string; name: string }[]; readonly leaderboard: readonly { participantId: string; displayName: string; teamId?: string | null }[] };
 

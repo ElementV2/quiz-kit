@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { AnswerSpec } from "@quiz/schema";
-import { DEFAULT_BUZZER_KEYS, REGRADABLE_KINDS, assignBuzzerKey, buzzerKey, keyLabel, keyOfSeat, parseAcceptedLines, parseBuzzerKeys, parsePlayersCsv, regradeSpec, splitCsvLine } from "./logic.ts";
+import { splitCsvRow } from "@quiz/schema";
+import { DEFAULT_BUZZER_KEYS, REGRADABLE_KINDS, assignBuzzerKey, buzzerKey, keyLabel, keyOfSeat, parseAcceptedLines, parseBuzzerKeys, parsePlayersCsv, regradeSpec } from "./logic.ts";
 
 describe("players CSV", () => {
   it("parses ; , and tab separated lines, header optional", () => {
@@ -14,7 +15,7 @@ describe("players CSV", () => {
   });
 
   it("keeps quoted separators and escaped quotes", () => {
-    expect(splitCsvLine('"Dupont; Jean";2;"Les ""As"""', ";")).toEqual(["Dupont; Jean", "2", 'Les "As"']);
+    expect(splitCsvRow('"Dupont; Jean";2;"Les ""As"""', ";")).toEqual(["Dupont; Jean", "2", 'Les "As"']);
   });
 
   it("reports invalid and duplicate seats per line", () => {

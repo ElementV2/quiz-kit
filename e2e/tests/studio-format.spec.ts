@@ -31,8 +31,7 @@ test("studio Format: a ladder round + a mixed round (free text + order) built fr
   // Round 1 becomes "Paliers" (single-answer QCM only): the boolean and multi questions are flagged by the engine's own init.
   await studio.getByRole("button", { name: "Format", exact: true }).click();
   const round1 = studio.locator(".s-round").nth(0);
-  await round1.getByRole("button", { name: "Format spécial…" }).click();
-  await round1.getByLabel("Format spécial de la manche").selectOption("ladder");
+  await round1.getByLabel("Type de manche").selectOption("ladder");
   await expect(round1.getByText("⚠ question incompatible").first()).toBeVisible();
   await expect(round1.getByText("⚠ question incompatible")).toHaveCount(2);
 
@@ -52,11 +51,10 @@ test("studio Format: a ladder round + a mixed round (free text + order) built fr
   await qcm.locator(".s-score-row").first().locator("input").press("Tab");
   await expect(qcm.locator(".s-score-row").first().locator("input")).toHaveValue("300");
   // Config form of a special format (board values), then back to mixed.
-  await round2.getByRole("button", { name: "Format spécial…" }).click();
-  await round2.getByLabel("Format spécial de la manche").selectOption("board");
+  await round2.getByLabel("Type de manche").selectOption("board");
   await expect(round2.getByText("Valeurs des cases, de haut en bas")).toBeVisible();
-  await round2.getByLabel("Format spécial de la manche").selectOption("mixed");
-  await expect(round2.getByRole("button", { name: "Format spécial…" })).toBeVisible();
+  await round2.getByLabel("Type de manche").selectOption("mixed");
+  await expect(round2.getByLabel("Type de manche")).toHaveValue("mixed");
   await studio.screenshot({ path: "screenshots/studio-format.png" });
 
   // Bank: a new order question goes to the last round by default, a free-text one to round 1.

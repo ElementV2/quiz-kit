@@ -9,6 +9,23 @@ import { JsonField } from "./fields.tsx";
 import { SAFE_AREAS, SIMULATED_PHASES, assetSheet, assetSheetCsv, deriveStates, longestText, matchDeliveredAssets, outsideSafe, simulateView, snap, templateSvg, type SimulatedPhase } from "./studio-logic.ts";
 import { hex, inField, snapshot, type Update } from "./util.ts";
 
+/** Zone types in words (menus of the scene editor). */
+const ZONE_LABEL: Record<ZoneType, string> = {
+  "question": "Question",
+  "question-media": "Média de la question",
+  "answer-list": "Liste des réponses",
+  "poll-board": "Tableau du sondage",
+  "buzzer": "Buzzer (qui a la main)",
+  "ladder": "Échelle de gains",
+  "timer": "Chrono",
+  "leaderboard": "Classement",
+  "round-info": "Manche et numéro de question",
+  "answer-count": "Nombre de réponses",
+  "text": "Texte",
+  "image": "Image",
+  "board-grid": "Grille du plateau",
+};
+
 /** The scenes a game without its own uses (programme, classement, mur). */
 const BUILT_IN_SCENES: readonly Scene[] = Object.values(OUTPUT_SCENES);
 
@@ -532,12 +549,12 @@ export function SceneEditor(p: { doc: GameDocument; update: Update }): JSX.Eleme
             </div>
             <Show when={tool() === "trace"}>
               <select value={traceType()} title="Type de la zone tracée" onChange={(e) => { const t = ZoneType.safeParse(e.currentTarget.value); if (t.success) setTraceType(t.data); }}>
-                <For each={ZoneType.options}>{(t) => <option value={t}>{t}</option>}</For>
+                <For each={ZoneType.options}>{(t) => <option value={t}>{ZONE_LABEL[t]}</option>}</For>
               </select>
             </Show>
             <select class="s-add-zone" value="" title="Ajouter une zone au centre" onChange={(e) => { const t = ZoneType.safeParse(e.currentTarget.value); e.currentTarget.value = ""; if (t.success) addZone(t.data); }}>
               <option value="">+ Ajouter une zone…</option>
-              <For each={ZoneType.options}>{(t) => <option value={t}>{t}</option>}</For>
+              <For each={ZoneType.options}>{(t) => <option value={t}>{ZONE_LABEL[t]}</option>}</For>
             </select>
             <span class="s-sep" />
             <label class="q-btn q-btn-ghost s-file">Calque de référence<input type="file" accept="image/*" onChange={(e) => void uploadRef(e.currentTarget.files?.[0])} /></label>
@@ -727,7 +744,7 @@ function ZoneInspector(p: { zone: Zone; size: { w: number; h: number }; doc: Gam
       </div>
       <div class="s-section">
         <label class="s-field"><span class="s-label">Identifiant</span><input value={p.zone.id} onChange={(e) => { const v = e.currentTarget.value.toLowerCase().replaceAll(/[^0-9a-z-]/g, "-"); if (v.length > 0) p.edit((z) => { z.id = v; }); }} /></label>
-        <label class="s-field"><span class="s-label">Donnée affichée (binding)</span><input placeholder="par défaut selon le type" value={p.zone.bind ?? ""} onChange={(e) => { const v = e.currentTarget.value; p.edit((z) => { if (v === "") delete z.bind; else z.bind = v; }); }} /></label>
+        <Show when={p.zone.type === "question" || p.zone.type === "text"}><label class="s-field"><span class="s-label">Donnée affichée (binding)</span><input placeholder="par défaut selon le type" value={p.zone.bind ?? ""} onChange={(e) => { const v = e.currentTarget.value; p.edit((z) => { if (v === "") delete z.bind; else z.bind = v; }); }} /></label></Show>
         <Show when={longest().length > 0}><p class="muted s-hint">Texte le plus long ({longest().length} car.) : « {longest().slice(0, 80)} »</p></Show>
       </div>
       <div class="s-section">

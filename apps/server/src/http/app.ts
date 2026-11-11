@@ -19,7 +19,6 @@ import type { ChatHub } from "../chat/chat-hub.ts";
 import { VmixConfig } from "../vmix/driver.ts";
 import { COMMANDS, isCommand, runCommand } from "../control/commands.ts";
 import { nextStep, PROTOCOL_VERSION } from "@quiz/protocol";
-import { PREVIEW_CSS, PREVIEW_HTML, PREVIEW_JS } from "./preview-page.ts";
 
 export type HttpDeps = {
   readonly runtime: () => SessionRuntime;
@@ -78,7 +77,7 @@ export function loggerOptions(level: string, stream?: { write(s: string): void }
   };
 }
 
-/** Front apps built by Vite (`pnpm build`), served from their `dist`. Falls back to the phase-0 preview if not built. */
+/** Front apps built by Vite (`pnpm build`), served from their `dist`; an app not built says so (never a fake page). */
 const APPS = ["output", "control", "host", "player", "studio", "hub"] as const;
 type AppName = (typeof APPS)[number];
 /** Built front-ends: `apps/<name>/dist` in the repo, or `QUIZ_APPS_DIR/<name>/dist` (desktop package). */
@@ -87,8 +86,11 @@ const appDist = (name: AppName): string => join(APPS_ROOT, name, "dist");
 
 function appIndex(name: AppName): string {
   const file = join(appDist(name), "index.html");
-  return existsSync(file) ? readFileSync(file, "utf8") : PREVIEW_HTML;
+  return existsSync(file) ? readFileSync(file, "utf8") : notBuilt(name);
 }
+
+/** Shown instead of an app that was not built (dev checkout without `pnpm build`). */
+const notBuilt = (name: AppName): string => `<!doctype html><html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Quizzkit — app non installée</title><style>body{font:16px/1.5 system-ui,sans-serif;background:#111;color:#eee;display:grid;place-items:center;min-height:100vh;margin:0;padding:16px}code{background:#222;padding:2px 6px;border-radius:4px}</style></head><body><main><h1>Cette app n'est pas installée</h1><p>L'app « ${name} » n'a pas été compilée sur ce serveur. Lancer <code>pnpm build</code>, puis recharger la page.</p></main></body></html>`;
 
 const page = (name: AppName) => async (_req: unknown, reply: { header(k: string, v: string): unknown; type(t: string): { send(b: string): unknown } }) => {
   reply.header("cache-control", "no-cache"); // the HTML is tiny; assets are hashed and cached for a year
@@ -624,8 +626,6 @@ export function buildHttpApp(deps: HttpDeps, options: FastifyServerOptions): Fas
   app.get("/seat/:n", page("player"));
   app.get("/play", page("player"));
   app.get("/studio", page("studio"));
-  app.get("/assets/preview.js", async (_req, reply) => reply.type("text/javascript; charset=utf-8").send(PREVIEW_JS));
-  app.get("/assets/preview.css", async (_req, reply) => reply.type("text/css; charset=utf-8").send(PREVIEW_CSS));
   // Home page: players join with the code, the team unlocks every screen with the team code.
   app.get("/", page("hub"));
   return app;

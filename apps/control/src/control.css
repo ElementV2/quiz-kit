@@ -8,7 +8,6 @@
 /* ── Top bar ── */
 .c-top { display: flex; align-items: center; gap: 12px; padding: 0 14px; height: 48px; border-bottom: 1px solid var(--ui-border); background: var(--ui-surface); min-width: 0; }
 .c-brand { font-size: 13px; font-weight: 700; font-stretch: 75%; text-transform: uppercase; letter-spacing: .18em; color: var(--ui-muted); padding-right: 12px; border-right: 1px solid var(--ui-border); }
-.c-show { font-weight: 650; font-stretch: 85%; max-width: 280px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .c-phase { color: var(--ui-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
 .c-spacer { flex: 1; }
 .c-code { display: inline-flex; align-items: baseline; gap: 6px; font-size: 11px; font-weight: 650; font-stretch: 75%; text-transform: uppercase; letter-spacing: .12em; color: var(--ui-muted); white-space: nowrap; }

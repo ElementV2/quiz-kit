@@ -107,7 +107,7 @@ td, th { padding: 6px 8px; border-bottom: 1px solid var(--ui-border); text-align
 th { color: var(--ui-muted); font-weight: 650; font-stretch: 75%; font-size: 11px; text-transform: uppercase; letter-spacing: .1em; }
 td { font-variant-numeric: tabular-nums; }
 .muted { color: var(--ui-muted); }
-.q-mono, .q-num { font-family: var(--ui-mono); font-variant-numeric: tabular-nums; }
+.q-mono { font-family: var(--ui-mono); font-variant-numeric: tabular-nums; }
 kbd { font: 11px var(--ui-mono); padding: 1px 5px; border: 1px solid var(--ui-border-strong); border-bottom-width: 2px; border-radius: 2px; background: var(--ui-surface-2); color: var(--ui-text); }
 ::-webkit-scrollbar { width: 10px; height: 10px; }
 ::-webkit-scrollbar-thumb { background: var(--ui-border-strong); border: 2px solid var(--ui-bg); border-radius: 6px; }

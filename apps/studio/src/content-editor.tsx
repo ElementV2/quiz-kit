@@ -105,8 +105,6 @@ export function ContentEditor(p: { doc: GameDocument; update: Update }): JSX.Ele
                     <QuestionPointsField q={q} edit={edit} />
                   </td>
                   <td class="s-actions">
-                    <Button kind="ghost" title="Monter" disabled={i() === 0} onClick={() => p.update((d) => moveItem(d.questions, i(), i() - 1))}>↑</Button>
-                    <Button kind="ghost" title="Descendre" disabled={i() === p.doc.questions.length - 1} onClick={() => p.update((d) => moveItem(d.questions, i(), i() + 1))}>↓</Button>
                     <Button kind="ghost" title="Supprimer la question" disabled={p.doc.questions.length <= 1} onClick={() => void remove(q)}>✕</Button>
                   </td>
                 </tr>

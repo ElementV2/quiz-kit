@@ -1,32 +1,9 @@
-import type { ControlView } from "@quiz/schema";
+import { splitCsvRow, type ControlView } from "@quiz/schema";
 
 /** Shared with the external control API (Companion / OSC). */
 export { nextStep } from "@quiz/protocol";
 
 export type PlayerRow = { readonly name: string; readonly seat: number | null; readonly team: string | null };
-
-/** Splits one CSV line (`;`, `,` or tab), honouring double quotes ("a;b" stays one cell, "" is a quote). */
-export function splitCsvLine(line: string, sep: string): string[] {
-  const cells: string[] = [];
-  let cur = "";
-  let quoted = false;
-  for (let i = 0; i < line.length; i++) {
-    const c = line[i] ?? "";
-    if (quoted) {
-      if (c === '"' && line[i + 1] === '"') {
-        cur += '"';
-        i++;
-      } else if (c === '"') quoted = false;
-      else cur += c;
-    } else if (c === '"') quoted = true;
-    else if (c === sep) {
-      cells.push(cur.trim());
-      cur = "";
-    } else cur += c;
-  }
-  cells.push(cur.trim());
-  return cells;
-}
 
 /**
  * Players pasted from Excel / Sheets or a CSV file (doc 09): `nom ; siège ; équipe`, header optional.
@@ -40,7 +17,7 @@ export function parsePlayersCsv(text: string): { rows: PlayerRow[]; errors: stri
   const errors: string[] = [];
   const seats = new Set<number>();
   lines.forEach((line, i) => {
-    const [name = "", seatRaw = "", team = ""] = splitCsvLine(line, sep);
+    const [name = "", seatRaw = "", team = ""] = splitCsvRow(line, sep);
     if (i === 0 && /^(nom|name|pseudo|joueur)$/i.test(name)) return; // header
     if (name.length === 0) {
       errors.push(`ligne ${i + 1} : nom vide`);

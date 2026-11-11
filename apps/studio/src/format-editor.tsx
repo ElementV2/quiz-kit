@@ -2,7 +2,7 @@ import { For, Match, Show, Switch, createMemo, createSignal, type JSX } from "so
 import { defaultRegistry, pointsInfo } from "@quiz/engine";
 import { GameDocument, ruleSummary, type Round, type ScoringComponent } from "@quiz/schema";
 import { Button, Panel, confirmDialog } from "@quiz/ui";
-import { JsonField, NumField } from "./fields.tsx";
+import { NumField } from "./fields.tsx";
 import { FlowEditor } from "./flow-editor.tsx";
 import { MECHANICS, MIXED_CATEGORIES, normalizeRule, SCORING_LABEL, mechanicLabel, mixedCategoryCounts, mixedCategoryValues, mixedScoring, setMixedField, setMixedScoring, addToRound, configValues, deleteRound, duplicateRound, mechanicOptions, moveItem, newRound, newScoring, parseNumberList, removeFromRound, roundIssues, setConfigField, setMechanic, swapList, type ConfigField, type RoundIssue, type RoundList } from "./format-logic.ts";
 import { kindLabel } from "./question-factories.ts";
@@ -66,7 +66,6 @@ export function FormatEditor(p: { doc: GameDocument; update: Update }): JSX.Elem
 }
 
 function RoundCard(p: { doc: GameDocument; round: Round; ri: number; count: number; issues: readonly RoundIssue[]; schemaIssues: readonly string[]; update: Update }): JSX.Element {
-  const [special, setSpecial] = createSignal(false);
   const edit = (f: (r: Round) => void, key?: string) => p.update((d) => { const r = d.format.rounds[p.ri]; if (r !== undefined) f(r); }, key === undefined ? undefined : `${p.round.id}:${key}`);
   const info = () => MECHANICS[p.round.mechanic];
   const general = () => p.issues.filter((i) => i.questionId === null || !p.doc.questions.some((q) => q.id === i.questionId));
@@ -93,31 +92,18 @@ function RoundCard(p: { doc: GameDocument; round: Round; ri: number; count: numb
       </Show>
       <div class="s-round-body">
         <div class="s-round-col">
-          {/*
-            A round takes every kind of question (« Mixte »): no type to pick. Special formats (rules for the whole round:
-            ladder, board, all on the buzzer…) stay one click away, never in the way.
-          */}
-          <Show
-            when={p.round.mechanic !== "mixed" || special()}
-            fallback={
-              <p class="s-explain s-normal">
-                <span class="muted">Tous les types de questions dans cette manche, chacun avec ses réglages.</span>
-                <button type="button" class="s-link" onClick={() => setSpecial(true)}>Format spécial…</button>
-              </p>
-            }
-          >
-            <label class="s-field"><span class="s-label">Format spécial de la manche</span>
-              <select value={p.round.mechanic} onChange={(e) => { const v = e.currentTarget.value; p.update((d) => setMechanic(d, p.ri, v, defaultRegistry)); if (v === "mixed") setSpecial(false); }}>
-                {/* A partie launched before « Mixte » existed (live edit): its round type stays visible. */}
-                <Show when={!mechanicOptions(defaultRegistry).some((m) => m.id === p.round.mechanic)}>
-                  <option value={p.round.mechanic} disabled>{mechanicLabel(p.round.mechanic)} (partie lancée avant « Mixte »)</option>
-                </Show>
-                <option value="mixed">Aucun : manche normale (tous types de questions)</option>
-                <For each={mechanicOptions(defaultRegistry).filter((m) => m.special)}>{(m) => <option value={m.id}>{m.label}</option>}</For>
-              </select>
-            </label>
-            <Show when={p.round.mechanic !== "mixed"}><p class="muted s-explain">{info()?.explain ?? "Mécanique sans description."}</p></Show>
-          </Show>
+          {/* « Mixte » takes every kind of question; the other types are rules for the whole round (ladder, board…). */}
+          <label class="s-field"><span class="s-label">Type de manche</span>
+            <select value={p.round.mechanic} onChange={(e) => { const v = e.currentTarget.value; p.update((d) => setMechanic(d, p.ri, v, defaultRegistry)); }}>
+              {/* A partie launched before « Mixte » existed (live edit): its round type stays visible. */}
+              <Show when={p.round.mechanic !== "mixed" && !mechanicOptions(defaultRegistry).some((m) => m.id === p.round.mechanic)}>
+                <option value={p.round.mechanic} disabled>{mechanicLabel(p.round.mechanic)} (partie lancée avant « Mixte »)</option>
+              </Show>
+              <option value="mixed">Mixte : tous types de questions</option>
+              <For each={mechanicOptions(defaultRegistry).filter((m) => m.special)}>{(m) => <option value={m.id}>{m.label}</option>}</For>
+            </select>
+          </label>
+          <p class="muted s-explain">{p.round.mechanic === "mixed" ? "Chaque question est jouée selon son type, avec les réglages de sa catégorie." : (info()?.explain ?? "Mécanique sans description.")}</p>
           <QuestionList title="Questions jouées (dans l'ordre)" list="questions" doc={p.doc} round={p.round} ri={p.ri} issues={p.issues} update={p.update} />
           <QuestionList title="Réserve (questions de secours)" list="reserve" doc={p.doc} round={p.round} ri={p.ri} issues={p.issues} update={p.update} />
         </div>
@@ -227,26 +213,27 @@ function RuleEditor(p: { title: string; rule: readonly ScoringComponent[]; editR
   return (
     <div class="s-section">
       <span class="s-label">{p.title}</span>
-      <Show when={p.off === true}><p class="muted s-hint">Cette mécanique calcule elle-même ses points (réglages ci-dessous) : le barème n'est pas utilisé.</p></Show>
-      <div class="s-scoring" data-off={String(p.off === true)}>
-        <For each={p.rule}>
-          {(c, ci) => (
-            <div class="s-score-row">
-              <span>{SCORING_LABEL[c.type]}</span>
-              <NumField label={`${SCORING_LABEL[c.type]} (${unit[c.type]})`} step={c.type === "multiplier" ? 0.5 : 10} value={scoreValue(c)} onChange={(v) => setValue(ci(), v)} />
-              <span class="muted">{unit[c.type]}</span>
-              <Button kind="ghost" title="Retirer la règle" disabled={p.rule.length <= 1} onClick={() => p.editRule((rule) => { rule.splice(ci(), 1); })}>✕</Button>
-            </div>
-          )}
-        </For>
-      </div>
-      <select value="" aria-label="Ajouter une règle de score" onChange={(e) => { const t = SCORING_TYPES.find((x) => x === e.currentTarget.value); e.currentTarget.value = ""; if (t !== undefined) p.editRule((rule) => { rule.push(newScoring(t)); }); }}>
-        <option value="">+ ajouter une règle…</option>
-        <For each={available()}>{(t) => <option value={t}>{SCORING_LABEL[t]}</option>}</For>
-      </select>
-      <Show when={p.rule.some((c) => c.type === "timeDecay")}><p class="muted s-hint">Dégressif : les points baissent de la base jusqu'au minimum pendant le temps de réponse.</p></Show>
-      <Show when={p.round?.mechanic === "mixed"}>
-        <p class="s-hint s-priority">Priorité des points, du plus fort au plus faible : <b>1.</b> les points de la question (onglet Contenu) · <b>2.</b> le barème de sa catégorie (ci-dessous) · <b>3.</b> ce barème de la manche. En direct, la <b>mise</b> de la régie (×2, points…) s'applique par-dessus, pour une question.</p>
+      <Show when={p.off !== true} fallback={<p class="muted s-hint">Cette mécanique calcule elle-même ses points (réglages ci-dessous) : pas de barème.</p>}>
+        <div class="s-scoring">
+          <For each={p.rule}>
+            {(c, ci) => (
+              <div class="s-score-row">
+                <span>{SCORING_LABEL[c.type]}</span>
+                <NumField label={`${SCORING_LABEL[c.type]} (${unit[c.type]})`} step={c.type === "multiplier" ? 0.5 : 10} value={scoreValue(c)} onChange={(v) => setValue(ci(), v)} />
+                <span class="muted">{unit[c.type]}</span>
+                <Button kind="ghost" title="Retirer la règle" disabled={p.rule.length <= 1} onClick={() => p.editRule((rule) => { rule.splice(ci(), 1); })}>✕</Button>
+              </div>
+            )}
+          </For>
+        </div>
+        <select value="" aria-label="Ajouter une règle de score" onChange={(e) => { const t = SCORING_TYPES.find((x) => x === e.currentTarget.value); e.currentTarget.value = ""; if (t !== undefined) p.editRule((rule) => { rule.push(newScoring(t)); }); }}>
+          <option value="">+ ajouter une règle…</option>
+          <For each={available()}>{(t) => <option value={t}>{SCORING_LABEL[t]}</option>}</For>
+        </select>
+        <Show when={p.rule.some((c) => c.type === "timeDecay")}><p class="muted s-hint">Dégressif : les points baissent de la base jusqu'au minimum pendant le temps de réponse.</p></Show>
+        <Show when={p.round?.mechanic === "mixed"}>
+          <p class="s-hint s-priority">Priorité des points, du plus fort au plus faible : <b>1.</b> les points de la question (onglet Contenu) · <b>2.</b> le barème de sa catégorie (ci-dessous) · <b>3.</b> ce barème de la manche. En direct, la <b>mise</b> de la régie (×2, points…) s'applique par-dessus, pour une question.</p>
+        </Show>
       </Show>
     </div>
   );
@@ -306,10 +293,6 @@ function ConfigForm(p: { round: Round; ri: number; update: Update }): JSX.Elemen
       <Show when={fields().length > 0} fallback={<p class="muted s-hint">Aucun réglage.</p>}>
         <For each={fields()}>{(f) => <ConfigInput field={f} values={values()} set={set} />}</For>
       </Show>
-      <details class="s-fold">
-        <summary>Avancé (JSON)</summary>
-        <JsonField label="Configuration brute" value={p.round.mechanicConfig} onChange={(v) => p.update((d) => { const r = d.format.rounds[p.ri]; if (r !== undefined) r.mechanicConfig = v; })} />
-      </details>
     </div>
   );
 }

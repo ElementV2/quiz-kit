@@ -15,8 +15,6 @@ export type SceneRendererProps = {
   readonly serverNow: () => number;
   /** Fit the fixed canvas into the parent (control preview). Outputs render 1:1. */
   readonly fit?: boolean;
-  /** Draw zone outlines (studio / debug). */
-  readonly outline?: boolean;
   /** Resolves a media hash to a URL (preloaded blob). Default: `/media/<hash>`. */
   readonly mediaUrl?: (hash: string) => string;
   /** Moments / particles layer (outputs). Absent = no effects (studio, control previews). */
@@ -75,7 +73,7 @@ export function SceneRenderer(props: SceneRendererProps): JSX.Element {
                   "pointer-events": "none",
                 }}
               >
-                <For each={layer.zones}>{(zone: Zone) => <ZoneBox zone={zone} view={view()} serverNow={props.serverNow} mediaUrl={props.mediaUrl ?? defaultMediaUrl} outline={props.outline === true} />}</For>
+                <For each={layer.zones}>{(zone: Zone) => <ZoneBox zone={zone} view={view()} serverNow={props.serverNow} mediaUrl={props.mediaUrl ?? defaultMediaUrl} />}</For>
               </div>
             )}
           </For>
@@ -93,7 +91,7 @@ export function SceneRenderer(props: SceneRendererProps): JSX.Element {
 
 const defaultMediaUrl = (hash: string): string => `/media/${hash}`;
 
-function ZoneBox(p: ZoneProps & { readonly outline: boolean }): JSX.Element {
+function ZoneBox(p: ZoneProps): JSX.Element {
   return (
     <div
       class={`q-zone q-zone-${p.zone.type}`}
@@ -104,7 +102,6 @@ function ZoneBox(p: ZoneProps & { readonly outline: boolean }): JSX.Element {
         top: `${p.zone.rect.y}px`,
         width: `${p.zone.rect.w}px`,
         height: `${p.zone.rect.h}px`,
-        outline: p.outline ? "2px dashed rgba(255,255,255,.35)" : "none",
         // Repeated zones (answer-list) style each cell per state; other zones take their idle look as a whole.
         ...(p.zone.type === "answer-list" ? {} : p.zone.states["idle"]),
         ...p.zone.style,
