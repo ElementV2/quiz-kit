@@ -1,6 +1,6 @@
 import { For, Show, createEffect, createMemo, createResource, createSignal, on, onCleanup, onMount, type JSX } from "solid-js";
 import { render } from "solid-js/web";
-import type { Action, ControlView } from "@quiz/schema";
+import { Action as ActionSchema, actionLabel, type Action, type ControlView } from "@quiz/schema";
 import { asChoice, optionLetter, secondsLeft } from "@quiz/renderer";
 import { Button, HomeLink, MECHANIC_LABEL, MechanicPanel, VerdictsPanel, ON_AIR_PHASES, PHASE_LABEL, StatusPill, createQuizConnection, formatAnswer, nextTarget, onAirTarget, questionAt, sameTarget, confirmDialog, isDialogOpen, StakesBar } from "@quiz/ui";
 import "@quiz/ui/ui.css";
@@ -23,6 +23,10 @@ import { PastVerdicts, QuestionTextEdit, RegradeEditor, RehearsalPanel, ReserveL
 type Act = (a: Action, ok?: string) => Promise<boolean>;
 type Tab = "games" | "players" | "layers" | "tools" | "check";
 
+const ACTION_TYPES: ReadonlySet<string> = new Set(ActionSchema.options.map((o) => o.shape.type.value));
+/** An ignored action in words (« verdict forcé »), its type as is when unknown. */
+const skippedLabel = (t: string): string => (t === "undo" ? "annuler" : ACTION_TYPES.has(t) ? actionLabel(t as Action["type"]) : t); // oxlint-disable-line typescript/no-unsafe-type-assertion -- checked just before
+
 function App() {
   const conn = createQuizConnection({ token });
   const view = createMemo<ControlView | null>(() => {
@@ -32,6 +36,8 @@ function App() {
   const readonly = () => view()?.readonly === true;
   const [regrading, setRegrading] = createSignal<{ round: number; question: number } | null>(null);
   const [message, setMessage] = createSignal<{ ok: boolean; text: string } | null>(null);
+  /** Last ignored-after-undo action already acknowledged (« Compris »). */
+  const [seenSkipped, setSeenSkipped] = createSignal(0);
   const [links] = createResource(() => api<LinksResponse>("/api/links").catch(() => null));
   const [status, setStatus] = createSignal<StatusResponse | null>(null);
   const [now, setNow] = createSignal(conn.serverNow());
@@ -151,7 +157,18 @@ function App() {
                 <Transport view={v()} readonly={readonly()} now={now()} act={act} />
                 {/* Always there, fixed height: a message appearing never moves the keys and the question below. */}
                 <p class={`c-message c-message-slot ${message()?.ok === false ? "c-err" : "c-ok"}`} role="status" title={message()?.text ?? ""}>{message()?.text ?? ""}</p>
-                <Show when={v().skipped.length > 0}><p class="c-message c-err">{v().skipped.length} action(s) devenue(s) sans effet après un undo.</p></Show>
+                {/* Undo replays what came after: some of it may no longer apply (a verdict on an answer that is gone…). Said in words, with the list, until « Compris ». */}
+                <Show when={v().skipped.filter((x) => x.seq > seenSkipped()).length > 0}>
+                  <div class="c-skipped" role="status">
+                    <p>
+                      <b>Annulation faite.</b> {v().skipped.filter((x) => x.seq > seenSkipped()).length === 1 ? "Une action faite après ne pouvait plus s'appliquer : elle est ignorée." : `${v().skipped.filter((x) => x.seq > seenSkipped()).length} actions faites après ne pouvaient plus s'appliquer : elles sont ignorées.`}
+                      <Button kind="ghost" onClick={() => setSeenSkipped(Math.max(...v().skipped.map((x) => x.seq)))}>Compris</Button>
+                    </p>
+                    <ul>
+                      <For each={v().skipped.filter((x) => x.seq > seenSkipped())}>{(x) => <li>« {skippedLabel(x.type)} » : {x.reason}</li>}</For>
+                    </ul>
+                  </div>
+                </Show>
                 <Show when={regradeTarget()}>
                   {(q) => (
                     <section class="c-card c-fix-card">

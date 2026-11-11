@@ -229,3 +229,7 @@ a.q-btn { text-decoration: none; text-align: center; display: inline-flex; align
 .c-ledger-delta[data-sign="minus"] { color: var(--ui-danger); }
 .c-ledger li .q-btn { margin-left: auto; }
 .c-channel { font-size: 11px; }
+/* After an undo: what no longer applies, in words. */
+.c-skipped { margin: 4px 0; padding: 8px 12px; border-left: 3px solid var(--ui-warn, #e0a030); background: var(--ui-surface); font-size: 13px; }
+.c-skipped p { display: flex; flex-wrap: wrap; gap: 6px 12px; align-items: center; margin: 0; }
+.c-skipped ul { margin: 4px 0 0; padding-left: 18px; }

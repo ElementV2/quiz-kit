@@ -39,7 +39,7 @@ test("studio Format: a ladder round + a mixed round (free text + order) built fr
   await studio.getByRole("button", { name: "+ Ajouter une manche" }).click();
   const round2 = studio.locator(".s-round").nth(1);
   await expect(round2.getByText(/aucune question/).first()).toBeVisible();
-  await expect(round2.getByText("Tous les types de questions dans cette manche")).toBeVisible(); // no type to pick
+  await expect(round2.getByLabel("Type de manche")).toHaveValue("mixed"); // « Mixte » by default
   await round2.getByLabel("Titre de la manche").fill("Chronologie");
   await expect(round2.getByText("Réglages par catégorie de question")).toBeVisible();
   // A category with its own points rule: tick, then edit it (the round's rule stays as it is).
