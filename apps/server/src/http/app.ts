@@ -11,7 +11,7 @@ import { loadGameDocument, type GameDocument, MIGRATIONS } from "@quiz/schema";
 import type { MediaStore } from "../media/media-store.ts";
 import { GameLibrary, exportQuiz, importQuiz } from "../media/library.ts";
 import { verifyToken } from "../tokens.ts";
-import { decide, participantTotal, type Registry } from "@quiz/engine";
+import { decide, participantTotal, type Registry, autoVerdicts } from "@quiz/engine";
 import { AnswerSpec, QuestionId, cleanDisplayName } from "@quiz/schema";
 import { buildResults, resultsCsv, resultsHtml } from "../results.ts";
 import type { Rehearsal } from "../rehearsal.ts";
@@ -300,6 +300,33 @@ export function buildHttpApp(deps: HttpDeps, options: FastifyServerOptions): Fas
       .map((p) => ({ participantId: p.id, name: p.displayName, before: participantTotal(game.state, p.id), after: participantTotal(after, p.id) }))
       .filter((c) => c.before !== c.after);
     return { changes };
+  });
+
+  /**
+   * Answers given to a question already revealed (« Corriger » in the run-down): each player's answer, the automatic
+   * verdict and the one forced by the control room, plus the mechanic view to show the answers in words.
+   */
+  app.get<{ Querystring: { t?: string; round?: string; question?: string } }>("/api/question-answers", async (req, reply) => {
+    if (!scoreToken(deps, req)) return reply.code(401).send({ error: "jeton régie requis" });
+    const q = z.strictObject({ t: z.string().optional(), round: z.coerce.number().int().min(0), question: z.coerce.number().int().min(0) }).safeParse(req.query);
+    if (!q.success) return reply.code(400).send({ error: "manche et question attendues" });
+    const ri = q.data.round;
+    const qi = q.data.question;
+    const st = deps.runtime().current.state;
+    const h = st.history.find((x) => x.roundIndex === ri && x.questionIndex === qi);
+    if (h === undefined) return reply.code(404).send({ error: "question pas encore révélée" });
+    const m = deps.registry.get(h.mechanicId);
+    if (m === null) return reply.code(404).send({ error: "type de manche inconnu" });
+    const auto = autoVerdicts(m.judge(h.state));
+    const given = m.answers(h.state);
+    const ids = [...new Set([...given.map((a) => a.participantId), ...auto.keys(), ...h.verdicts.map((v) => v.participantId)])];
+    const names = new Map(st.participants.map((p) => [p.id, p.displayName]));
+    const byPid = new Map(given.map((a) => [a.participantId, a.optionIds]));
+    const forced = new Map(h.verdicts.map((v) => [v.participantId, v.correct]));
+    return {
+      mechanic: m.project(h.state, { audience: "control", phase: "revealed", participantId: null }),
+      rows: ids.map((pid) => ({ participantId: pid, name: names.get(pid) ?? "joueur retiré", optionIds: [...(byPid.get(pid) ?? [])], auto: auto.get(pid) ?? null, forced: forced.get(pid) ?? null })),
+    };
   });
 
   /** Rehearsal mode (doc 07): bots that answer like tablets. Control only; never during a real show. */

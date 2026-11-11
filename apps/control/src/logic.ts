@@ -90,7 +90,7 @@ export function checklist(v: ControlView, s: { journal?: { ok?: boolean; journal
 type Spec = ControlView["rundown"][number]["questions"][number]["answerSpec"];
 
 /** Answer kinds the control room can correct with a simple editor (`question.regrade`, doc 09). */
-export const REGRADABLE_KINDS: ReadonlySet<Spec["kind"]> = new Set(["single", "multi", "boolean", "text", "number"]);
+export const REGRADABLE_KINDS: ReadonlySet<Spec["kind"]> = new Set(["single", "multi", "boolean", "text", "number", "order", "allocation"]);
 
 /** Accepted answers typed one per line (first = canonical), blanks and duplicates dropped. */
 export function parseAcceptedLines(text: string): string[] {
@@ -101,7 +101,7 @@ export function parseAcceptedLines(text: string): string[] {
  * Corrected answer spec from the editor's draft (same kind as the original, other fields kept).
  * Returns null when the draft cannot be sent (nothing picked, empty list, not a number).
  */
-export function regradeSpec(spec: Spec, draft: { readonly picked?: readonly string[] | undefined; readonly truth?: boolean | undefined; readonly accepted?: string | undefined; readonly correct?: string | undefined; readonly tolerance?: string | undefined }): Spec | null {
+export function regradeSpec(spec: Spec, draft: { readonly picked?: readonly string[] | undefined; readonly truth?: boolean | undefined; readonly accepted?: string | undefined; readonly correct?: string | undefined; readonly tolerance?: string | undefined; readonly order?: readonly string[] | undefined }): Spec | null {
   switch (spec.kind) {
     case "single": {
       const id = draft.picked?.[0];
@@ -123,13 +123,21 @@ export function regradeSpec(spec: Spec, draft: { readonly picked?: readonly stri
       if ((draft.correct ?? "").trim() === "" || !Number.isFinite(correct) || !Number.isFinite(tolerance) || tolerance < 0) return null;
       return { ...spec, correct, tolerance };
     }
+    case "allocation": {
+      const id = draft.picked?.[0];
+      return id === undefined || !spec.options.some((o) => o.id === id) ? null : { ...spec, correct: id };
+    }
+    case "order": {
+      const ids = draft.order ?? [];
+      const byId = new Map(spec.options.map((o) => [o.id, o]));
+      if (ids.length !== spec.options.length || !ids.every((id) => byId.has(id)) || new Set(ids).size !== ids.length) return null;
+      return { ...spec, options: ids.flatMap((id) => byId.get(id) ?? []) };
+    }
     case "poll":
     case "vote":
     case "oral":
-    case "order":
     case "pairs":
     case "pin":
-    case "allocation":
       return null;
     default:
       return null;
@@ -139,15 +147,18 @@ export function regradeSpec(spec: Spec, draft: { readonly picked?: readonly stri
 /** Is a question on air (the reserve replaces it), or does the reserve go to the next question? */
 export const questionOnAir = (v: ControlView): boolean => v.question !== null && (v.phase === "presenting" || v.phase === "open" || v.phase === "locked" || v.phase === "judging");
 
-export type RegradeDraft = { picked: string[]; truth: boolean | undefined; accepted: string; correct: string; tolerance: string };
+export type RegradeDraft = { picked: string[]; truth: boolean | undefined; accepted: string; correct: string; tolerance: string; order: string[];
+};
 
 /** Editor draft initialised from the current answer spec. */
 export function initialRegradeDraft(spec: Spec): RegradeDraft {
-  const d: RegradeDraft = { picked: [], truth: undefined, accepted: "", correct: "", tolerance: "0" };
+  const d: RegradeDraft = { picked: [], truth: undefined, accepted: "", correct: "", tolerance: "0", order: [] };
   if (spec.kind === "single") d.picked = [spec.correct];
   else if (spec.kind === "multi") d.picked = [...spec.correct];
   else if (spec.kind === "boolean") d.truth = spec.correct;
   else if (spec.kind === "text") d.accepted = spec.accepted.join("\n");
+  else if (spec.kind === "allocation") d.picked = [spec.correct];
+  else if (spec.kind === "order") d.order = spec.options.map((o) => o.id);
   else if (spec.kind === "number") {
     d.correct = String(spec.correct);
     d.tolerance = String(spec.tolerance);

@@ -45,3 +45,4 @@ import { crowdVote } from "./mechanics/crowd-vote/crowd-vote.ts";
 
 /** Mechanics available in this build. */
 export const defaultRegistry = createRegistry([mixed, choice, pollBoard, buzzer, ladder, textAnswer, numberAnswer, order, pairs, pin, allocation, boardMechanic, hints, revealImage, crowdVote]);
+export { applyVerdicts, autoVerdicts, type ForcedVerdict } from "./verdicts.ts";

@@ -527,3 +527,17 @@ describe("one device per seat / per player", () => {
   });
 });
 
+describe("answers of a question already revealed (« Corriger »)", () => {
+  it("lists each player's answer with the automatic and forced verdict", async () => {
+    const s = await boot();
+    const t = tokenOf(s, "control");
+    for (const a of OPEN) s.runtime.submit(a, CTL, null);
+    s.runtime.submit({ type: "answer.submit", participantId: "p_1", answer: { kind: "choice", optionIds: ["a"] } }, { role: "player", id: "p_1" }, null);
+    const after: Action[] = [{ type: "question.lock" }, { type: "question.reveal" }, { type: "answer.verdict", roundIndex: 0, questionIndex: 0, participantId: "p_1", correct: true }];
+    for (const a of after) s.runtime.submit(a, CTL, null);
+    const r = (await (await fetch(`http://127.0.0.1:${s.port}/api/question-answers?round=0&question=0&t=${t}`)).json()) as { rows: { participantId: string; name: string; optionIds: string[]; auto: boolean | null; forced: boolean | null }[] }; // oxlint-disable-line typescript/no-unsafe-type-assertion -- own endpoint
+    expect(r.rows).toEqual([{ participantId: "p_1", name: "Ana", optionIds: ["a"], auto: false, forced: true }]);
+    expect((await fetch(`http://127.0.0.1:${s.port}/api/question-answers?round=0&question=5&t=${t}`)).status).toBe(404);
+  });
+});
+

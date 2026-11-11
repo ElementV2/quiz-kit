@@ -215,3 +215,6 @@ a.q-btn { text-decoration: none; text-align: center; display: inline-flex; align
 .c-worth .q-label { margin-right: 6px; }
 .c-worth-staked { color: var(--ui-accent); }
 .c-top > .q-tally { min-width: 8.5em; justify-content: center; text-align: center; } /* Antenne / Hors antenne: same width, the bar never jumps */
+.c-past { margin-top: 10px; display: grid; gap: 6px; }
+.c-regrade-order { margin: 0; padding-left: 20px; display: grid; gap: 4px; }
+.c-regrade-order li { display: flex; align-items: center; gap: 6px; }

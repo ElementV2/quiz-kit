@@ -1,7 +1,8 @@
 import { answerKindLabel } from "@quiz/schema";
 import { For, Match, Show, Switch, createResource, createSignal, type JSX } from "solid-js";
 import { Button, confirmDialog } from "@quiz/ui";
-import type { Action, ControlView } from "@quiz/schema";
+import type { Action, ControlView, MechanicView } from "@quiz/schema";
+import { answerText } from "@quiz/renderer";
 import { REGRADABLE_KINDS, initialRegradeDraft, questionOnAir, regradeSpec } from "./logic.ts";
 
 /**
@@ -84,14 +85,28 @@ export function RegradeEditor(p: { readonly question: RundownQuestion; readonly 
   const [accepted, setAccepted] = createSignal(init.accepted);
   const [correct, setCorrect] = createSignal(init.correct);
   const [tolerance, setTolerance] = createSignal(init.tolerance);
+  const [order, setOrder] = createSignal<string[]>(init.order);
   const [preview, setPreview] = createSignal<Preview | null>(null);
-  const next = () => regradeSpec(spec(), { picked: picked(), truth: truth(), accepted: accepted(), correct: correct(), tolerance: tolerance() });
+  const next = () => regradeSpec(spec(), { picked: picked(), truth: truth(), accepted: accepted(), correct: correct(), tolerance: tolerance(), order: order() });
   const options = () => {
     const s = spec();
-    return s.kind === "single" || s.kind === "multi" ? s.options : [];
+    return s.kind === "single" || s.kind === "multi" || s.kind === "allocation" ? s.options : [];
+  };
+  const onePick = () => spec().kind === "single" || spec().kind === "allocation";
+  const labelOf = (id: string) => {
+    const s = spec();
+    return s.kind === "order" ? (s.options.find((o) => o.id === id)?.label ?? id) : id;
+  };
+  const move = (i: number, d: -1 | 1) => {
+    const o = [...order()];
+    const j = i + d;
+    if (j < 0 || j >= o.length) return;
+    [o[i], o[j]] = [o[j] ?? "", o[i] ?? ""];
+    setOrder(o);
+    setPreview(null);
   };
   const toggle = (id: string) => {
-    if (spec().kind === "single") setPicked([id]);
+    if (onePick()) setPicked([id]);
     else setPicked(picked().includes(id) ? picked().filter((x) => x !== id) : [...picked(), id]);
     setPreview(null);
   };
@@ -115,18 +130,31 @@ export function RegradeEditor(p: { readonly question: RundownQuestion; readonly 
   return (
     <div class="c-regrade">
       <p class="c-prompt">{p.question.text}</p>
-      <Show when={REGRADABLE_KINDS.has(spec().kind)} fallback={<p class="muted">Une réponse « {answerKindLabel(spec().kind)} » ne se corrige pas ici.</p>}>
+      <Show when={REGRADABLE_KINDS.has(spec().kind)} fallback={<p class="muted">La réponse d'une question « {answerKindLabel(spec().kind)} » ne se modifie pas ici : corriger joueur par joueur ci-dessous (✓ / ✗), ou ajuster les scores.</p>}>
         <Switch>
           <Match when={options().length > 0}>
             <div class="c-regrade-opts">
               <For each={options()}>
                 {(o) => (
                   <label>
-                    <input type={spec().kind === "single" ? "radio" : "checkbox"} name={`rg-${p.question.id}`} checked={picked().includes(o.id)} onChange={() => toggle(o.id)} /> {o.label}
+                    <input type={onePick() ? "radio" : "checkbox"} name={`rg-${p.question.id}`} checked={picked().includes(o.id)} onChange={() => toggle(o.id)} /> {o.label}
                   </label>
                 )}
               </For>
             </div>
+          </Match>
+          <Match when={spec().kind === "order"}>
+            <ol class="c-regrade-order">
+              <For each={order()}>
+                {(id, i) => (
+                  <li>
+                    <span class="c-grow">{labelOf(id)}</span>
+                    <Button kind="ghost" title="Monter" disabled={i() === 0} onClick={() => move(i(), -1)}>▲</Button>
+                    <Button kind="ghost" title="Descendre" disabled={i() === order().length - 1} onClick={() => move(i(), 1)}>▼</Button>
+                  </li>
+                )}
+              </For>
+            </ol>
           </Match>
           <Match when={spec().kind === "boolean"}>
             <div class="c-regrade-opts">
@@ -240,3 +268,55 @@ export function ResultsPanel(p: { readonly withToken: WithToken }): JSX.Element 
     </div>
   );
 }
+
+type PastRow = { participantId: string; name: string; optionIds: string[]; auto: boolean | null; forced: boolean | null };
+type PastAnswers = { mechanic: MechanicView; rows: PastRow[] };
+
+/**
+ * « Corriger » on a question already revealed: every player's answer with its verdict; ✓ / ✗ force it (cheating, a
+ * fair answer refused…), the same key again goes back to automatic. Points are rewritten at once (journaled, undoable).
+ */
+export function PastVerdicts(p: { readonly round: number; readonly question: number; readonly ledgerSize: number; readonly act: Act; readonly withToken: WithToken }): JSX.Element {
+  // Reloaded when the points change (a verdict, a regrade), not at every answer of the question on air.
+  const [data] = createResource(
+    () => `${p.round}:${p.question}:${p.ledgerSize}`,
+    async (): Promise<PastAnswers | { error: string }> => {
+      const r = await fetch(p.withToken(`/api/question-answers?round=${p.round}&question=${p.question}`)).catch(() => null);
+      if (r === null) return { error: "serveur injoignable" };
+      if (r.status === 404) return { error: "Question pas encore révélée : corriger les joueurs pendant la question, depuis « À l'antenne »." };
+      if (!r.ok) return { error: `lecture impossible (${r.status})` };
+      return (await r.json()) as PastAnswers; // oxlint-disable-line typescript/no-unsafe-type-assertion -- own server endpoint
+    },
+  );
+  const ok = (): PastAnswers | null => { const d = data(); return d !== undefined && "rows" in d ? d : null; };
+  const set = (row: PastRow, correct: boolean | null) =>
+    void p.act({ type: "answer.verdict", roundIndex: p.round, questionIndex: p.question, participantId: row.participantId, correct }, correct === null ? `${row.name} : verdict automatique` : `${row.name} compté ${correct ? "juste" : "faux"} — points recalculés`);
+  return (
+    <Show when={ok()} fallback={<p class="muted">{(() => { const d = data(); return d !== undefined && "error" in d ? d.error : "Chargement…"; })()}</p>}>
+      {(d) => (
+        <div class="c-past">
+          <span class="q-label">Réponses des joueurs ({d().rows.length}) — corriger un verdict</span>
+          <ul class="q-mech-review">
+            <For each={d().rows} fallback={<li class="muted">Personne n'a répondu.</li>}>
+              {(row) => {
+                const now = () => row.forced ?? row.auto;
+                return (
+                  <li data-accepted={String(now())}>
+                    <span class="q-mech-who">{row.name}</span>
+                    <span class="q-mech-said">{row.optionIds.length === 0 ? "—" : answerText(d().mechanic, row.optionIds)}</span>
+                    <Show when={row.forced !== null}><span class="q-mech-tag">corrigé</span></Show>
+                    <span class="q-mech-verdict">
+                      <button type="button" class="q-toggle" data-on={String(now() === true)} title={row.forced === true ? "Revenir au verdict automatique" : "Compter juste"} onClick={() => set(row, row.forced === true ? null : true)}>✓</button>
+                      <button type="button" class="q-toggle q-toggle-no" data-on={String(now() === false)} title={row.forced === false ? "Revenir au verdict automatique" : "Compter faux"} onClick={() => set(row, row.forced === false ? null : false)}>✗</button>
+                    </span>
+                  </li>
+                );
+              }}
+            </For>
+          </ul>
+        </div>
+      )}
+    </Show>
+  );
+}
+

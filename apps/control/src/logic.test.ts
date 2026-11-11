@@ -37,7 +37,7 @@ describe("regrade editor", () => {
     expect(regradeSpec({ kind: "number", correct: 330, tolerance: 10, unit: "m" }, { correct: "324,5", tolerance: "" })).toEqual({ kind: "number", correct: 324.5, tolerance: 0, unit: "m" });
     expect(regradeSpec({ kind: "number", correct: 1, tolerance: 0 }, { correct: "abc" })).toBeNull();
     expect(regradeSpec({ kind: "oral", expected: "x" }, {})).toBeNull();
-    expect(REGRADABLE_KINDS.has("order")).toBe(false);
+    expect(REGRADABLE_KINDS.has("pairs")).toBe(false);
   });
 
   it("drops blank and duplicate accepted lines", () => {
@@ -60,3 +60,15 @@ describe("keyboard buzzers", () => {
     expect(keyLabel(" ")).toBe("Espace");
   });
 });
+
+describe("regrade of order and allocation questions", () => {
+  it("a new order (same items) and a new right option for an allocation", () => {
+    const order: AnswerSpec = { kind: "order", options: [{ id: "a", label: "A" }, { id: "b", label: "B" }, { id: "c", label: "C" }] };
+    expect(regradeSpec(order, { order: ["c", "a", "b"] })).toEqual({ kind: "order", options: [{ id: "c", label: "C" }, { id: "a", label: "A" }, { id: "b", label: "B" }] });
+    expect(regradeSpec(order, { order: ["a", "a", "b"] })).toBeNull();
+    const alloc: AnswerSpec = { kind: "allocation", correct: "a", budget: 1000, options: [{ id: "a", label: "A" }, { id: "b", label: "B" }] };
+    expect(regradeSpec(alloc, { picked: ["b"] })).toEqual({ ...alloc, correct: "b" });
+    expect(REGRADABLE_KINDS.has("order") && REGRADABLE_KINDS.has("allocation")).toBe(true);
+  });
+});
+

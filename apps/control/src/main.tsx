@@ -10,7 +10,7 @@ import { ApiInfo, ChatPanel, StaffCode } from "./Integrations.tsx";
 import { KeyBuzzersPanel, createKeyBuzzers } from "./KeyBuzzers.tsx";
 import { checklist, nextStep } from "./logic.ts";
 import { GameImport, LayersPanel, LibraryPanel, LinksList, Players, ProgramPreview, TeamsPanel, useLayers } from "./Panels.tsx";
-import { QuestionTextEdit, RegradeEditor, RehearsalPanel, ReserveList, ResultsPanel } from "./ShowTools.tsx";
+import { PastVerdicts, QuestionTextEdit, RegradeEditor, RehearsalPanel, ReserveList, ResultsPanel } from "./ShowTools.tsx";
 
 /**
  * /control — the control room (doc 08), organised around the live task:
@@ -162,6 +162,7 @@ function App() {
                           : `Correction en coulisse : « ${v().question?.prompt.text ?? ""} » reste à l'antenne, seuls les points de la question ci-dessous sont recalculés.`}
                       </p>
                       <Show when={q().id} keyed>{(_id: string) => <RegradeEditor question={q()} act={act} withToken={withToken} onClose={() => setRegrading(null)} />}</Show>
+                      <Show when={regrading()}>{(r) => <PastVerdicts round={r().round} question={r().question} ledgerSize={v().ledger.length} act={act} withToken={withToken} />}</Show>
                     </section>
                   )}
                 </Show>
