@@ -3,7 +3,7 @@
 ## Accueil (`/`)
 
 L'adresse du serveur ouverte dans un navigateur (`http://<IP>:7300/`) donne l'accueil : « Jouer » pour les
-joueurs (code de la partie), et pour l'équipe un **code équipe** (6 chiffres) qui déverrouille tous les postes
+joueurs (code de la partie), et pour l'équipe un **code équipe** (8 caractères) qui déverrouille tous les postes
 (Régie, Animateur, Studio, Régie lecture seule) en un clic, les liens des sorties OBS / vMix à copier, le code
 de la partie avec son QR code pour les tablettes, et les sièges fixes (lien + QR). Personne ne recopie de
 liens à rallonge. Sur le PC du serveur lui-même (`localhost`), l'accès est direct et le code équipe y est
@@ -20,7 +20,7 @@ plateau (jamais `localhost`). Anti-force brute : 10 essais par minute et par IP,
 - Bas : participants (connecté, a répondu, latence, siège), alertes.
 - Tout au clavier, raccourcis configurables, touche unique « étape suivante » (espace).
 - Confirmation sur les actions irréversibles (fin de partie, élimination).
-- Une seule régie **maître** ; autres postes en lecture ou en rôle limité (scoreur).
+- Une seule régie **maître** ; autres postes en lecture seule.
 
 ## Animateur (`/host/<show>`)
 

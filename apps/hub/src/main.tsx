@@ -215,7 +215,7 @@ function App(): JSX.Element {
     <div class="h-app">
       <header class="h-top">
         <div class="h-brand">
-          <span class="h-logo">QUIZ</span>
+          <span class="h-logo">QUIZZKIT</span>
           <span class="h-eyebrow">Serveur de show</span>
         </div>
         <span class="h-spacer" />
