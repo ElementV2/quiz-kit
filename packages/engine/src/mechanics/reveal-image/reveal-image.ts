@@ -69,6 +69,7 @@ export const revealImage = defineMechanic<RevealImageConfig, RevealImageState>({
     return {
       mechanic: "reveal-image",
       image: env.audience === "player" ? null : { ...s.image },
+      aspect: s.image.w !== undefined && s.image.h !== undefined ? s.image.w / s.image.h : null,
       cols: s.cols,
       rows: s.rows,
       revealed: revealed ? Array.from({ length: s.total }, (_, i) => i) : s.order.slice(0, s.shown).toSorted((a, b) => a - b),

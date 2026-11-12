@@ -99,6 +99,8 @@ Règle : une question vérifiée devient un ADR ou une ligne dans le doc concern
       sérialisés à chaque snapshot (revue phase 3, m2). Mesurer la durée sur la machine show (`pnpm load`).
 - [x] Sortie `reveal-image` : la sortie (PC OBS / vMix) reçoit l'image complète, masquée par les cases à l'écran.
       Accepté (poste de confiance, jeton de sortie) ; à revoir si une sortie est un jour exposée au public.
+- [x] Tablettes `reveal-image` : la même grille que l'écran, cases découpées par le serveur (sharp), seules les cases
+      dévoilées sont servies (décision produit 2026-11-12, ADR-0017).
 - [x] Accès équipe distant : 30 échecs / min toutes IP bloquent l'accès distant 5 min (déni de service possible
       depuis le Wi-Fi joueurs ; l'accès `localhost` et `links.txt` restent disponibles). Réseau équipe séparé
       recommandé ; à revoir si gênant (revue 4, m4).

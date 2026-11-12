@@ -39,7 +39,7 @@ describe("reveal-image", () => {
     expect(out.question?.prompt.media).toEqual(PHOTO);
     const tablet = project(g, { role: "player", participantId: "p_1" }, reg);
     expect(tablet.question?.prompt.media).toBeUndefined();
-    expect(tablet.mechanic).toMatchObject({ image: null });
+    expect(tablet.mechanic).toMatchObject({ image: null, aspect: 1920 / 1080 });
     g = run(reg, [ctl({ type: "element.reveal", index: 1 })], g);
     const m = project(g, { role: "output", scene: "program" }, reg).mechanic;
     expect(m?.mechanic === "reveal-image" ? m.revealed.length : 0).toBe(2);
@@ -47,5 +47,9 @@ describe("reveal-image", () => {
     expect(participantTotal(g.state, "p_1")).toBe(82);
     const end = project(g, { role: "output", scene: "program" }, reg).mechanic;
     expect(end?.mechanic === "reveal-image" ? end.revealed.length : 0).toBe(6);
+    // Even revealed, the tablet gets the tiles (all uncovered), never the picture: it loads them from the server.
+    const after = project(g, { role: "player", participantId: "p_1" }, reg);
+    expect(after.mechanic).toMatchObject({ image: null, revealed: [0, 1, 2, 3, 4, 5] });
+    expect(after.question?.prompt.media).toBeUndefined();
   });
 });

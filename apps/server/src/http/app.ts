@@ -7,9 +7,10 @@ import Fastify, { type FastifyInstance, type FastifyRequest, type FastifyServerO
 import { z } from "zod";
 import type { Links } from "../links.ts";
 import type { SessionRuntime } from "../runtime/session-runtime.ts";
-import { loadGameDocument, type GameDocument, MIGRATIONS } from "@quiz/schema";
+import { loadGameDocument, type GameDocument, MIGRATIONS, type View } from "@quiz/schema";
 import type { MediaStore } from "../media/media-store.ts";
 import { GameLibrary, exportQuiz, importQuiz } from "../media/library.ts";
+import { TileCutter, uncoveredTile } from "../media/tiles.ts";
 import { verifyToken } from "../tokens.ts";
 import { decide, participantTotal, type Registry, autoVerdicts } from "@quiz/engine";
 import { AnswerSpec, QuestionId, cleanDisplayName } from "@quiz/schema";
@@ -214,6 +215,25 @@ export function buildHttpApp(deps: HttpDeps, options: FastifyServerOptions): Fas
     // Files are stored by hash, without extension: `send` would replace our type with application/octet-stream
     // (an SVG logo then never decodes) and our cache header with its own. Both options: @fastify/static SendOptions.
     return reply.sendFile(req.params.hash, deps.media.dir, { contentType: false, cacheControl: false });
+  });
+
+  /** « Image dévoilée »: one uncovered tile of the question on air, cut by the server (tablets never get the picture). */
+  const tiles = new TileCutter(deps.media, (m) => app.log.warn(m));
+  // One projection per game state, not per request (every tablet asks for every tile at the reveal).
+  let tileView: { readonly state: object; readonly view: View } | null = null;
+  const liveView = (): View => {
+    const rt = deps.runtime();
+    if (tileView?.state !== rt.current.state) tileView = { state: rt.current.state, view: rt.view({ role: "control" }) };
+    return tileView.view;
+  };
+  app.get<{ Params: { questionId: string; index: string } }>("/api/tile/:questionId/:index", async (req, reply) => {
+    // Never cached: a tile refused now (still covered) must load once uncovered, an undo must not leave one behind.
+    reply.header("cache-control", "no-store");
+    const tile = uncoveredTile(liveView(), req.params.questionId, Number(req.params.index));
+    if (tile === null) return reply.code(404).send({ error: "case pas encore dévoilée" });
+    const bytes = await tiles.cut(tile);
+    if (bytes === null) return reply.code(404).send({ error: "image illisible" });
+    return reply.type("image/webp").send(bytes);
   });
 
   // ── Game library (studio) ──────────────────────────────────────────────────

@@ -3,11 +3,12 @@
  *   src-tauri/binaries/quiz-node-<triple>.exe  the official Node runtime running the build (same version as dev)
  *   src-tauri/resources/server/main.mjs        the show server, bundled by esbuild (dev keeps type stripping)
  *   src-tauri/resources/server/node_modules/better-sqlite3   native SQLite (prebuilt N-API binary)
+ *   src-tauri/resources/server/node_modules/sharp, @img/…    image tiles of « Image dévoilée » (prebuilt libvips)
  *   src-tauri/resources/apps/<name>/dist       the built front-ends (run `pnpm build` first)
  * Run: node tools/prepare.ts (from apps/desktop).
  */
 import { execFileSync, spawn } from "node:child_process";
-import { cpSync, existsSync, mkdirSync, mkdtempSync, rmSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, realpathSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
@@ -35,7 +36,7 @@ await build({
   platform: "node",
   format: "esm",
   target: "node26",
-  external: ["better-sqlite3"],
+  external: ["better-sqlite3", "sharp"],
   banner: { js: "import { createRequire as __cr } from 'node:module'; const require = __cr(import.meta.url);" },
   legalComments: "external",
   logLevel: "warning",
@@ -49,6 +50,18 @@ for (const part of ["package.json", "lib", "LICENSE"]) cpSync(join(sqliteDir, pa
 const prebuild = `${process.platform}-${process.arch}.node`;
 mkdirSync(join(dest, "prebuilds"), { recursive: true });
 cpSync(join(sqliteDir, "prebuilds", prebuild), join(dest, "prebuilds", prebuild));
+
+// 3b. sharp and what it loads at run time (its JS deps, the prebuilt binary + libvips of this platform): pnpm keeps
+// them side by side next to the real sharp folder; copied as plain folders (no links). Types are not needed.
+const sharpDir = realpathSync(join(repo, "apps", "server", "node_modules", "sharp"));
+const sharpDeps = dirname(sharpDir);
+for (const name of readdirSync(sharpDeps)) {
+  if (name === "@types") continue;
+  cpSync(join(sharpDeps, name), join(resources, "server", "node_modules", name), { recursive: true, dereference: true });
+}
+// The copy must be enough on its own: load sharp from the package folder (fails here, not on the show machine).
+const shipped = createRequire(join(resources, "server", "main.mjs"));
+if (typeof shipped("sharp") !== "function") throw new Error("sharp copié mais inutilisable dans le paquet");
 
 // 4. Front-ends.
 for (const name of APPS) {

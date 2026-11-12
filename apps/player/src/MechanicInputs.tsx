@@ -1,5 +1,5 @@
 import { For, Match, Show, Switch, createMemo, createSignal, type JSX } from "solid-js";
-import { answerText, asAllocation, asBoard, asBuzzer, asHints, asNumberAnswer, asOrder, asPairs, asPin, asRevealImage, asTextAnswer, correctText, formatNumber, nameOf, optionLetter, optionState, parsePin, type PinView } from "@quiz/renderer";
+import { answerText, asAllocation, asBoard, asBuzzer, asHints, asNumberAnswer, asOrder, asPairs, asPin, asRevealImage, asTextAnswer, correctText, formatNumber, nameOf, optionLetter, optionState, parsePin, type PinView, type RevealImageView } from "@quiz/renderer";
 import type { AnswerValue, PlayerView } from "@quiz/schema";
 import { allocAdjust, allocAllIn, allocProblem, allocRemaining, allocStep, initialOrder, keypadPress, linkPair, linksFrom, moveItem, normPoint, numberProblem, pairsComplete, parseDecimal, unlinkRight } from "./inputs-logic.ts";
 
@@ -268,6 +268,31 @@ function SingleChoice(p: InputProps & { readonly options: readonly { id: string;
   );
 }
 
+/**
+ * « Image dévoilée »: the same tiles as the screen. The tablet never gets the picture; each uncovered tile is cut and
+ * served by the server (`/api/tile/<question>/<index>`), the others stay covered. Every tile once revealed.
+ */
+function TileGrid(p: { readonly questionId: string; readonly m: RevealImageView }): JSX.Element {
+  const shown = () => new Set(p.m.revealed);
+  const tiles = () => Array.from({ length: p.m.cols * p.m.rows }, (_, i) => i);
+  const url = (i: number) => `/api/tile/${encodeURIComponent(p.questionId)}/${i}`;
+  // The tiles are cut from the picture as the screen shows it (EXIF orientation applied): the first one that arrives
+  // gives the true shape, the stored dimensions (`aspect`) only lay the grid out before.
+  const [measured, setMeasured] = createSignal<number | null>(null);
+  const measure = (e: Event) => {
+    const img = e.currentTarget as HTMLImageElement; // oxlint-disable-line typescript/no-unsafe-type-assertion -- onLoad of an <img>
+    if (img.naturalHeight > 0) setMeasured((img.naturalWidth * p.m.cols) / (img.naturalHeight * p.m.rows));
+  };
+  const aspect = () => String(measured() ?? p.m.aspect ?? 4 / 3);
+  return (
+    <div class="p-tiles" style={{ "aspect-ratio": aspect(), "--p-aspect": aspect(), "grid-template-columns": `repeat(${p.m.cols}, 1fr)`, "grid-template-rows": `repeat(${p.m.rows}, 1fr)` }}>
+      <For each={tiles()}>
+        {(i) => <div class="p-tile">{shown().has(i) ? <img src={url(i)} alt="" draggable={false} onLoad={measure} /> : null}</div>}
+      </For>
+    </div>
+  );
+}
+
 /** Text or one option, for the progressive mechanics (hints, reveal-image). */
 function ProgressiveAnswer(p: InputProps & { readonly input: "text" | "choice"; readonly options: readonly { id: string; label: string }[] | null }): JSX.Element {
   return (
@@ -350,8 +375,9 @@ export function MechanicInput(p: InputProps): JSX.Element {
       <Match when={kind() === "reveal-image" ? asRevealImage(p.view.mechanic) : null}>
         {(m) => (
           <>
+            <Show when={p.view.question?.id} keyed>{(qid) => <TileGrid questionId={qid} m={m()} />}</Show>
             <Show when={!isRevealed(p)}>
-              <p class="p-points">Regardez l'écran · {m().revealed.length} / {m().cols * m().rows} cases · vaut <b>{m().points} pts</b></p>
+              <p class="p-points">{m().revealed.length} / {m().cols * m().rows} cases dévoilées · vaut <b>{m().points} pts</b></p>
             </Show>
             <ProgressiveAnswer {...p} input={m().input} options={m().options} />
             <Recap view={p.view} />

@@ -223,7 +223,10 @@ forme texte (`PlayerView.myAnswer`, `ControlView.answers`) : `text` → [texte],
   présentation) ; points `fixed` de `maxPoints` (1 indice) à `minPoints` (tous), figés à la réponse.
   Les indices cachés ne quittent jamais le serveur (sauf régie / animateur).
 - `reveal-image` : l'image de la question découpée en `cols × rows` cases dévoilées dans un ordre tiré par la
-  seed ; même barème que `hints`. Les tablettes ne reçoivent jamais l'image (ni vue, ni préchargement).
+  seed ; même barème que `hints`. Les tablettes ne reçoivent jamais l'image ni son empreinte (ni vue, ni préchargement) :
+  elles affichent la même grille que l'écran, chaque case dévoilée étant découpée et servie par le serveur
+  (`GET /api/tile/<question>/<case>`, refusée tant que la case est couverte, ADR-0017). La vue donne `aspect`
+  (largeur / hauteur) pour placer la grille avant l'arrivée des cases.
 
 Rejouer une question à la même place (même manche, même index, y compris en relançant une manche déjà jouée
 avec `round.start { roundIndex }`) annule les points de sa révélation précédente et les remplace ; la même

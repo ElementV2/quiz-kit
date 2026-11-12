@@ -255,8 +255,11 @@ export type HintsMechanicView = z.infer<typeof HintsMechanicView>;
 /** Image revealed tile by tile: the earlier you answer, the more you score. */
 export const RevealImageMechanicView = z.strictObject({
   mechanic: z.literal("reveal-image"),
-  /** Null for players: the tablet must not get the full picture (it is shown masked on the outputs). */
+  /** Null for players: the tablet must not get the full picture. It loads the uncovered tiles one by one from the
+   * server (`/api/tile/<question>/<index>`), which cuts them out and serves only those already uncovered. */
   image: Media.nullable(),
+  /** Width / height of the picture (null: unknown): lets the tablet lay out the tiles before they arrive. */
+  aspect: z.number().positive().nullable(),
   cols: z.number().int(),
   rows: z.number().int(),
   /** Uncovered tiles (row-major index); everything once revealed. */
